@@ -11,5 +11,6 @@ import { AshfallTown } from './ashfall-town.js';
 import { LostValley } from './lost-valley.js';
 import { NeonCircuit } from './neon-circuit.js';
 import { NightManor } from './night-manor.js';
+import { DrownedRuins } from './drowned-ruins.js';
 
-export const STYLES = [TestScene, Fogway, Monoliths, Relic, KitDemo, AshfallTown, LostValley, NeonCircuit, NightManor];
+export const STYLES = [TestScene, Fogway, Monoliths, Relic, KitDemo, AshfallTown, LostValley, NeonCircuit, NightManor, DrownedRuins];
