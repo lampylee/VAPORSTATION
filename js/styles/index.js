@@ -7,5 +7,6 @@ import { Fogway } from './fogway.js';
 import { Monoliths } from './monoliths.js';
 import { Relic } from './relic.js';
 import { KitDemo } from './kit-demo.js';
+import { DrownedRuins } from './drowned-ruins.js';
 
-export const STYLES = [TestScene, Fogway, Monoliths, Relic, KitDemo];
+export const STYLES = [TestScene, Fogway, Monoliths, Relic, KitDemo, DrownedRuins];
