@@ -1,0 +1,417 @@
+// The shared PS1 rendering pipeline. Every style draws through this, so they
+// all get the same look automatically:
+//
+//   style A ─┐                      ┌──────────────┐
+//            ├─► low-res FBOs ────► │ composite    │ dissolve A→B, ordered dither,
+//   style B ─┘   (e.g. 320x240)     │ (low-res)    │ quantise to 15-bit colour
+//                                   └──────┬───────┘
+//                                          ▼
+//                                   present: nearest-neighbour upscale to the
+//                                   screen (+ optional scanlines / vignette)
+//
+// World shader: vertex snapping to a coarse screen grid (fixed-point wobble),
+// affine (non perspective-correct) texture mapping, per-vertex Gouraud light,
+// per-vertex distance fog, nearest texture sampling, no AA.
+import { mat4 } from './math.js';
+
+const WORLD_VS = `#version 300 es
+precision highp float;
+layout(location=0) in vec3 aPos;
+layout(location=1) in vec3 aNormal;
+layout(location=2) in vec2 aUV;
+layout(location=3) in vec3 aColor;
+uniform mat4 uModel, uView, uProj;
+uniform vec2 uSnapGrid;      // half internal resolution / snap size in pixels
+uniform float uSnapOn;
+uniform vec3 uLightDir, uLightColor, uAmbient;
+uniform float uUnlit;
+uniform vec2 uFog;           // near, far
+uniform vec2 uUVOffset, uUVScale;
+out vec3 vUVw;               // uv * w, w  -> undoes perspective correction
+out vec2 vUVp;               // perspective-correct uv (for blending amount)
+out vec3 vColor;
+out float vFog;
+void main() {
+  vec4 view = uView * uModel * vec4(aPos, 1.0);
+  vec4 clip = uProj * view;
+  if (uSnapOn > 0.5 && clip.w > 0.0) {
+    vec2 ndc = clip.xy / clip.w;
+    ndc = floor(ndc * uSnapGrid + 0.5) / uSnapGrid;
+    clip.xy = ndc * clip.w;
+  }
+  gl_Position = clip;
+  vec3 n = normalize(mat3(uModel) * aNormal);
+  float d = max(dot(n, -uLightDir), 0.0);
+  vec3 lit = uAmbient + uLightColor * d;
+  vColor = aColor * mix(lit, vec3(1.0), uUnlit);
+  vec2 uv = aUV * uUVScale + uUVOffset;
+  vUVp = uv;
+  vUVw = vec3(uv * clip.w, clip.w);
+  vFog = clamp((length(view.xyz) - uFog.x) / max(uFog.y - uFog.x, 0.001), 0.0, 1.0);
+}`;
+
+const WORLD_FS = `#version 300 es
+precision highp float;
+in vec3 vUVw;
+in vec2 vUVp;
+in vec3 vColor;
+in float vFog;
+uniform sampler2D uTex;
+uniform float uAffine;
+uniform vec3 uTint, uEmissive, uFogColor;
+uniform float uFogOn;
+out vec4 outColor;
+void main() {
+  vec2 uv = mix(vUVp, vUVw.xy / vUVw.z, uAffine);
+  vec4 t = texture(uTex, uv);
+  if (t.a < 0.5) discard;           // PS1-style 1-bit transparency
+  vec3 c = t.rgb * vColor * uTint + uEmissive;
+  c = mix(c, uFogColor, vFog * uFogOn);
+  outColor = vec4(c, 1.0);
+}`;
+
+const FULLSCREEN_VS = `#version 300 es
+out vec2 vUV;
+void main() {
+  vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2);
+  vUV = p;
+  gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
+}`;
+
+const COMPOSITE_FS = `#version 300 es
+precision highp float;
+uniform sampler2D uA, uB;
+uniform float uMix;          // 0 = all A, 1 = all B
+uniform float uLevels;       // 2^bits - 1
+uniform float uDither;
+uniform float uSeed;
+out vec4 outColor;
+const float BAYER[16] = float[16](0.,8.,2.,10.,12.,4.,14.,6.,3.,11.,1.,9.,15.,7.,13.,5.);
+float bayer4(ivec2 p) { return (BAYER[(p.y & 3) * 4 + (p.x & 3)] + 0.5) / 16.0; }
+float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7)) + uSeed) * 43758.5453); }
+void main() {
+  ivec2 p = ivec2(gl_FragCoord.xy);
+  vec3 c = texelFetch(uA, p, 0).rgb;
+  if (uMix > 0.0) {
+    // blocky pixel dissolve: random 4x4 blocks, ordered pattern inside each
+    float th = hash(vec2(p / 4)) * 0.6 + bayer4(p / 2) * 0.4;
+    if (uMix > th) c = texelFetch(uB, p, 0).rgb;
+  }
+  float d = mix(0.5, bayer4(p), uDither);
+  c = floor(clamp(c, 0.0, 1.0) * uLevels + d) / uLevels;
+  outColor = vec4(c, 1.0);
+}`;
+
+const PRESENT_FS = `#version 300 es
+precision highp float;
+in vec2 vUV;
+uniform sampler2D uTex;
+uniform vec2 uRes;
+uniform float uCrt;
+out vec4 outColor;
+void main() {
+  vec3 c = texture(uTex, vUV).rgb;
+  if (uCrt > 0.5) {
+    float row = fract(vUV.y * uRes.y);
+    c *= 1.1 * (0.82 + 0.18 * cos((row - 0.5) * 6.2831853));
+    vec2 q = vUV - 0.5;
+    c *= clamp(1.0 - dot(q, q) * 1.3, 0.0, 1.0);
+  }
+  outColor = vec4(c, 1.0);
+}`;
+
+export const RESOLUTIONS = {
+  '320x240': [320, 240],
+  '426x240': [426, 240],
+  'auto240': null,       // 240 lines, width matches the screen's aspect
+  '640x480': [640, 480],
+};
+
+function compile(gl, type, src) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+
+function program(gl, vs, fs) {
+  const p = gl.createProgram();
+  gl.attachShader(p, compile(gl, gl.VERTEX_SHADER, vs));
+  gl.attachShader(p, compile(gl, gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  const u = {};
+  const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+  for (let i = 0; i < n; i++) {
+    const name = gl.getActiveUniform(p, i).name;
+    u[name] = gl.getUniformLocation(p, name);
+  }
+  return { p, u };
+}
+
+class Mesh {
+  constructor(gl, geo, dynamic) {
+    this.gl = gl;
+    this.count = geo.count;
+    this.vao = gl.createVertexArray();
+    gl.bindVertexArray(this.vao);
+    const usage = dynamic ? gl.DYNAMIC_DRAW : gl.STATIC_DRAW;
+    const mk = (loc, arr, size) => {
+      const b = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, b);
+      gl.bufferData(gl.ARRAY_BUFFER, arr, usage);
+      gl.enableVertexAttribArray(loc);
+      gl.vertexAttribPointer(loc, size, gl.FLOAT, false, 0, 0);
+      return b;
+    };
+    this.buffers = {
+      positions: mk(0, geo.positions, 3),
+      normals: mk(1, geo.normals, 3),
+      uvs: mk(2, geo.uvs, 2),
+      colors: mk(3, geo.colors, 3),
+    };
+    gl.bindVertexArray(null);
+  }
+  /** Update any subset of {positions, normals, uvs, colors} (same vertex count). */
+  update(geo) {
+    const gl = this.gl;
+    for (const k of Object.keys(this.buffers)) {
+      if (geo[k]) { gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers[k]); gl.bufferSubData(gl.ARRAY_BUFFER, 0, geo[k]); }
+    }
+  }
+  dispose() {
+    const gl = this.gl;
+    Object.values(this.buffers).forEach((b) => gl.deleteBuffer(b));
+    gl.deleteVertexArray(this.vao);
+  }
+}
+
+const IDENTITY = mat4.create();
+const WHITE = [1, 1, 1];
+const BLACK = [0, 0, 0];
+
+export class PS1Renderer {
+  constructor(canvas) {
+    this.canvas = canvas;
+    const gl = canvas.getContext('webgl2', {
+      antialias: false, alpha: false, depth: false, stencil: false,
+      premultipliedAlpha: false, preserveDrawingBuffer: false, powerPreference: 'high-performance',
+    });
+    if (!gl) throw new Error('WebGL2 is not available in this browser.');
+    this.gl = gl;
+    this.world = program(gl, WORLD_VS, WORLD_FS);
+    this.comp = program(gl, FULLSCREEN_VS, COMPOSITE_FS);
+    this.present_ = program(gl, FULLSCREEN_VS, PRESENT_FS);
+    this.emptyVao = gl.createVertexArray();
+    this.whiteTex = this.createTexture({ data: new Uint8Array([255, 255, 255, 255]), width: 1, height: 1 });
+
+    // Global look parameters (set from settings / audio every frame).
+    this.params = {
+      resolution: '320x240', aspectMode: 'fit',
+      jitter: 1, affine: 1, dither: 1, colorBits: 5, crt: false,
+      jitterBoost: 0,   // added by audio (beats)
+      fogScale: 1,      // multiplies fog distances (audio level)
+    };
+    this.width = 0; this.height = 0;
+    this.targets = {};
+    this.view = mat4.create();
+    this.proj = mat4.create();
+    this.fogColor = [0, 0, 0];
+    this.stats = { draws: 0, tris: 0 };
+    this.resize();
+  }
+
+  // ---------- resources ----------
+  createMesh(geo, dynamic = false) { return new Mesh(this.gl, geo, dynamic); }
+
+  createTexture({ data, width, height }, { repeat = true } = {}) {
+    const gl = this.gl;
+    const t = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    const wrap = repeat ? gl.REPEAT : gl.CLAMP_TO_EDGE;
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrap);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrap);
+    return t;
+  }
+
+  deleteTexture(t) { if (t) this.gl.deleteTexture(t); }
+
+  _makeTarget(w, h, depth) {
+    const gl = this.gl;
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    const fbo = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    let rb = null;
+    if (depth) {
+      rb = gl.createRenderbuffer();
+      gl.bindRenderbuffer(gl.RENDERBUFFER, rb);
+      gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, w, h);
+      gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, rb);
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    return { tex, fbo, rb };
+  }
+
+  _freeTargets() {
+    const gl = this.gl;
+    for (const t of Object.values(this.targets)) {
+      gl.deleteTexture(t.tex); gl.deleteFramebuffer(t.fbo); if (t.rb) gl.deleteRenderbuffer(t.rb);
+    }
+    this.targets = {};
+  }
+
+  /** Call on window resize and whenever resolution settings change. */
+  resize() {
+    const dpr = window.devicePixelRatio || 1;
+    const cw = Math.max(1, Math.round(this.canvas.clientWidth * dpr));
+    const ch = Math.max(1, Math.round(this.canvas.clientHeight * dpr));
+    if (this.canvas.width !== cw || this.canvas.height !== ch) { this.canvas.width = cw; this.canvas.height = ch; }
+    let res = RESOLUTIONS[this.params.resolution];
+    if (res === undefined) res = RESOLUTIONS['320x240'];
+    if (res === null) res = [Math.max(160, Math.round((240 * cw / ch) / 2) * 2), 240];
+    if (res[0] !== this.width || res[1] !== this.height) {
+      this._freeTargets();
+      this.width = res[0]; this.height = res[1];
+      this.targets.A = this._makeTarget(this.width, this.height, true);
+      this.targets.B = this._makeTarget(this.width, this.height, true);
+      this.targets.C = this._makeTarget(this.width, this.height, false);
+    }
+  }
+
+  get aspect() { return this.width / this.height; }
+
+  // ---------- scene drawing API (used by styles) ----------
+  beginScene(which = 'A') {
+    const gl = this.gl, u = this.world.u, P = this.params;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.targets[which].fbo);
+    gl.viewport(0, 0, this.width, this.height);
+    gl.enable(gl.DEPTH_TEST);
+    gl.depthFunc(gl.LEQUAL);
+    gl.depthMask(true);
+    gl.disable(gl.BLEND);
+    gl.disable(gl.CULL_FACE);
+    gl.useProgram(this.world.p);
+    const snap = Math.max(0, P.jitter + P.jitterBoost);
+    gl.uniform1f(u.uSnapOn, snap > 0.05 ? 1 : 0);
+    gl.uniform2f(u.uSnapGrid, this.width * 0.5 / Math.max(snap, 0.05), this.height * 0.5 / Math.max(snap, 0.05));
+    gl.uniform1f(u.uAffine, P.affine);
+    gl.uniform1i(u.uTex, 0);
+    gl.activeTexture(gl.TEXTURE0);
+    this.setLight([0.3, -0.8, -0.5], [0.9, 0.9, 0.9], [0.25, 0.25, 0.3]);
+    this.setFog([0, 0, 0], 10, 60);
+  }
+
+  clear(color) {
+    const gl = this.gl;
+    gl.clearColor(color[0], color[1], color[2], 1);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  }
+
+  /** eye/target as [x,y,z]; fov in degrees. */
+  setCamera(eye, target, { fov = 60, near = 0.1, far = 200, roll = 0 } = {}) {
+    mat4.lookAt(this.view, eye, target, roll);
+    mat4.perspective(this.proj, fov * Math.PI / 180, this.aspect, near, far);
+    const gl = this.gl, u = this.world.u;
+    gl.uniformMatrix4fv(u.uView, false, this.view);
+    gl.uniformMatrix4fv(u.uProj, false, this.proj);
+  }
+
+  setFog(color, near, far) {
+    const gl = this.gl, u = this.world.u, s = this.params.fogScale;
+    this.fogColor = color;
+    gl.uniform3fv(u.uFogColor, color);
+    gl.uniform2f(u.uFog, near * s, far * s);
+  }
+
+  /** dir = direction the light travels. */
+  setLight(dir, color, ambient) {
+    const gl = this.gl, u = this.world.u;
+    const l = Math.hypot(dir[0], dir[1], dir[2]) || 1;
+    gl.uniform3f(u.uLightDir, dir[0] / l, dir[1] / l, dir[2] / l);
+    gl.uniform3fv(u.uLightColor, color);
+    gl.uniform3fv(u.uAmbient, ambient);
+  }
+
+  /**
+   * Draw a mesh. Options:
+   *  texture, tint [r,g,b], emissive [r,g,b], uvOffset [u,v], uvScale [u,v],
+   *  unlit (bool), fog (bool, default true), additive (bool), depthWrite (bool)
+   */
+  draw(mesh, model = IDENTITY, o = {}) {
+    const gl = this.gl, u = this.world.u;
+    gl.uniformMatrix4fv(u.uModel, false, model);
+    gl.bindTexture(gl.TEXTURE_2D, o.texture || this.whiteTex);
+    gl.uniform3fv(u.uTint, o.tint || WHITE);
+    gl.uniform3fv(u.uEmissive, o.emissive || BLACK);
+    const off = o.uvOffset || [0, 0], sc = o.uvScale || [1, 1];
+    gl.uniform2f(u.uUVOffset, off[0], off[1]);
+    gl.uniform2f(u.uUVScale, sc[0], sc[1]);
+    gl.uniform1f(u.uUnlit, o.unlit ? 1 : 0);
+    gl.uniform1f(u.uFogOn, o.fog === false ? 0 : 1);
+    // additive (PS1 "semi-transparency" B+F) fades to black in fog, not to the fog colour
+    if (o.additive) { gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE); gl.uniform3fv(u.uFogColor, BLACK); }
+    gl.depthMask(o.depthWrite !== false && !o.additive);
+    gl.bindVertexArray(mesh.vao);
+    gl.drawArrays(gl.TRIANGLES, 0, mesh.count);
+    if (o.additive) { gl.disable(gl.BLEND); gl.uniform3fv(u.uFogColor, this.fogColor); }
+    gl.depthMask(true);
+    this.stats.draws++; this.stats.tris += mesh.count / 3;
+  }
+
+  // ---------- post ----------
+  /** Combine A and B (pixel dissolve by mix), dither + quantise into C. */
+  composite(mix = 0) {
+    const gl = this.gl, u = this.comp.u, P = this.params;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.targets.C.fbo);
+    gl.viewport(0, 0, this.width, this.height);
+    gl.disable(gl.DEPTH_TEST);
+    gl.disable(gl.BLEND);
+    gl.useProgram(this.comp.p);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.targets.A.tex);
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, this.targets.B.tex);
+    gl.uniform1i(u.uA, 0); gl.uniform1i(u.uB, 1);
+    gl.uniform1f(u.uMix, mix);
+    gl.uniform1f(u.uLevels, Math.pow(2, P.colorBits) - 1);
+    gl.uniform1f(u.uDither, P.dither);
+    gl.uniform1f(u.uSeed, 0);
+    gl.bindVertexArray(this.emptyVao);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.activeTexture(gl.TEXTURE0);
+  }
+
+  /** Nearest-neighbour upscale of C to the canvas. */
+  present() {
+    const gl = this.gl, u = this.present_.u, P = this.params;
+    const cw = this.canvas.width, ch = this.canvas.height;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, cw, ch);
+    gl.clearColor(0, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    let vw = cw, vh = ch;
+    if (P.aspectMode !== 'stretch') {
+      const s = Math.min(cw / this.width, ch / this.height);
+      vw = Math.round(this.width * s); vh = Math.round(this.height * s);
+    }
+    gl.viewport(Math.floor((cw - vw) / 2), Math.floor((ch - vh) / 2), vw, vh);
+    gl.useProgram(this.present_.p);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.targets.C.tex);
+    gl.uniform1i(u.uTex, 0);
+    gl.uniform2f(u.uRes, this.width, this.height);
+    gl.uniform1f(u.uCrt, P.crt ? 1 : 0);
+    gl.bindVertexArray(this.emptyVao);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+
+  resetStats() { this.stats.draws = 0; this.stats.tris = 0; }
+}

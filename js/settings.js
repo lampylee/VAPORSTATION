@@ -1,0 +1,72 @@
+// Persistent settings. Everything the user can tweak lives here.
+const KEY = 'ps1viz.settings.v1';
+
+export const DEFAULTS = {
+  // audio input
+  deviceId: '',
+  deviceLabel: '',
+  channel: 'both',          // 'both' | 'left' | 'right'
+  inputGainDb: 0,           // manual trim before analysis
+  agc: true,                // slow auto-normalisation of levels
+  agcTime: 8,               // seconds, how slowly auto-gain adapts
+  // play / silent detection
+  thresholdDb: -50,         // RMS (dBFS, after input gain) that counts as "playing"
+  hysteresisDb: 4,          // must fall this far below threshold to count toward silence
+  startHold: 0.5,           // s above threshold before PLAYING
+  stopHold: 2.5,            // s below threshold before SILENT
+  rampUp: 2.0,              // s for intensity 0 -> 1
+  rampDown: 4.0,            // s for intensity 1 -> 0
+  // beat detection
+  beatSensitivity: 1.35,    // bass must exceed rolling average by this factor
+  beatCooldown: 0.2,        // s minimum between beats
+  // PS1 look
+  resolution: '320x240',    // '320x240' | '426x240' | 'auto240' | '640x480'
+  aspectMode: 'fit',        // 'fit' | 'stretch'
+  jitter: 1.0,              // vertex snap grid in internal pixels (0 = off)
+  affine: 1.0,              // 0 = perspective-correct, 1 = full affine warp
+  dither: 1.0,              // ordered dither strength
+  colorBits: 5,             // bits per channel (5 = PS1 15-bit colour)
+  audioPushesLook: true,    // beats bump jitter, level changes fog
+  crt: false,
+  // styles
+  style: 1,
+  autoSwitch: true,         // auto style change while idle only
+  idleSwitchDelay: 10,      // s of full idle before the first auto change
+  idleSwitchInterval: 45,   // s between auto changes while still idle
+  transitionTime: 3.0,      // s crossfade duration
+  // ui
+  debug: false,
+};
+
+export function loadSettings() {
+  const s = { ...DEFAULTS };
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (raw) {
+      const saved = JSON.parse(raw);
+      for (const k of Object.keys(DEFAULTS)) {
+        if (k in saved && typeof saved[k] === typeof DEFAULTS[k]) s[k] = saved[k];
+      }
+    }
+  } catch (e) {
+    console.warn('Settings could not be loaded, using defaults.', e);
+  }
+  return s;
+}
+
+let timer = 0;
+export function saveSettings(s) {
+  clearTimeout(timer);
+  timer = setTimeout(() => {
+    try {
+      localStorage.setItem(KEY, JSON.stringify(s));
+    } catch (e) {
+      console.warn('Settings could not be saved.', e);
+    }
+  }, 250);
+}
+
+export function resetSettings(s) {
+  Object.assign(s, DEFAULTS);
+  try { localStorage.removeItem(KEY); } catch (e) { /* ignore */ }
+}
