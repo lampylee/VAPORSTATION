@@ -1,13 +1,11 @@
-// Style registry. To add a style: write a class with
-//   static meta = { name }
-//   init(renderer)                       create meshes/textures
-//   update(audioData, intensity, dt)     advance state (multiply reactions by intensity!)
-//   render(renderer)                     clear, set camera/fog/light, draw()
-//   dispose(renderer)                    free GPU resources
-// then add it to STYLES below. Index 0 is the pipeline test scene (key 0).
+// Style registry. To add a style: write a class following the contract in
+// CLAUDE.md / docs/ENVIRONMENT-GUIDE.md, then add it to STYLES below.
+// Number keys select by index (0 = pipeline test). meta.hidden styles are
+// skipped by N and auto-switching (still selectable from the dropdown).
 import { TestScene } from './test-scene.js';
 import { Fogway } from './fogway.js';
 import { Monoliths } from './monoliths.js';
 import { Relic } from './relic.js';
+import { KitDemo } from './kit-demo.js';
 
-export const STYLES = [TestScene, Fogway, Monoliths, Relic];
+export const STYLES = [TestScene, Fogway, Monoliths, Relic, KitDemo];

@@ -46,10 +46,16 @@ export class StyleManager {
     this.onChange?.(i);
   }
 
-  /** Next style in the rotation (skips the test scene at index 0). */
+  /** Indices in the rotation (styles without meta.hidden). */
+  get rotation() { return this.styles.map((s, i) => (s.constructor.meta?.hidden ? -1 : i)).filter((i) => i >= 0); }
+
+  /** Next style in the rotation (skips hidden styles like the test scene). */
   goNext(dir = 1) {
-    const n = this.count - 1;
-    this.goTo((((this.target - 1 + dir) % n) + n) % n + 1);
+    const rot = this.rotation;
+    if (!rot.length) return;
+    const pos = rot.indexOf(this.target);
+    const i = pos < 0 ? (dir > 0 ? 0 : rot.length - 1) : (pos + dir + rot.length) % rot.length;
+    this.goTo(rot[i]);
   }
 
   update(audio, intensity, playing, dt, s) {

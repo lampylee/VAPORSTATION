@@ -40,16 +40,16 @@ Each environment ships its own default palette but can be overridden by any pale
 
 Writing every environment from scratch won't scale. Build shared building blocks first; then each environment is mostly composition + art direction.
 
-- [ ] **Sky**: low-poly dome / backdrop cards, gradient-by-dither, sun/moon discs, star fields.
-- [ ] **Billboards / sprites**: camera-facing and crossed-quad trees, grass, lamp glows, the classic PS1 foliage trick.
-- [ ] **Particles**: rain, snow, ash, embers, dust, fireflies, bubbles (instanced, additive or 1-bit alpha).
-- [ ] **Terrain**: heightmap grids with vertex colours, infinite scrolling tiles.
-- [ ] **Camera rigs**: spline dolly, orbit, fly-through, "security cam" sweep, slow push-in. All with beat nudges built in.
-- [ ] **Modular props**: walls, fences, poles, crates, doorways from the geometry builders.
-- [ ] **Model loading**: a tiny `.glb` loader (positions/normals/uvs/vertex colours only) so low-poly models from Blockbench/Blender drop straight in.
-- [ ] **Instancing** in the renderer (one draw call for 500 trees) to keep big scenes at 60 fps.
-- [ ] **"Swell" helper**: standard ways to map intensity onto a scene (idle → active variants, e.g. lights coming on, weather intensifying, world transforming).
-- [ ] `docs/ENVIRONMENT-GUIDE.md`: the contract, kit API, palette roles, performance budget (≤150 draws, ≤20k tris), checklist. Agents build environments from this.
+- [x] **Sky**: low-poly dome / backdrop cards, gradient-by-dither, sun/moon discs, star fields.
+- [x] **Billboards / sprites**: camera-facing and crossed-quad trees, grass, lamp glows, the classic PS1 foliage trick.
+- [x] **Particles**: rain, snow, ash, embers, dust, fireflies, bubbles (instanced, additive or 1-bit alpha).
+- [x] **Terrain**: heightmap grids with vertex colours, infinite scrolling tiles.
+- [x] **Camera rigs**: spline dolly, orbit, fly-through, "security cam" sweep, slow push-in. All with beat nudges built in.
+- [x] **Modular props**: walls, fences, poles, crates, doorways from the geometry builders.
+- [x] **Model loading**: a tiny `.glb` loader (positions/normals/uvs/vertex colours only) so low-poly models from Blockbench/Blender drop straight in.
+- [x] **Instancing** in the renderer (one draw call for 500 trees) to keep big scenes at 60 fps.
+- [x] **"Swell" helper**: standard ways to map intensity onto a scene (idle → active variants, e.g. lights coming on, weather intensifying, world transforming).
+- [x] `docs/ENVIRONMENT-GUIDE.md`: the contract, kit API, palette roles, performance budget (≤150 draws, ≤20k tris), checklist. Agents build environments from this.
 
 ## Phase 3 — Environment library
 

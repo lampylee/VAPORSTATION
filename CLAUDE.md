@@ -1,7 +1,7 @@
 # Vaporstation — agent notes
 
 Live audio-reactive visualizer with an authentic PS1 look, used fullscreen at gigs.
-Plan and status: `ROADMAP.md`. User-facing docs: `README.md`.
+Plan and status: `ROADMAP.md`. User-facing docs: `README.md`. **Building an environment? Read `docs/ENVIRONMENT-GUIDE.md` and copy `js/styles/kit-demo.js`.**
 
 ## Hard rules
 - Static web app: plain ES modules + WebGL2, **no build step, no runtime dependencies**. Must work fully offline.
@@ -23,6 +23,7 @@ Plan and status: `ROADMAP.md`. User-facing docs: `README.md`.
 - `js/gfx/ps1.js` — low-res FBOs, vertex snap, affine UVs, per-vertex fog/light, CLUT palette lookup, dissolve + dither composite, nearest upscale, CRT.
 - `js/gfx/textures.js` — procedural **indexed** textures (palette slot per pixel).
 - `js/palette/` — palette model (4 ramps × 4 shades + roles), live crossfading palettes, library, user store, editor UI.
+- `js/kit/` — world kit: sky, terrain, particles, sprites, props, camera rigs, swell helpers, GLB loader.
 - `js/styles/` — one file per environment + `index.js` registry + `manager.js` (crossfades, idle auto-switch, palettes).
 
 ## Palettes (CLUT)

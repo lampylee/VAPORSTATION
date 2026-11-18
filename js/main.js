@@ -216,6 +216,7 @@ function frame(now) {
 
   // music subtly pushes the PS1 parameters (always scaled by intensity)
   const P = renderer.params;
+  P.time = now / 1000;
   P.jitterBoost = s.audioPushesLook ? audio.beatPulse * k * 1.2 : 0;
   P.fogScale = s.audioPushesLook ? 1 + audio.level * k * 0.25 : 1;
 

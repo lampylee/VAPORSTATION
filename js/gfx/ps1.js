@@ -20,6 +20,8 @@ layout(location=0) in vec3 aPos;
 layout(location=1) in vec3 aNormal;
 layout(location=2) in vec2 aUV;
 layout(location=3) in vec3 aColor;
+layout(location=4) in vec4 aInst0;   // instancing: xyz position, uniform scale
+layout(location=5) in vec4 aInst1;   // instancing: rotY, shade, sway phase, height scale
 uniform mat4 uModel, uView, uProj;
 uniform vec2 uSnapGrid;      // half internal resolution / snap size in pixels
 uniform float uSnapOn;
@@ -27,12 +29,35 @@ uniform vec3 uLightDir, uLightColor, uAmbient;
 uniform float uUnlit;
 uniform vec2 uFog;           // near, far
 uniform vec2 uUVOffset, uUVScale;
+uniform float uInstanced;    // 1 = use aInst0/aInst1
+uniform float uBillboard;    // 0 off, 1 upright (cylindrical), 2 face camera fully
+uniform float uTime, uSway;  // sway bends vertices by their height (foliage, banners)
 out vec3 vUVw;               // uv * w, w  -> undoes perspective correction
 out vec2 vUVp;               // perspective-correct uv (for blending amount)
 out vec3 vColor;
 out float vFog;
 void main() {
-  vec4 view = uView * uModel * vec4(aPos, 1.0);
+  vec3 p = aPos;
+  vec3 nrm = aNormal;
+  float shade = 1.0;
+  if (uInstanced > 0.5) {
+    p.x += sin(uTime * 1.7 + aInst1.z) * uSway * max(p.y, 0.0);
+    p.y *= aInst1.w;
+    shade = aInst1.y;
+    if (uBillboard > 0.5) {
+      vec3 right = vec3(uView[0][0], uView[1][0], uView[2][0]);
+      vec3 up = uBillboard > 1.5 ? vec3(uView[0][1], uView[1][1], uView[2][1]) : vec3(0.0, 1.0, 0.0);
+      p = aInst0.xyz + (right * p.x + up * p.y) * aInst0.w;
+      nrm = vec3(uView[0][2], uView[1][2], uView[2][2]);
+    } else {
+      float c = cos(aInst1.x), s = sin(aInst1.x);
+      p = vec3(c * p.x + s * p.z, p.y, -s * p.x + c * p.z) * aInst0.w + aInst0.xyz;
+      nrm = vec3(c * nrm.x + s * nrm.z, nrm.y, -s * nrm.x + c * nrm.z);
+    }
+  } else if (uSway != 0.0) {
+    p.x += sin(uTime * 1.7) * uSway * max(p.y, 0.0);
+  }
+  vec4 view = uView * uModel * vec4(p, 1.0);
   vec4 clip = uProj * view;
   if (uSnapOn > 0.5 && clip.w > 0.0) {
     vec2 ndc = clip.xy / clip.w;
@@ -40,10 +65,10 @@ void main() {
     clip.xy = ndc * clip.w;
   }
   gl_Position = clip;
-  vec3 n = normalize(mat3(uModel) * aNormal);
+  vec3 n = normalize(mat3(uModel) * nrm);
   float d = max(dot(n, -uLightDir), 0.0);
   vec3 lit = uAmbient + uLightColor * d;
-  vColor = aColor * mix(lit, vec3(1.0), uUnlit);
+  vColor = aColor * shade * mix(lit, vec3(1.0), uUnlit);
   vec2 uv = aUV * uUVScale + uUVOffset;
   vUVp = uv;
   vUVw = vec3(uv * clip.w, clip.w);
@@ -191,6 +216,33 @@ class Mesh {
     Object.values(this.buffers).forEach((b) => gl.deleteBuffer(b));
     gl.deleteVertexArray(this.vao);
   }
+}
+
+/**
+ * Per-instance data for drawInstanced: 8 floats each
+ * [x, y, z, scale, rotY, shade, swayPhase, heightScale].
+ */
+class InstanceBuffer {
+  constructor(gl, max) {
+    this.gl = gl; this.max = max; this.count = 0;
+    this.data = new Float32Array(max * 8);
+    this.buffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
+    gl.bufferData(gl.ARRAY_BUFFER, this.data.byteLength, gl.DYNAMIC_DRAW);
+  }
+  set(i, x, y, z, scale = 1, rotY = 0, shade = 1, phase = 0, heightScale = 1) {
+    const d = this.data, o = i * 8;
+    d[o] = x; d[o + 1] = y; d[o + 2] = z; d[o + 3] = scale;
+    d[o + 4] = rotY; d[o + 5] = shade; d[o + 6] = phase; d[o + 7] = heightScale;
+  }
+  /** Upload the first `count` instances (call after set()). */
+  upload(count = this.count) {
+    this.count = Math.min(count, this.max);
+    const gl = this.gl;
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.data, 0, this.count * 8);
+  }
+  dispose() { this.gl.deleteBuffer(this.buffer); }
 }
 
 const IDENTITY = mat4.create();
@@ -368,6 +420,7 @@ export class PS1Renderer {
     gl.uniform1f(u.uAffine, P.affine);
     gl.uniform1i(u.uTex, 0);
     gl.uniform1i(u.uClut, 1);
+    gl.uniform1f(u.uTime, P.time || 0);
     this.setPalette(null);
     this.setLight([0.3, -0.8, -0.5], [0.9, 0.9, 0.9], [0.25, 0.25, 0.3]);
     this.setFog([0, 0, 0], 10, 60);
@@ -410,6 +463,35 @@ export class PS1Renderer {
    *  unlit (bool), fog (bool, default true), additive (bool), depthWrite (bool)
    */
   draw(mesh, model = IDENTITY, o = {}) {
+    this._begin(model, o, 0);
+    this.gl.bindVertexArray(mesh.vao);
+    this.gl.drawArrays(this.gl.TRIANGLES, 0, mesh.count);
+    this._end(o);
+    this.stats.draws++; this.stats.tris += mesh.count / 3;
+  }
+
+  /**
+   * Draw many copies of a mesh in one call. inst = r.createInstances(max).
+   * Extra options: billboard (0 off, 1 upright, 2 face camera), sway (bend amount).
+   */
+  drawInstanced(mesh, inst, o = {}) {
+    const n = Math.min(inst.count, inst.max);
+    if (n <= 0) return;
+    const gl = this.gl;
+    this._begin(o.model || IDENTITY, o, 1);
+    gl.bindVertexArray(mesh.vao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, inst.buffer);
+    gl.enableVertexAttribArray(4); gl.vertexAttribPointer(4, 4, gl.FLOAT, false, 32, 0); gl.vertexAttribDivisor(4, 1);
+    gl.enableVertexAttribArray(5); gl.vertexAttribPointer(5, 4, gl.FLOAT, false, 32, 16); gl.vertexAttribDivisor(5, 1);
+    gl.drawArraysInstanced(gl.TRIANGLES, 0, mesh.count, n);
+    gl.disableVertexAttribArray(4); gl.disableVertexAttribArray(5);
+    this._end(o);
+    this.stats.draws++; this.stats.tris += (mesh.count / 3) * n;
+  }
+
+  createInstances(max) { return new InstanceBuffer(this.gl, max); }
+
+  _begin(model, o, instanced) {
     const gl = this.gl, u = this.world.u;
     gl.uniformMatrix4fv(u.uModel, false, model);
     gl.bindTexture(gl.TEXTURE_2D, o.texture || this.whiteTex);
@@ -421,14 +503,18 @@ export class PS1Renderer {
     gl.uniform2f(u.uUVScale, sc[0], sc[1]);
     gl.uniform1f(u.uUnlit, o.unlit ? 1 : 0);
     gl.uniform1f(u.uFogOn, o.fog === false ? 0 : 1);
+    gl.uniform1f(u.uInstanced, instanced);
+    gl.uniform1f(u.uBillboard, o.billboard || 0);
+    gl.uniform1f(u.uSway, o.sway || 0);
     // additive (PS1 "semi-transparency" B+F) fades to black in fog, not to the fog colour
     if (o.additive) { gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE); gl.uniform3fv(u.uFogColor, BLACK); }
     gl.depthMask(o.depthWrite !== false && !o.additive);
-    gl.bindVertexArray(mesh.vao);
-    gl.drawArrays(gl.TRIANGLES, 0, mesh.count);
-    if (o.additive) { gl.disable(gl.BLEND); gl.uniform3fv(u.uFogColor, this.fogColor); }
+  }
+
+  _end(o) {
+    const gl = this.gl;
+    if (o.additive) { gl.disable(gl.BLEND); gl.uniform3fv(this.world.u.uFogColor, this.fogColor); }
     gl.depthMask(true);
-    this.stats.draws++; this.stats.tris += mesh.count / 3;
   }
 
   // ---------- post ----------

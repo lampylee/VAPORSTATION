@@ -8,7 +8,7 @@ import { R } from '../palette/palette.js';
 import { STYLE_PALETTES } from '../palette/library.js';
 
 export class TestScene {
-  static meta = { name: 'Pipeline test' };
+  static meta = { name: 'Pipeline test', hidden: true };
   static palette = STYLE_PALETTES.test;
 
   init(r) {

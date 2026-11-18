@@ -93,6 +93,7 @@ js/gfx/ps1.js           shared PS1 pipeline (all the look lives here)
 js/gfx/geometry.js      low-poly mesh builders
 js/gfx/textures.js      procedural 64×64 indexed textures
 js/palette/             palette model, crossfading, library, editor/import UI
+js/kit/                 world kit for building environments (see docs/ENVIRONMENT-GUIDE.md)
 js/styles/*.js          styles + StyleManager (crossfades, idle auto-switch)
 ```
 
