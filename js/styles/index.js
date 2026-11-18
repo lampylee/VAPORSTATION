@@ -7,5 +7,6 @@ import { Fogway } from './fogway.js';
 import { Monoliths } from './monoliths.js';
 import { Relic } from './relic.js';
 import { KitDemo } from './kit-demo.js';
+import { LostValley } from './lost-valley.js';
 
-export const STYLES = [TestScene, Fogway, Monoliths, Relic, KitDemo];
+export const STYLES = [TestScene, Fogway, Monoliths, Relic, KitDemo, LostValley];
