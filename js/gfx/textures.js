@@ -1,7 +1,12 @@
-// Procedural low-res textures (64x64 by default), returned as RGBA byte arrays.
-// Colours are hex strings so they can come straight from a style's palette.
-// Each texture gets a little hashed grain so it reads as "hand-drawn VRAM art".
-import { hex255 } from './color.js';
+// Procedural low-res INDEXED textures (64x64 by default), like PS1 4-bit CLUT
+// textures: each pixel stores a palette slot (0-15), 255 = transparent.
+// Any palette can then recolour them. Use R(ramp, shade) for slots.
+//
+// "Grain" nudges pixels one shade up/down inside their ramp, so surfaces get
+// hand-drawn texture without leaving the palette.
+import { R } from '../palette/palette.js';
+
+export const CLEAR = 255;
 
 const rnd = (x, y, s = 0) => {
   const h = Math.sin(x * 12.9898 + y * 78.233 + s * 37.719) * 43758.5453;
@@ -9,102 +14,99 @@ const rnd = (x, y, s = 0) => {
 };
 
 function make(w, h, fn) {
-  const data = new Uint8Array(w * h * 4);
-  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-    const [r, g, b, a = 255] = fn(x, y);
-    const i = (y * w + x) * 4;
-    data[i] = r; data[i + 1] = g; data[i + 2] = b; data[i + 3] = a;
-  }
-  return { data, width: w, height: h };
+  const data = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) data[y * w + x] = fn(x, y);
+  return { data, width: w, height: h, indexed: true };
 }
 
-const grain = (c, x, y, amt, seed = 0) => {
-  const n = (rnd(x, y, seed) - 0.5) * amt;
-  return [c[0] + n, c[1] + n, c[2] + n].map((v) => Math.max(0, Math.min(255, Math.round(v))));
-};
+/** Move an index up/down one shade within its ramp at random (amount = probability). */
+export function grain(idx, x, y, amount = 0.15, seed = 0) {
+  if (idx === CLEAR) return idx;
+  const r = rnd(x, y, seed + 11);
+  const ramp = idx >> 2, shade = idx & 3;
+  if (r < amount / 2) return R(ramp, Math.max(0, shade - 1));
+  if (r > 1 - amount / 2) return R(ramp, Math.min(3, shade + 1));
+  return idx;
+}
 
-export function bricks({ a = '#7a3b2e', b = '#5e2c22', mortar = '#1c0f0c', size = 64, rows = 8, cols = 4, noise = 30 } = {}) {
-  const A = hex255(a), B = hex255(b), M = hex255(mortar);
+const BAYER4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+const bayer = (x, y) => (BAYER4[(y & 3) * 4 + (x & 3)] + 0.5) / 16;
+
+export function bricks({ ramp = 0, mortar = R(3, 0), size = 64, rows = 8, cols = 4, noise = 0.18 } = {}) {
   const bh = size / rows, bw = size / cols;
   return make(size, size, (x, y) => {
-    const row = Math.floor(y / bh);
-    const off = (row % 2) * bw / 2;
+    const row = Math.floor(y / bh), off = (row % 2) * bw / 2;
     const col = Math.floor((x + off) / bw);
     const lx = (x + off) % bw, ly = y % bh;
-    if (lx < 1 || ly < 1) return grain(M, x, y, noise * 0.5);
-    const base = rnd(col, row, 3) > 0.5 ? A : B;
-    const edge = (lx < 2 || ly < 2) ? 1.15 : 1;
-    return grain(base.map((v) => v * edge), x, y, noise);
+    if (lx < 1 || ly < 1) return mortar;
+    if (lx < 2 || ly < 2) return R(ramp, 3); // lit edge
+    return grain(R(ramp, rnd(col, row, 3) > 0.5 ? 2 : 1), x, y, noise);
   });
 }
 
-export function checker({ a = '#e0e0e0', b = '#303040', size = 64, cells = 8, noise = 18 } = {}) {
-  const A = hex255(a), B = hex255(b), cs = size / cells;
-  return make(size, size, (x, y) => grain(((Math.floor(x / cs) + Math.floor(y / cs)) % 2) ? A : B, x, y, noise));
+export function checker({ a = R(0, 3), b = R(0, 1), size = 64, cells = 8, noise = 0.12 } = {}) {
+  const cs = size / cells;
+  return make(size, size, (x, y) => grain(((Math.floor(x / cs) + Math.floor(y / cs)) % 2) ? a : b, x, y, noise));
 }
 
-export function grid({ bg = '#101820', line = '#40e0d0', size = 64, cells = 4, thick = 2, noise = 14 } = {}) {
-  const BG = hex255(bg), L = hex255(line), cs = size / cells;
+export function grid({ bg = R(3, 0), line = R(1, 3), glow = R(1, 1), size = 64, cells = 4, thick = 2, noise = 0.1 } = {}) {
+  const cs = size / cells;
   return make(size, size, (x, y) => {
-    const on = (x % cs) < thick || (y % cs) < thick;
-    const glow = (x % cs) < thick + 1 || (y % cs) < thick + 1;
-    if (on) return grain(L, x, y, noise);
-    if (glow) return grain(BG.map((v, i) => (v + L[i]) / 3), x, y, noise);
-    return grain(BG, x, y, noise);
+    const mx = x % cs, my = y % cs;
+    if (mx < thick || my < thick) return line;
+    if (mx < thick + 1 || my < thick + 1) return glow;
+    return grain(bg, x, y, noise);
   });
 }
 
-export function stripes({ a = '#ffffff', b = '#000000', size = 64, count = 8, noise = 12 } = {}) {
-  const A = hex255(a), B = hex255(b), s = size / count;
-  return make(size, size, (x, y) => grain(Math.floor(y / s) % 2 ? A : B, x, y, noise));
+export function stripes({ a = R(2, 3), b = R(2, 1), size = 64, count = 8, noise = 0.1 } = {}) {
+  const s = size / count;
+  return make(size, size, (x, y) => grain(Math.floor(y / s) % 2 ? a : b, x, y, noise));
 }
 
-/** Blocky value noise: good for stone, metal and organic surfaces. */
-export function blotch({ a = '#7a7f88', b = '#3a3d44', size = 64, scale = 8, noise = 26, seed = 1 } = {}) {
-  const A = hex255(a), B = hex255(b);
+/** Blocky value noise across a ramp's shades — stone, metal, organic surfaces. */
+export function blotch({ ramp = 0, size = 64, scale = 8, seed = 1, minShade = 0, noise = 0.12 } = {}) {
   return make(size, size, (x, y) => {
     const v = rnd(Math.floor(x / scale), Math.floor(y / scale), seed) * 0.6 + rnd(Math.floor(x / (scale / 2)), Math.floor(y / (scale / 2)), seed + 1) * 0.4;
-    const t = v > 0.55 ? 1 : v > 0.35 ? 0.5 : 0;
-    return grain(A.map((c, i) => c * t + B[i] * (1 - t)), x, y, noise, seed);
+    const shade = Math.max(minShade, v > 0.7 ? 3 : v > 0.5 ? 2 : v > 0.3 ? 1 : 0);
+    return grain(R(ramp, shade), x, y, noise, seed);
   });
 }
 
-/** Stone with carved glyph lines (white mask channel used for emissive glyphs). */
-export function glyphStone({ stone = '#6c707a', dark = '#2c2f36', glyph = '#ffd27a', size = 64, seed = 4 } = {}) {
-  const S = hex255(stone), D = hex255(dark), G = hex255(glyph);
+/** Stone with carved glyphs in another colour. */
+export function glyphStone({ ramp = 0, glyph = R(2, 3), size = 64, seed = 4 } = {}) {
   return make(size, size, (x, y) => {
     const cx = Math.floor(x / 8), cy = Math.floor(y / 8), lx = x % 8, ly = y % 8;
     const r = rnd(cx, cy, seed);
-    const carved = (r > 0.55 && (lx === 3 || lx === 4) && ly > 0 && ly < 7) || (r > 0.75 && (ly === 3 || ly === 4) && lx > 0 && lx < 7) || (r < 0.15 && lx > 1 && lx < 6 && ly > 1 && ly < 6 && (lx === 2 || lx === 5 || ly === 2 || ly === 5));
-    if (carved) return grain(G, x, y, 20, seed);
+    const carved = (r > 0.55 && (lx === 3 || lx === 4) && ly > 0 && ly < 7)
+      || (r > 0.75 && (ly === 3 || ly === 4) && lx > 0 && lx < 7)
+      || (r < 0.15 && lx > 1 && lx < 6 && ly > 1 && ly < 6 && (lx === 2 || lx === 5 || ly === 2 || ly === 5));
+    if (carved) return glyph;
     const v = rnd(Math.floor(x / 4), Math.floor(y / 4), seed + 2);
-    return grain(v > 0.6 ? S : S.map((c, i) => (c + D[i]) / 2), x, y, 30, seed);
+    return grain(R(ramp, v > 0.6 ? 2 : 1), x, y, 0.25, seed);
   });
 }
 
-/** Sun disc with horizontal cut-out bands (alpha), square texture. */
-export function bandedSun({ top = '#ffe066', bottom = '#ff3d7f', size = 64 } = {}) {
-  const T = hex255(top), B = hex255(bottom);
+/** Disc texture: dithered gradient down a ramp, with cut-out bands in the lower half. */
+export function bandedSun({ ramp = 2, size = 64 } = {}) {
   return make(size, size, (x, y) => {
     const t = y / (size - 1);
-    const c = T.map((v, i) => Math.round(v * (1 - t) + B[i] * t));
-    // gaps get wider towards the bottom
-    const band = y > size * 0.5 && (y % 8) < Math.floor((t - 0.5) * 10);
-    return [...c, band ? 0 : 255];
+    if (y > size * 0.5 && (y % 8) < Math.floor((t - 0.5) * 10)) return CLEAR;
+    const s = (1 - t) * 3; // 3 at top -> 0 at bottom
+    const shade = Math.min(3, Math.floor(s) + (s - Math.floor(s) > bayer(x, y) ? 1 : 0));
+    return R(ramp, shade);
   });
 }
 
-/** Tiny 16x16 sparkle star with alpha. */
-export function sparkle({ color = '#ffffff', size = 16 } = {}) {
-  const C = hex255(color), m = (size - 1) / 2;
+/** Tiny star / sparkle cut-out. */
+export function sparkle({ index = R(2, 3), size = 16 } = {}) {
+  const m = (size - 1) / 2;
   return make(size, size, (x, y) => {
     const dx = Math.abs(x - m), dy = Math.abs(y - m);
-    const on = (dx < 1 && dy < m) || (dy < 1 && dx < m) || dx + dy < m * 0.6;
-    return [...C, on ? 255 : 0];
+    return (dx < 1 && dy < m) || (dy < 1 && dx < m) || dx + dy < m * 0.6 ? index : CLEAR;
   });
 }
 
-export function solid(color = '#ffffff', size = 8) {
-  const C = hex255(color);
-  return make(size, size, () => C);
+export function solid(index = R(3, 3), size = 4) {
+  return make(size, size, () => index);
 }

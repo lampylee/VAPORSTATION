@@ -7,6 +7,12 @@ const path = require('path');
 
 const PORT = Number(process.argv[2]) || 8080;
 const ROOT = __dirname;
+
+// The demo track isn't committed (5 MB); build it once if it's missing.
+if (!fs.existsSync(path.join(ROOT, 'demo', 'demo.wav'))) {
+  console.log('Generating demo/demo.wav (first run only)…');
+  require('child_process').execFileSync(process.execPath, [path.join(ROOT, 'tools', 'make-demo-track.js')], { stdio: 'inherit' });
+}
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',

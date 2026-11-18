@@ -1,45 +1,28 @@
 // Style: RELIC — a deforming low-poly crystal core inside a rotating strut cage,
 // circled by rings of cubes, floating in a starry void.
 //   bass  -> core spikes + scale, spin speed, camera push-in
-//   mid   -> light colour shift
+//   mid   -> light shifts toward the accent colour
 //   high  -> orbit speed + cube sparkle, star twinkle
-//   beat  -> white flash, spin kick, camera nudge
+//   beat  -> flash, spin kick, camera nudge
+// Colours: base = core, secondary = orbit cubes, accent = cage/flash, atmosphere = void + stars.
 import { mat4, damp, lerp, hash } from '../gfx/math.js';
-import { paletteToRgb, mixColor, scaleColor, addColor } from '../gfx/color.js';
+import { mixColor, scaleColor, addColor } from '../gfx/color.js';
 import { icosphereData, polyhedron, box, octahedron, merge, flatNormals } from '../gfx/geometry.js';
 import * as T from '../gfx/textures.js';
-
-// ---- tweak me ----
-export const PALETTE = {
-  fogIdle: '#07040e',
-  fogActive: '#0d0618',
-  coreA: '#ff5a7a',
-  coreB: '#5a1438',
-  cage: '#ffd36b',
-  cageDark: '#7a5418',
-  orbit: '#56d6ff',
-  stars: '#cfd6ff',
-  flash: '#ffffff',
-  lightA: '#ffd0e0',
-  lightB: '#80c0ff',
-  ambient: '#2a2040',
-  tintIdle: '#7a6a90',
-  tintActive: '#ffffff',
-};
+import { R } from '../palette/palette.js';
+import { STYLE_PALETTES } from '../palette/library.js';
 
 const RINGS = [{ n: 14, r: 3.4, tilt: 0.35 }, { n: 18, r: 4.2, tilt: -0.5 }, { n: 10, r: 5.0, tilt: 1.1 }];
 
 export class Relic {
   static meta = { name: 'Relic' };
+  static palette = STYLE_PALETTES.relic;
 
   init(r) {
-    const p = PALETTE;
-    this.c = paletteToRgb(p);
     this.tex = {
-      core: r.createTexture(T.blotch({ a: p.coreA, b: p.coreB, scale: 8, seed: 7 })),
-      cage: r.createTexture(T.stripes({ a: p.cage, b: p.cageDark, count: 8 })),
-      orbit: r.createTexture(T.grid({ bg: '#10203a', line: p.orbit, cells: 2, thick: 2 })),
-      white: r.createTexture(T.solid('#ffffff')),
+      core: r.texture(T.blotch({ ramp: 0, scale: 8, seed: 7, minShade: 1 })),
+      cage: r.texture(T.stripes({ a: R(2, 3), b: R(2, 1), count: 8 })),
+      orbit: r.texture(T.grid({ bg: R(1, 0), line: R(1, 3), glow: R(1, 2), cells: 2, thick: 2 })),
     };
 
     // core: icosphere deformed on the CPU every frame
@@ -82,7 +65,7 @@ export class Relic {
     this.nudge = 0; this.nudgeVel = 0; this.camDist = 9; this.k = 0; this.a = null;
     this.m = mat4.create();
     this.eye = [0, 0, 0];
-    this.col = { fog: [0, 0, 0], tint: [0, 0, 0], emi: [0, 0, 0], cage: [0, 0, 0], orbit: [0, 0, 0], star: [0, 0, 0], light: [0, 0, 0] };
+    this.col = { fog: [0, 0, 0], tint: [0, 0, 0], emi: [0, 0, 0], cage: [0, 0, 0], orbit: [0, 0, 0], star: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0] };
   }
 
   update(a, k, dt) {
@@ -107,46 +90,48 @@ export class Relic {
         + k * (a.bass * 0.5 * s.b + a.high * 0.18 * n + a.beatPulse * 0.15 * s.c));
       this.cur[i][0] = verts[i][0] * rad; this.cur[i][1] = verts[i][1] * rad; this.cur[i][2] = verts[i][2] * rad;
     }
-    const P = this.coreGeo.positions;
+    const Pos = this.coreGeo.positions;
     let o = 0;
-    for (const f of this.ico.faces) for (const vi of f) { const q = this.cur[vi]; P[o++] = q[0]; P[o++] = q[1]; P[o++] = q[2]; }
+    for (const f of this.ico.faces) for (const vi of f) { const q = this.cur[vi]; Pos[o++] = q[0]; Pos[o++] = q[1]; Pos[o++] = q[2]; }
     flatNormals(this.coreGeo);
-    this.core.update({ positions: P, normals: this.coreGeo.normals });
+    this.core.update({ positions: Pos, normals: this.coreGeo.normals });
   }
 
   render(r) {
-    const { c, col, m, k, eye } = this, a = this.a, t = this.time;
-    mixColor(col.fog, c.fogIdle, c.fogActive, k);
-    addColor(col.fog, col.fog, c.coreB, this.flash * 0.25);
+    const { col, m, k, eye } = this, a = this.a, t = this.time, P = this.pal;
+    scaleColor(col.fog, P.role('fog'), lerp(0.7, 1, k));
+    addColor(col.fog, col.fog, P.color(R(0, 0)), this.flash * 0.25);
     r.clear(col.fog);
     const ang = t * 0.12;
     eye[0] = Math.sin(ang) * this.camDist; eye[1] = 1.5 + Math.sin(t * 0.17) * 1.5 + this.nudge * 0.3; eye[2] = Math.cos(ang) * this.camDist;
     r.setCamera(eye, [0, this.nudge * 0.1, 0], { fov: 55 + this.flash * 4, near: 0.1, far: 150 });
-    mixColor(col.light, c.lightA, c.lightB, a.mid * k);
-    r.setLight([Math.sin(t * 0.4), -0.6, Math.cos(t * 0.4)], col.light, c.ambient);
+    mixColor(col.light, P.role('light'), P.role('glow'), a.mid * k * 0.6);
+    r.setLight([Math.sin(t * 0.4), -0.6, Math.cos(t * 0.4)], col.light, scaleColor(col.amb, P.role('ambient'), 0.4));
 
     // stars (no fog, additive, twinkle with highs)
-    scaleColor(col.star, c.stars, 0.35 + a.high * k * 0.9 + Math.sin(t * 3) * 0.05);
-    r.draw(this.stars, mat4.trs(m, 0, 0, 0, t * 0.01, t * 0.02, 0), { texture: this.tex.white, tint: [0, 0, 0], emissive: col.star, unlit: true, fog: false, additive: true });
+    scaleColor(col.star, P.color(R(3, 3)), 0.35 + a.high * k * 0.9 + Math.sin(t * 3) * 0.05);
+    r.draw(this.stars, mat4.trs(m, 0, 0, 0, t * 0.01, t * 0.02, 0), { tint: [0, 0, 0], emissive: col.star, unlit: true, fog: false, additive: true });
 
     r.setFog(col.fog, 5, lerp(15, 22, k));
-    mixColor(col.tint, c.tintIdle, c.tintActive, k);
-    addColor(col.tint, col.tint, c.flash, this.flash * 0.6);
-    scaleColor(col.emi, c.coreA, 0.06 + a.bass * k * 0.25 + this.flash * 0.35);
+    const dim = lerp(0.55, 1, k);
+    col.tint[0] = col.tint[1] = col.tint[2] = dim;
+    addColor(col.tint, col.tint, P.role('flash'), this.flash * 0.6);
+    scaleColor(col.emi, P.color(R(0, 2)), 0.06 + a.bass * k * 0.25 + this.flash * 0.35);
     r.draw(this.core, mat4.trs(m, 0, 0, 0, this.rotX, this.rotY, 0), { texture: this.tex.core, tint: col.tint, emissive: col.emi });
 
-    scaleColor(col.cage, c.cage, 0.05 + a.high * k * 0.4 + this.flash * 0.3);
+    scaleColor(col.cage, P.role('glow'), 0.05 + a.high * k * 0.4 + this.flash * 0.3);
     const cs = 2.3 * (1 + a.beatPulse * k * 0.08);
     r.draw(this.cage, mat4.trs(m, 0, 0, 0, -this.rotX * 0.4, -this.rotY * 0.5, 0, cs), { texture: this.tex.cage, tint: col.tint, emissive: col.cage });
 
     const orbitSpeed = 0.35 + a.high * k * 1.6;
+    const orbitCol = P.color(R(1, 3));
     RINGS.forEach((ring, ri) => {
       for (let i = 0; i < ring.n; i++) {
         const th = t * orbitSpeed * (ri % 2 ? -1 : 1) + (i / ring.n) * Math.PI * 2;
         const x = Math.cos(th) * ring.r, z = Math.sin(th) * ring.r;
         const y = z * Math.sin(ring.tilt), zz = z * Math.cos(ring.tilt);
         const sparkle = hash(i + ri * 31, Math.floor(t * 8)) < a.high * k * 0.8 ? 1 : 0.08;
-        scaleColor(col.orbit, c.orbit, sparkle + this.flash * 0.3);
+        scaleColor(col.orbit, orbitCol, sparkle + this.flash * 0.3);
         mat4.trs(m, x, y, zz, t * 1.5 + i, t + i, 0, 1 + a.bass * k * 0.4);
         r.draw(this.cube, m, { texture: this.tex.orbit, tint: col.tint, emissive: col.orbit });
       }

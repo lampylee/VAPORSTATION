@@ -1,11 +1,19 @@
 // Owns all style instances, crossfades between them with the pipeline's pixel
-// dissolve, and auto-switches only while idle (so changes are never a visible cut).
+// dissolve, auto-switches only while idle (so changes are never a visible cut),
+// and gives every style a live, crossfading palette.
 import { smoothstep } from '../gfx/math.js';
+import { LivePalette } from '../palette/palette.js';
 
 export class StyleManager {
   constructor(renderer, classes, startIndex = 1) {
     this.r = renderer;
-    this.styles = classes.map((C) => { const s = new C(); s.init(renderer); return s; });
+    this.override = null;   // a palette applied to every style, or null = each style's own
+    this.styles = classes.map((C) => {
+      const s = new C();
+      s.pal = new LivePalette(renderer, C.palette);
+      s.init(renderer);
+      return s;
+    });
     this.cur = Math.min(Math.max(0, startIndex), this.styles.length - 1);
     this.next = -1;
     this.t = 0;
@@ -20,6 +28,15 @@ export class StyleManager {
   get target() { return this.queued >= 0 ? this.queued : this.next >= 0 ? this.next : this.cur; }
   name(i) { return this.styles[i].constructor.meta?.name || `Style ${i}`; }
 
+  /** The palette the visible (or incoming) style is showing. */
+  get activePalette() { return this.styles[this.target].pal.palette; }
+
+  /** Apply a palette to every style (null = back to each style's default), crossfading. */
+  applyPalette(palette, duration = 0) {
+    this.override = palette;
+    for (const s of this.styles) s.pal.set(palette || s.constructor.palette, duration);
+  }
+
   /** Crossfade to style i. Requests during a crossfade are queued (last one wins). */
   goTo(i) {
     if (i < 0 || i >= this.count) return;
@@ -30,9 +47,9 @@ export class StyleManager {
   }
 
   /** Next style in the rotation (skips the test scene at index 0). */
-  goNext() {
+  goNext(dir = 1) {
     const n = this.count - 1;
-    this.goTo(((this.target - 1 + 1) % n) + 1);
+    this.goTo((((this.target - 1 + dir) % n) + n) % n + 1);
   }
 
   update(audio, intensity, playing, dt, s) {
@@ -45,6 +62,7 @@ export class StyleManager {
       this.nextAutoAt = this.idleTime + s.idleSwitchInterval;
     }
 
+    for (const st of this.styles) st.pal.update(dt);
     this.styles[this.cur].update(audio, intensity, dt);
     if (this.next >= 0) {
       this.styles[this.next].update(audio, intensity, dt);
@@ -58,16 +76,12 @@ export class StyleManager {
 
   render() {
     const r = this.r;
-    r.beginScene('A');
-    this.styles[this.cur].render(r);
+    const draw = (which, st) => { r.beginScene(which); r.setPalette(st.pal); st.render(r); };
+    draw('A', this.styles[this.cur]);
     let mix = 0;
-    if (this.next >= 0) {
-      r.beginScene('B');
-      this.styles[this.next].render(r);
-      mix = smoothstep(this.t);
-    }
+    if (this.next >= 0) { draw('B', this.styles[this.next]); mix = smoothstep(this.t); }
     r.composite(mix);
   }
 
-  dispose() { this.styles.forEach((s) => s.dispose(this.r)); }
+  dispose() { this.styles.forEach((s) => { s.dispose(this.r); s.pal.dispose(); }); }
 }

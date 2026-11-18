@@ -1,30 +1,22 @@
 // Pipeline test scene: checker floor, a spinning brick cube, a big grid wall
 // (to show affine texture swim) and pillars receding into fog. Press 0 in the
-// app to view it. Also used by test.html.
+// app to view it. Also used by test.html (which passes its own palette).
 import { mat4 } from '../gfx/math.js';
-import { paletteToRgb } from '../gfx/color.js';
 import { box, plane } from '../gfx/geometry.js';
 import * as T from '../gfx/textures.js';
-
-export const PALETTE = {
-  fog: '#20283a',
-  floorA: '#c8c8d0', floorB: '#3a3a52',
-  brickA: '#a04a32', brickB: '#7a3626', mortar: '#1a0e0a',
-  wallBg: '#0c1828', wallLine: '#38e8c8',
-  pillar: '#d0b070',
-};
+import { R } from '../palette/palette.js';
+import { STYLE_PALETTES } from '../palette/library.js';
 
 export class TestScene {
   static meta = { name: 'Pipeline test' };
+  static palette = STYLE_PALETTES.test;
 
   init(r) {
-    const p = PALETTE;
-    this.c = paletteToRgb(p);
     this.tex = {
-      floor: r.createTexture(T.checker({ a: p.floorA, b: p.floorB })),
-      brick: r.createTexture(T.bricks({ a: p.brickA, b: p.brickB, mortar: p.mortar })),
-      wall: r.createTexture(T.grid({ bg: p.wallBg, line: p.wallLine })),
-      pillar: r.createTexture(T.blotch({ a: p.pillar, b: '#6a5030' })),
+      floor: r.texture(T.checker({ a: R(3, 3), b: R(3, 1) })),
+      brick: r.texture(T.bricks({ ramp: 0, mortar: R(3, 0) })),
+      wall: r.texture(T.grid({ bg: R(3, 0), line: R(1, 3), glow: R(1, 1) })),
+      pillar: r.texture(T.blotch({ ramp: 2 })),
     };
     this.floor = r.createMesh(plane(80, 4, 20));
     this.cube = r.createMesh(box(2, 2, 2));
@@ -41,12 +33,13 @@ export class TestScene {
   }
 
   render(r) {
-    const t = this.t, m = this.m, c = this.c;
-    r.clear(c.fog);
+    const t = this.t, m = this.m, P = this.pal;
+    const fog = P.role('fog');
+    r.clear(fog);
     const eye = [Math.sin(t * 0.3) * 9, 3 + Math.sin(t * 0.21), Math.cos(t * 0.3) * 9];
     r.setCamera(eye, [0, 1.2, 0], { fov: 60 });
-    r.setFog(c.fog, 6, 40);
-    r.setLight([0.4, -0.8, -0.3], [0.85, 0.85, 0.8], [0.3, 0.3, 0.38]);
+    r.setFog(fog, 6, 40);
+    r.setLight([0.4, -0.8, -0.3], P.role('light'), P.role('ambient'));
 
     r.draw(this.floor, mat4.trs(m, 0, 0, 0), { texture: this.tex.floor });
     const s = 1 + this.pulse * 0.4;

@@ -12,9 +12,9 @@ Guiding rules (unchanged from v1):
 
 ## Phase 0 — Housekeeping (small, do first)
 
-- [ ] First commit, `.gitignore` (decide on `demo/demo.wav`: commit or regenerate).
-- [ ] `CLAUDE.md` with the project rules above + how to run/test, so every agent session starts aligned.
-- [ ] Perf harness: a `?bench` URL flag that cycles all environments and logs fps / draw calls / triangles to the console. Needed once there are 20+ environments.
+- [x] First commit, `.gitignore` (decide on `demo/demo.wav`: commit or regenerate).
+- [x] `CLAUDE.md` with the project rules above + how to run/test, so every agent session starts aligned.
+- [x] Perf harness: a `?bench` URL flag that cycles all environments and logs fps / draw calls / triangles to the console. Needed once there are 20+ environments.
 
 ## Phase 1 — Palette system (the album colours)
 
@@ -29,11 +29,11 @@ We do the same:
 Each environment ships its own default palette but can be overridden by any palette, so one album palette recolours every world consistently.
 
 **Features**
-- [ ] `palettes/*.json`: built-in library (named, tagged).
-- [ ] Palette picker in the UI + hotkeys (e.g. `P` next palette, `Shift+1..9` favourites).
-- [ ] **Palette editor**: 16 swatches + role mapping, live preview, save to localStorage, export/import JSON.
-- [ ] **Extract from album art**: drop an image, k-means it down to 16 colours (canvas, no library), auto-assign roles by luminance/saturation. This is the fastest way to get his album colours in.
-- [ ] **Lospec import**: paste a palette name or `.hex` file. Lospec offers single-palette downloads as JSON/CSV; there's no official search API, so offline we just ship a curated handful.
+- [x] Built-in library in `js/palette/library.js` (15 palettes) + user palettes in localStorage.
+- [x] Palette picker in the UI + hotkeys (`P` / `Shift+P` / `O`), drag-and-drop import.
+- [x] **Palette editor**: 16 swatches + role mapping, live preview, save to localStorage, export/import JSON.
+- [x] **Extract from album art**: drop an image, k-means it down to 16 colours (canvas, no library), auto-assign roles by luminance/saturation. This is the fastest way to get his album colours in.
+- [x] **Lospec import**: paste a palette name or `.hex` file. Lospec offers single-palette downloads as JSON/CSV; there's no official search API, so offline we just ship a curated handful.
 - [ ] **Setlist mode**: a list of `{ song/album label, palette, environment(s) }`. Advance with a key or footswitch between songs; changes crossfade while idle.
 
 ## Phase 2 — World kit (makes "huge variety" cheap)

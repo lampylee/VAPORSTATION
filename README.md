@@ -36,6 +36,7 @@ The input is opened with echo cancellation, noise suppression and auto gain cont
   - 72 s+ silence
 - Press **D** to watch the state, intensity and beats. Regenerate the track with `node tools/make-demo-track.js`.
 - **Load audio file…** plays any mp3/wav through exactly the same analysis path (and out of your speakers).
+- `http://localhost:8080/?bench` cycles every style idle → full intensity with synthetic music and prints fps / CPU time / draw calls per style to the console. Keep the tab visible while it runs.
 - `test.html` is the bare PS1 pipeline on a test scene. Keys: J jitter, A affine, R resolution, D dither, C CRT. Key **0** in the main app shows the same scene.
 
 ## Keys
@@ -50,6 +51,23 @@ The input is opened with echo cancellation, noise suppression and auto gain cont
 | 0 | pipeline test scene |
 | A | toggle auto style-switching while idle |
 | C | toggle CRT scanlines + vignette |
+| P / Shift+P | next / previous palette (crossfades) |
+| O | back to each style's own palette |
+
+## Palettes (album colours)
+
+Every environment is drawn with **palette-indexed textures**, the way PS1 games used colour lookup tables. So any palette recolours any environment, and palette changes crossfade smoothly.
+
+A palette is 16 colours: 4 **ramps** (Base, Secondary, Accent, Atmosphere/fog) × 4 shades, dark → light, plus **roles** (fog, ambient, light, glow, flash) that point at swatches.
+
+- **Pick one:** the *Palette* dropdown in the panel, or **P** live. "Each style's own" lets every environment use its default palette.
+- **From album art:** click *From album art…*, or just **drop the cover image anywhere on the window**. It's clustered into 4 ramps automatically, then opens in the editor.
+- **Import:** *Import…* accepts pasted hex codes (Lospec `.hex`), GIMP `.gpl`, Lospec JSON or our own exported JSON. You can also drop those files on the window. With internet you can fetch a Lospec palette by name.
+- **Edit:** click the swatch strip or *Edit*. Change a ramp's key colour to rebuild the whole ramp, or tweak single swatches; it previews live. Built-in palettes are saved as a copy.
+- **Export** writes a `.json` you can commit, back up or share. Your palettes live in this browser's localStorage, so export them before switching laptops.
+
+To add a built-in palette, add one line to `js/palette/library.js`:
+`fromKeys('my-album', 'My Album', [base, secondary, accent, fog])`.
 
 All settings are saved in localStorage and restored on load. **Reset settings** restores the defaults.
 
@@ -73,27 +91,28 @@ js/audio/analyser.js    RMS, bands, beat detection, auto-gain
 js/audio/playstate.js   playing/silent hysteresis + intensity ramp
 js/gfx/ps1.js           shared PS1 pipeline (all the look lives here)
 js/gfx/geometry.js      low-poly mesh builders
-js/gfx/textures.js      procedural 64×64 textures
+js/gfx/textures.js      procedural 64×64 indexed textures
+js/palette/             palette model, crossfading, library, editor/import UI
 js/styles/*.js          styles + StyleManager (crossfades, idle auto-switch)
 ```
 
-### Tweak colours
-
-Each style file starts with a `PALETTE` object of hex colours (`fogIdle`, `fogActive`, `flash`, …). Edit and reload.
-
 ### Add a style
 
-Create `js/styles/mystyle.js`:
+Create `js/styles/mystyle.js` (full contract in `CLAUDE.md`):
 
 ```js
+import { R, fromKeys } from '../palette/palette.js';
 export class MyStyle {
   static meta = { name: 'My style' };
-  init(r) { /* r.createMesh(geo), r.createTexture(T.checker({...})) */ }
+  static palette = fromKeys('mystyle', 'My style', ['#8a8a8a', '#4a6a8a', '#ffcc33', '#101820']);
+  init(r) { /* r.createMesh(geo), r.texture(T.checker({ a: R(0, 3), b: R(0, 1) })) */ }
   update(audio, intensity, dt) { /* audio: level, bass, mid, high, beat, beatPulse */ }
-  render(r) { /* r.clear(c); r.setCamera(eye, target, {fov}); r.setFog(c, near, far); r.draw(mesh, matrix, {texture, tint, emissive}) */ }
+  render(r) { /* r.clear(this.pal.role('fog')); r.setCamera(...); r.setFog(...); r.draw(mesh, matrix, {texture, tint, emissive}) */ }
   dispose(r) { /* free meshes/textures */ }
 }
 ```
+
+Read colours only through `this.pal` (`color(R(ramp, shade))` or `role('fog')`), so album palettes work everywhere.
 
 Then add it to `STYLES` in `js/styles/index.js`. It automatically gets the low resolution, jitter, affine textures, fog, dithering, crossfades and CRT.
 Multiply every reaction by `intensity` so nothing pops when the band starts or stops.

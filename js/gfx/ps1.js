@@ -57,6 +57,8 @@ in vec2 vUVp;
 in vec3 vColor;
 in float vFog;
 uniform sampler2D uTex;
+uniform sampler2D uClut;     // 16x1 palette (colour lookup table)
+uniform float uIndexed;      // 1 = uTex holds palette indices, like PS1 4-bit textures
 uniform float uAffine;
 uniform vec3 uTint, uEmissive, uFogColor;
 uniform float uFogOn;
@@ -64,7 +66,11 @@ out vec4 outColor;
 void main() {
   vec2 uv = mix(vUVp, vUVw.xy / vUVw.z, uAffine);
   vec4 t = texture(uTex, uv);
-  if (t.a < 0.5) discard;           // PS1-style 1-bit transparency
+  if (uIndexed > 0.5) {
+    int idx = int(t.r * 255.0 + 0.5);
+    if (idx > 15) discard;          // index 255 = transparent
+    t = vec4(texelFetch(uClut, ivec2(idx, 0), 0).rgb, 1.0);
+  } else if (t.a < 0.5) discard;    // PS1-style 1-bit transparency
   vec3 c = t.rgb * vColor * uTint + uEmissive;
   c = mix(c, uFogColor, vFog * uFogOn);
   outColor = vec4(c, 1.0);
@@ -205,6 +211,8 @@ export class PS1Renderer {
     this.present_ = program(gl, FULLSCREEN_VS, PRESENT_FS);
     this.emptyVao = gl.createVertexArray();
     this.whiteTex = this.createTexture({ data: new Uint8Array([255, 255, 255, 255]), width: 1, height: 1 });
+    this.defaultClut = this.createClutTexture(); // grey ramp, used if a scene sets no palette
+    this.updateClut(this.defaultClut, Float32Array.from({ length: 48 }, (_, i) => Math.floor(i / 3) / 15));
 
     // Global look parameters (set from settings / audio every frame).
     this.params = {
@@ -236,6 +244,58 @@ export class PS1Renderer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrap);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrap);
     return t;
+  }
+
+  /** Indexed texture: one byte per pixel = palette slot (0-15, 255 = transparent). */
+  createIndexedTexture({ data, width, height }) {
+    const gl = this.gl;
+    const t = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, width, height, 0, gl.RED, gl.UNSIGNED_BYTE, data);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+    t.indexed = true;
+    return t;
+  }
+
+  /** Make a texture from generator output (indexed or RGBA). */
+  texture(gen) { return gen.indexed ? this.createIndexedTexture(gen) : this.createTexture(gen); }
+
+  createClutTexture() {
+    const gl = this.gl;
+    const t = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 16, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    return t;
+  }
+
+  /** colors: Float32Array(48) rgb 0..1 */
+  updateClut(tex, colors) {
+    const gl = this.gl, px = this._clutBytes || (this._clutBytes = new Uint8Array(64));
+    for (let i = 0; i < 16; i++) {
+      px[i * 4] = Math.round(colors[i * 3] * 255);
+      px[i * 4 + 1] = Math.round(colors[i * 3 + 1] * 255);
+      px[i * 4 + 2] = Math.round(colors[i * 3 + 2] * 255);
+      px[i * 4 + 3] = 255;
+    }
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 16, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+  }
+
+  /** Bind a LivePalette for the following draws (call after beginScene). */
+  setPalette(live) {
+    const gl = this.gl;
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, live ? live.tex : this.defaultClut);
+    gl.activeTexture(gl.TEXTURE0);
   }
 
   deleteTexture(t) { if (t) this.gl.deleteTexture(t); }
@@ -307,7 +367,8 @@ export class PS1Renderer {
     gl.uniform2f(u.uSnapGrid, this.width * 0.5 / Math.max(snap, 0.05), this.height * 0.5 / Math.max(snap, 0.05));
     gl.uniform1f(u.uAffine, P.affine);
     gl.uniform1i(u.uTex, 0);
-    gl.activeTexture(gl.TEXTURE0);
+    gl.uniform1i(u.uClut, 1);
+    this.setPalette(null);
     this.setLight([0.3, -0.8, -0.5], [0.9, 0.9, 0.9], [0.25, 0.25, 0.3]);
     this.setFog([0, 0, 0], 10, 60);
   }
@@ -352,6 +413,7 @@ export class PS1Renderer {
     const gl = this.gl, u = this.world.u;
     gl.uniformMatrix4fv(u.uModel, false, model);
     gl.bindTexture(gl.TEXTURE_2D, o.texture || this.whiteTex);
+    gl.uniform1f(u.uIndexed, o.texture?.indexed ? 1 : 0);
     gl.uniform3fv(u.uTint, o.tint || WHITE);
     gl.uniform3fv(u.uEmissive, o.emissive || BLACK);
     const off = o.uvOffset || [0, 0], sc = o.uvScale || [1, 1];

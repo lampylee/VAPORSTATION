@@ -17,7 +17,10 @@
   import { PS1Renderer, RESOLUTIONS } from './js/gfx/ps1.js';
   import { TestScene } from './js/styles/test-scene.js';
   const r = new PS1Renderer(document.getElementById('c'));
-  const scene = new TestScene(); scene.init(r);
+  import { LivePalette } from './js/palette/palette.js';
+  const scene = new TestScene();
+  scene.pal = new LivePalette(r, TestScene.palette);
+  scene.init(r);
   const audio = { level: 0, bass: 0, mid: 0, high: 0, beat: false, beatPulse: 0 };
   const jitters = [1, 3, 0], resList = Object.keys(RESOLUTIONS);
   let ji = 0, ri = 0;
@@ -36,7 +39,7 @@
   function frame(now) {
     const dt = Math.min(0.1, (now - last) / 1000); last = now;
     scene.update(audio, 0, dt);
-    r.beginScene('A'); scene.render(r); r.composite(0); r.present();
+    r.beginScene('A'); r.setPalette(scene.pal); scene.render(r); r.composite(0); r.present();
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);

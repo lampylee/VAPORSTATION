@@ -28,6 +28,9 @@ export const DEFAULTS = {
   colorBits: 5,             // bits per channel (5 = PS1 15-bit colour)
   audioPushesLook: true,    // beats bump jitter, level changes fog
   crt: false,
+  // palettes
+  paletteId: '',            // '' = each style uses its own palette
+  paletteFade: 2.5,         // s crossfade between palettes
   // styles
   style: 1,
   autoSwitch: true,         // auto style change while idle only

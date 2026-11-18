@@ -85,7 +85,7 @@ export class UI {
       el('div', { className: 'btns' },
         el('button', { textContent: 'Fullscreen (F)', onclick: () => h.onFullscreen() }),
         el('button', { textContent: 'Reset settings', onclick: () => h.onReset() })),
-      el('pre', { className: 'keys', textContent: 'F fullscreen   H hide UI   D debug\n1/2/3 style    N next      0 test scene\nA auto-switch  C CRT' })));
+      el('pre', { className: 'keys', textContent: 'F fullscreen   H hide UI   D debug\n1/2/3 style    N next      0 test scene\nP / Shift+P palette        O style palettes\nA auto-switch  C CRT\nDrop an image, palette file or audio file anywhere.' })));
 
     this.debug = document.getElementById('debug');
     this._buildDebug();
@@ -115,6 +115,12 @@ export class UI {
     inp.onchange = () => inp.blur();
     this.inputs[it.key] = { set: (v) => { inp.value = v; val.textContent = fmt(v); } };
     return el('label', { className: 'row' }, el('span', { textContent: it.label }), inp, val);
+  }
+
+  /** Insert an extra section (e.g. the palette section) before the named section. */
+  insertSectionBefore(section, title) {
+    const h2 = [...document.querySelectorAll('#panel h2')].find((x) => x.textContent === title);
+    if (h2) h2.parentElement.before(section); else document.getElementById('panel').append(section);
   }
 
   /** Sync all controls from settings (after keyboard toggles / reset). */
