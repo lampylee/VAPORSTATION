@@ -53,6 +53,8 @@ Writing every environment from scratch won't scale. Build shared building blocks
 
 ## Phase 3 — Environment library
 
+> Status: wave 1 merged (Ashfall Town, Lost Valley, Neon Circuit, Night Manor, Drowned Ruins, Route 9). Wave 2 briefs and the Kit v2 backlog are in `docs/HANDOFF.md`.
+
 Each environment is one file, one palette default and one registry line. That makes them ideal to build **in parallel**: one agent session per environment, each in its own git worktree, all following the environment guide.
 
 **On game inspiration:** we'll capture the *mood and genre* of late-90s games (fog-bound horror towns, dinosaur jungles, anti-gravity racing), but with **original names, layouts, props and art**, not recreations of specific games' characters, logos, maps or assets. That gives the same feeling, keeps us out of trouble even non-commercially, and means the band owns its visuals.

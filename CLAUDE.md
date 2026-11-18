@@ -1,7 +1,7 @@
 # Vaporstation — agent notes
 
 Live audio-reactive visualizer with an authentic PS1 look, used fullscreen at gigs.
-Plan and status: `ROADMAP.md`. User-facing docs: `README.md`. **Building an environment? Read `docs/ENVIRONMENT-GUIDE.md` and copy `js/styles/kit-demo.js`.**
+Plan: `ROADMAP.md`. **Current status, open items and next steps: `docs/HANDOFF.md`.** User-facing docs: `README.md`. **Building an environment? Read `docs/ENVIRONMENT-GUIDE.md` and copy `js/styles/kit-demo.js`.**
 
 ## Hard rules
 - Static web app: plain ES modules + WebGL2, **no build step, no runtime dependencies**. Must work fully offline.
