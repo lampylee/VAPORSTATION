@@ -8,5 +8,6 @@ import { Monoliths } from './monoliths.js';
 import { Relic } from './relic.js';
 import { KitDemo } from './kit-demo.js';
 import { AshfallTown } from './ashfall-town.js';
+import { LostValley } from './lost-valley.js';
 
-export const STYLES = [TestScene, Fogway, Monoliths, Relic, KitDemo, AshfallTown];
+export const STYLES = [TestScene, Fogway, Monoliths, Relic, KitDemo, AshfallTown, LostValley];
