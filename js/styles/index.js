@@ -10,5 +10,6 @@ import { KitDemo } from './kit-demo.js';
 import { AshfallTown } from './ashfall-town.js';
 import { LostValley } from './lost-valley.js';
 import { NeonCircuit } from './neon-circuit.js';
+import { NightManor } from './night-manor.js';
 
-export const STYLES = [TestScene, Fogway, Monoliths, Relic, KitDemo, AshfallTown, LostValley, NeonCircuit];
+export const STYLES = [TestScene, Fogway, Monoliths, Relic, KitDemo, AshfallTown, LostValley, NeonCircuit, NightManor];
