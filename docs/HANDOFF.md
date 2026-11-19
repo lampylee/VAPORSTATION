@@ -25,7 +25,7 @@ All work is committed on `main` (local only: **no git remote yet**, nothing push
 | 1 | Fogway | yes | 52→86 / 0.8–1k |
 | 2 | Monoliths | yes | 45→77 / 5k |
 | 3 | Relic | yes | 45 / 2.3k |
-| 4 | Kit demo | hidden | 11–12 / 10k |
+| 4 | Kit demo (shows Kit v2 too) | hidden | 13–14 / 10.5k |
 | 5 | Ashfall Town | yes | 9–10 / 3–4.8k |
 | 6 | Lost Valley | yes | 54–56 / 10.5–11k |
 | 7 | Neon Circuit | yes | 18–19 / 17.5k |
@@ -46,16 +46,24 @@ Number keys only reach 0–9; Route 9 (index 10) is reachable via **N**, the dro
 ## Open items (rough priority)
 
 1. Run `?bench` + Scarlett live test in real Chrome (5 minutes, unblocks confidence).
-2. **Kit v2 pass** (below) — recommended **before wave 2**, so the next six environments don't each re-implement the same helpers.
-3. **Wave 2 environments** (briefs below).
+2. ~~Kit v2 pass~~ — done, see below.
+3. **Wave 2 environments** (briefs below) — launched 2026-11-19, one session per environment.
 4. **Setlist mode** (ROADMAP Phase 1): song/album → palette + environment(s), advance with a key/footswitch; also the natural fix for the 0–9 number-key limit (or add an environment browser in Phase 4).
 5. Housekeeping: the six wave-1 branches `claude/env-*` and their worktrees are merged and can be deleted; the six wave-1 sessions can be archived.
 6. Add a GitHub remote and push, so work is backed up off this machine.
 7. Phase 4 (UI pass with the `frontend-design` plugin, MIDI, tap tempo, manual overrides), then Phase 5.
 
-## Kit v2 backlog (consolidated from the wave-1 sessions' reports)
+## Kit v2 — done (2026-11-19)
 
-Each was implemented locally inside one environment file; promote the useful ones into `js/kit/` / `js/gfx/ps1.js` and update `docs/ENVIRONMENT-GUIDE.md`. Starred = asked for by 2+ sessions or clearly reusable.
+All starred items below are in the kit, documented in `docs/ENVIRONMENT-GUIDE.md` and exercised by `js/styles/kit-demo.js`:
+`r.updateTexture`, `texture2`/`blend` dither-crossfade, instance tilt (`rotX`/`rotZ`, billboard spin), draw `fade` (lights through fog), `K.xf`/`K.Frame`/`props.rotX/Y/Z`, `K.PathFrames` (+ `sweep`, `placeEvery`, `PathRig` `rollFn`), `K.roadStrip`, `K.forSegments`, `K.scatter`, `K.orientedBox`, `Sky` `moonTexture` + `sprites.moon`, `K.NeonText`/`K.textTexture` (full 5x7 font).
+Also promoted: `K.Pendulum` (soft limit), `K.fadeOut/fadeIn`, pixel helpers (`makeIndexed`, `dshade`, `bayer`, `rnd`, `blobNoise`, `ditherPick`), `pointedArch`/`pointedCurve`/`lancet`/`vault`, `chain`, `flatPoly`, `decal`, `quadFacing`, `atlasUV`, sprites `fern`/`kelp`/`cactus`/`lightShaft`; negative `heightScale` flip is documented.
+Ashfall Town now uses `r.updateTexture`; the other wave-1 styles keep their local copies (working code, not worth the churn).
+**Not promoted** (still local, candidates for Kit v3): caustic flipbook overlay, fish/boid schools, direction-aligned streak particles, light strips with travelling pulses, scrolling waterfall texture, moss stone / cliff rock / jungle floor textures, texture-atlas box faces.
+
+### Original backlog (for reference)
+
+Each was implemented locally inside one environment file. Starred = asked for by 2+ sessions or clearly reusable.
 
 **Renderer**
 - ★ `r.updateTexture(tex, gen)` for in-place re-uploads (Ashfall Town calls `texSubImage2D` directly).
@@ -114,7 +122,7 @@ Start each with `start_session` (`initiation: user_asked`, `use_worktree: true`,
 
 > Build one new environment for Vaporstation: **NAME**, on your own branch in this worktree.
 >
-> **Read first:** `CLAUDE.md`, `docs/ENVIRONMENT-GUIDE.md`, `docs/HANDOFF.md` (verification tips + kit backlog), and `js/styles/kit-demo.js` (the reference implementation). Wave-1 environments in `js/styles/` show more techniques; feel free to borrow from them.
+> **Read first:** `CLAUDE.md`, `docs/ENVIRONMENT-GUIDE.md`, `docs/HANDOFF.md` (verification tips), and `js/styles/kit-demo.js` (the reference implementation). **Use the Kit v2 helpers** (path frames, scatter, segments, NeonText, Pendulum, instance tilt, texture2/blend, draw fade, pixel helpers) instead of re-implementing them. Wave-1 environments in `js/styles/` show more techniques; feel free to borrow from them.
 >
 > **Concept:** CONCEPT
 > Palette: `static palette = fromKeys('FILE', 'NAME', [...])` with PALETTE-HINT, inline in your file.

@@ -336,11 +336,7 @@ export class AshfallTown {
   _composeRust(level) {
     const A = this.atlas, out = A.data, n = out.length;
     for (let i = 0; i < n; i++) out[i] = A.thr[i] < level ? A.rust[i] : A.base[i];
-    const gl = this.r.gl;
-    gl.bindTexture(gl.TEXTURE_2D, this.atlasTex);
-    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, AT, AT, gl.RED, gl.UNSIGNED_BYTE, out);
-    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+    this.r.updateTexture(this.atlasTex, A);
   }
 
   /** Deterministic street contents for the segments around the camera. */

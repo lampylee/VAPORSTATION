@@ -3,23 +3,11 @@
 // Draw them on a billboard quad: r.drawInstanced(quadMesh, inst, { texture, billboard: 1 }).
 import { R } from '../palette/palette.js';
 import { CLEAR } from '../gfx/textures.js';
+import { bayer, makeIndexed as make, dshade } from './pixel.js';
+import { fbm } from './noise.js';
 
-const BAYER4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
-const bayer = (x, y) => (BAYER4[(y & 3) * 4 + (x & 3)] + 0.5) / 16;
+// same hash the sprites have always used (keeps existing sprite shapes identical)
 const rnd = (x, y, s = 0) => { const h = Math.sin(x * 12.9898 + y * 78.233 + s * 37.7) * 43758.5453; return h - Math.floor(h); };
-
-function make(w, h, fn) {
-  const data = new Uint8Array(w * h);
-  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) data[y * w + x] = fn(x, y);
-  return { data, width: w, height: h, indexed: true };
-}
-
-/** Continuous shade 0..3 -> dithered integer shade, as an index in `ramp`. */
-const dshade = (ramp, s, x, y) => {
-  s = Math.max(0, Math.min(3, s));
-  const f = Math.floor(s);
-  return R(ramp, Math.min(3, f + (s - f > bayer(x, y) ? 1 : 0)));
-};
 
 /** Conifer: stacked tiers + trunk. 32x64. */
 export function pine({ ramp = 1, trunk = R(0, 0), tiers = 4, seed = 1 } = {}) {
@@ -136,5 +124,94 @@ export function chainLink({ index = R(0, 2), dark = R(0, 1) } = {}) {
     const a = (x + y) % 8, b = (x - y + 64) % 8;
     if (a === 0 || b === 0) return (x + y) % 16 < 8 ? index : dark;
     return CLEAR;
+  });
+}
+
+// ---- Kit v2 additions (promoted from wave-1 environments) ----
+
+/** Fern: arching fronds fanned out from the base. 32x24. */
+export function fern({ ramp = 1, seed = 8 } = {}) {
+  const W = 32, H = 24, fronds = [];
+  for (let i = 0; i < 7; i++) {
+    const ang = Math.PI * (0.14 + (i / 6) * 0.72) + (rnd(i, 0, seed) - 0.5) * 0.15, len = 12 + rnd(i, 1, seed) * 9;
+    fronds.push([ang, len]);
+  }
+  return make(W, H, (x, y) => {
+    for (const [ang, len] of fronds) {
+      for (let s = 0; s <= 12; s++) {
+        const t = s / 12, d = t * len;
+        const px = W / 2 + Math.cos(ang) * d, py = H - 1 - Math.sin(ang) * d + t * t * len * 0.55; // droop
+        const w = (1 - t) * 2.2 + 0.4;
+        if (Math.abs(x - px) < w && Math.abs(y - py) < w * 0.7 && ((x + y) % 2 || w > 1.5)) return dshade(ramp, 0.8 + t * 1.8 + (Math.cos(ang) < 0 ? 0.4 : 0), x, y);
+      }
+    }
+    return CLEAR;
+  });
+}
+
+/** Kelp / tall weed frond: wavy stalk with alternating blades. 16x64. Sway it with `sway`. */
+export function kelp({ ramp = 1, seed = 1 } = {}) {
+  const r2 = (a, b) => rnd(a, b, seed + 11);
+  const stalk = (y) => 7.5 + Math.sin((y / 63) * 7 + seed) * 2 * (1 - (y / 63) * 0.6);
+  const blades = [];
+  for (let y0 = 6 + seed % 3, i = 0; y0 < 58; y0 += 5 + r2(i, 0) * 2, i++) {
+    const side = i % 2 ? 1 : -1, len = (5 + r2(i, 1) * 3) * (1 - (y0 / 63) * 0.35);
+    const ax = stalk(y0), ay = y0, bx = Math.max(0.5, Math.min(15.5, ax + side * len * 0.8)), by = y0 - len * 0.75;
+    blades.push([ax, ay, bx, by, 1.4 + r2(i, 2) * 0.8]);
+  }
+  return make(16, 64, (x, y) => {
+    const t = y / 63; // 0 = top, 1 = root
+    if (Math.abs(x - stalk(y)) < 0.8) return dshade(ramp, 1.4 + (1 - t) * 0.9, x, y);
+    for (const [ax, ay, bx, by, w] of blades) {
+      const dx = bx - ax, dy = by - ay, u = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy)));
+      if (Math.hypot(x - ax - dx * u, y - ay - dy * u) < w * Math.sin(Math.PI * Math.min(1, u * 1.1 + 0.08))) return dshade(ramp, 2.9 - u * 0.9 - t * 0.7, x, y);
+    }
+    return CLEAR;
+  });
+}
+
+/** Desert cactus: trunk + two arms with vertical ribs. 32x64. */
+export function cactus({ ramp = 1, seed = 1 } = {}) {
+  const segs = [ // capsules: [x0, y0, x1, y1, radius]
+    [15.5, 63, 15.5, 6, 4],
+    [15.5, 36, 7, 36, 2.6], [7, 36, 7, 18, 2.6],
+    [15.5, 42, 24, 42, 2.4], [24, 42, 24, 27, 2.4],
+  ];
+  return make(32, 64, (x, y) => {
+    let best = -1, dxs = 0, rad = 1;
+    for (const [ax, ay, bx, by, r] of segs) {
+      const dx = bx - ax, dy = by - ay, t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy || 1)));
+      const px = x - ax - dx * t, py = y - ay - dy * t, d = Math.hypot(px, py);
+      if (d < r && (best < 0 || d / r < best)) { best = d / r; dxs = Math.abs(dy) > Math.abs(dx) ? px : py; rad = r; }
+    }
+    if (best < 0) return CLEAR;
+    const rib = (Math.floor(dxs + rad + 0.5) % 2) === 0 ? -0.5 : 0;
+    return dshade(ramp, 2.1 - (dxs / rad) * 1.1 + rib + (rnd(x, y, seed) - 0.5) * 0.4, x, y);
+  });
+}
+
+/**
+ * Tall light shaft / searchlight beam: bright core, dithered falloff to transparent,
+ * brighter at the top. 16x64. Draw additive (billboard: 1, or on a tilted quad).
+ */
+export function lightShaft({ ramp = 3 } = {}) {
+  return make(16, 64, (x, y) => {
+    const t = y / 63, across = 1 - Math.abs(x - 7.5) / 8;
+    const b = across * across * (1 - t * 0.75);
+    if (b < 0.05 + bayer(x, y) * 0.22) return CLEAR;
+    return dshade(ramp, 1 + b * 2.4, x, y);
+  });
+}
+
+/**
+ * Moon disc with darker maria and a dithered rim. 32x32. Pass to Sky as
+ * `moonTexture` when the default accent glow reads wrong (it's pink in many palettes).
+ */
+export function moon({ ramp = 3, seed = 12 } = {}) {
+  return make(32, 32, (x, y) => {
+    const dx = x - 15.5, dy = y - 15.5, d = Math.hypot(dx, dy) / 15.5;
+    if (d > 1) return CLEAR;
+    const maria = fbm(x * 0.14, y * 0.14, { octaves: 3, seed });
+    return dshade(ramp, 3.2 - d * d * 0.9 - (maria > 0.56 ? 0.9 : 0) + (dx + dy < 0 ? 0.15 : -0.2), x, y);
   });
 }

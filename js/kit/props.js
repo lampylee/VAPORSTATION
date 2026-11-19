@@ -4,6 +4,10 @@
 import { GeoBuilder, box, merge } from '../gfx/geometry.js';
 import { CLEAR } from '../gfx/textures.js';
 import { R } from '../palette/palette.js';
+import { rotX, rotY, rotZ, transform, cloneGeo } from './shapes.js';
+
+// rotate / transform a geometry in place (positions + normals)
+export { rotX, rotY, rotZ, transform, cloneGeo };
 
 /** N-sided prism (pillars, posts, tree trunks, barrels). Pivot at base. */
 export function prism(sides = 6, radius = 0.5, height = 2, { cap = true, uvRepeat = [1, 1], taper = 1 } = {}) {
@@ -143,13 +147,5 @@ export { CLEAR };
 export function shift(geo, dx, dy, dz) {
   const p = geo.positions;
   for (let i = 0; i < p.length; i += 3) { p[i] += dx; p[i + 1] += dy; p[i + 2] += dz; }
-  return geo;
-}
-function rotZ(geo, a) {
-  const c = Math.cos(a), s = Math.sin(a), p = geo.positions, n = geo.normals;
-  for (let i = 0; i < p.length; i += 3) {
-    const x = p[i], y = p[i + 1]; p[i] = x * c - y * s; p[i + 1] = x * s + y * c;
-    const nx = n[i], ny = n[i + 1]; n[i] = nx * c - ny * s; n[i + 1] = nx * s + ny * c;
-  }
   return geo;
 }

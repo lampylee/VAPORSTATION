@@ -47,7 +47,11 @@ function dome(radius = 100, segs = 12, rings = 6, curve = 0.7) {
 }
 
 export class Sky {
-  constructor(r, { stars = 0, starIndex = R(3, 3), moon = false, moonRamp = 2, moonDir = [0.3, 0.35, -1], moonSize = 9, banded = false, clouds = 0, cloudRamp = 3 } = {}) {
+  /**
+   * moonTexture: your own indexed generator for the moon disc (e.g. sprites.moon({ ramp: 3 })),
+   * instead of the default accent-ramp glow (or banded sun).
+   */
+  constructor(r, { stars = 0, starIndex = R(3, 3), moon = false, moonRamp = 2, moonDir = [0.3, 0.35, -1], moonSize = 9, banded = false, moonTexture = null, clouds = 0, cloudRamp = 3 } = {}) {
     this.dome = r.createMesh(dome());
     this.m = mat4.create();
     this._d = [0, 0, 0];
@@ -63,7 +67,7 @@ export class Sky {
     }
     if (moon) {
       this.moon = r.createMesh(disc(12, 1));
-      this.moonTex = r.texture(banded ? bandedSun({ ramp: moonRamp }) : glow({ ramp: moonRamp }));
+      this.moonTex = r.texture(moonTexture || (banded ? bandedSun({ ramp: moonRamp }) : glow({ ramp: moonRamp })));
       const l = Math.hypot(...moonDir);
       this.moonDir = moonDir.map((v) => v / l);
       this.moonSize = moonSize;

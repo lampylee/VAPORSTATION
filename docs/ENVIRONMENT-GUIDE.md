@@ -59,20 +59,29 @@ r.setLight(dir, P.role('light') scaled, P.role('ambient') scaled);
 | Piece | API | Notes |
 |---|---|---|
 | Noise | `fbm(x, z, {octaves, seed})`, `ridged()`, `noise2()`, `rand2(ix, iz, seed)` | deterministic; `rand2` for placement |
-| Swell | `swell(k, idle, active)`, `stage(k, from, to)`, `drive(audio, k)`, `Envelope`, `Spring`, `History` | `History` makes pulses travel through space |
-| Camera | `DollyRig(spline)`, `OrbitRig`, `SweepRig`, `PathRig(fn)`, `Spline(points)` | all have beat nudge, roll kick and FOV punch built in; `update(audio, k, dt)` then `apply(r)` |
-| Sky | `new Sky(r, {stars, moon, banded, clouds})`, `draw(r, eye, {horizon, zenith, brightness, starLevel, moonScale, cloudDrift})` | draw first; pass the fog colour as `horizon` |
+| Swell | `swell(k, idle, active)`, `stage(k, from, to)`, `drive(audio, k)`, `Envelope`, `Spring`, `Pendulum`, `History`, `fadeOut(d, near, far)`, `fadeIn` | `History` makes pulses travel through space; `Pendulum` actually swings (pump it with bass in phase with `.v`); `fadeOut` scales scattered things down at the edge |
+| Camera | `DollyRig(spline)`, `OrbitRig`, `SweepRig`, `PathRig(fn, {rollFn})`, `Spline(points)` | all have beat nudge, roll kick and FOV punch built in; `update(audio, k, dt)` then `apply(r)`. `rollFn: (s) => path.rollAt(s)` banks with a track |
+| Sky | `new Sky(r, {stars, moon, banded, moonTexture, clouds})`, `draw(r, eye, {horizon, zenith, brightness, starLevel, moonScale, cloudDrift})` | draw first; pass the fog colour as `horizon`. `moonTexture: K.sprites.moon({ ramp: 3 })` if the default accent glow reads wrong |
 | Terrain | `new Terrain(r, {size, cells, height, uvScale})`, `follow(x, z)`, `heightAt(x, z)`, `draw(r, opts)` | infinite, world-space UVs, Gouraud shading |
 | Particles | `new Particles(r, 'rain' \| 'snow' \| 'ash' \| 'embers' \| 'dust' \| 'fireflies' \| 'bubbles', overrides)`, `update(dt, center, {amount, speed, wind})`, `draw(r, {brightness})` | one draw call each; `amount` 0..1 fades particles in/out |
-| Sprites | `sprites.pine/broadleaf/deadTree/bush/grass/flame/glow/cloud/dot/streak/chainLink` | indexed with transparency; draw with `billboardQuad()` + `drawInstanced` |
-| Props | `props.prism/crate/wall/arch/lampPost/panel/fence/tombstone/stairs` + textures `planks/rust/tiles/sign` | pivot at base centre; `merge()` to combine |
+| Sprites | `sprites.pine/broadleaf/deadTree/bush/grass/fern/kelp/cactus/flame/glow/lightShaft/moon/cloud/dot/streak/chainLink` | indexed with transparency; draw with `billboardQuad()` + `drawInstanced`. `lightShaft` = searchlight / sunbeam (additive) |
+| Props | `props.prism/crate/wall/arch/lampPost/panel/fence/tombstone/stairs` + textures `planks/rust/tiles/sign`; `props.shift/rotX/rotY/rotZ/transform/cloneGeo` | pivot at base centre; `merge()` to combine. Transforms modify in place |
+| Pixel | `makeIndexed(w, h, (x, y) => index)`, `dshade(ramp, shade0to3, x, y)`, `bayer(x, y)`, `rnd(x, y, seed)`, `blobNoise(x, y, cell, seed)`, `ditherPick(a, b, t, x, y)`, `CLEAR` | for your own indexed texture generators; don't re-implement them per file |
+| Shapes | `xf({pos, rot, scale})` (merge part transform), `Frame` (`f.add(parts, geo, {pos, rot})`, `f.child()`), `orientedBox(g, c, ax, ay, az)`, `quadFacing`, `flatPoly`, `decal`, `chain`, `atlasUV(geo, rect)`, `pointedArch`, `pointedCurve`, `lancet`, `vault`, vectors `vadd/vsub/vcross/vnorm/…`, `rotPoint` | rotations everywhere are applied X, then Z, then Y (same as instance tilt) |
+| Path | `new PathFrames(spline \| points, {step, bank, closed})` → `.point(s, out, x, y)`, `.frameAt(s)`, `.rollAt(s)`, `.yawAt(s)`, `.sweep(profile, {uvTile, from, to})`, `.placeEvery(spacing, fn)`; `roadStrip({...})`; `forSegments(s, {length, ahead}, fn)`; `scatter(x, z, {cell, radius}, fn)`; `repeat(x, period)` | evenly resampled frames with banking; `sweep` builds roads, walls, barriers, tubes from a cross-section; `forSegments` = endless corridors/streets with deterministic per-segment contents; `scatter` = camera-centred jittered grid |
+| Text | `new NeonText(r, 'OPEN LATE', {height, align})` → `.set(i, b)` / `.setAll((i, n) => b)` / `.draw(r, matrix, opts)`; `textTexture(text, {scale, core, mid, outline, bg})`; `FONT` | original 5x7 font (A–Z, 0–9, punctuation); one draw call, per-letter brightness for letters switching on one by one |
 | Models | `await loadGLB(url)` → `{geo, images}`; `imageToIndexed(image, {ramp})` | vertex colours kept; convert embedded textures to one ramp so palettes still apply |
 
 ### Renderer (`r`)
 
 - `r.createMesh(geo, dynamic?)`, `mesh.update(geo)`; `r.texture(gen)` for generator output.
-- `r.draw(mesh, matrix, { texture, tint, emissive, unlit, fog, additive, depthWrite, uvOffset, uvScale, sway })`
-- `r.createInstances(max)` → `inst.set(i, x, y, z, scale, rotY, shade, swayPhase, heightScale)`, `inst.upload(count)`
+- `r.updateTexture(tex, gen, rows?)` re-uploads a texture in place (animated screens, holo panels, a surface that changes with the swell). Same size = cheap; `rows: [y0, y1)` uploads a band.
+- `r.draw(mesh, matrix, { texture, tint, emissive, unlit, fog, additive, depthWrite, uvOffset, uvScale, sway, texture2, blend, fade })`
+  - `texture2` + `blend` (0..1): **dither-crossfade** to a second texture of the same kind and size (clean → rusted, day → night, a room flipping to its alternate). The threshold is per texel, so it grows in blotchy patches stuck to the surface. Drive `blend` with `K.stage`.
+  - `fade: [near, far]`: fade out with camera distance into the fog colour (to black when additive), **even with `fog: false`**. Use it for lights that shine through fog (`fog: false, additive: true, fade: [...]`) so they never pop at the scatter edge.
+- `r.createInstances(max)` → `inst.set(i, x, y, z, scale, rotY, shade, swayPhase, heightScale, rotX, rotZ)`, `inst.tilt(i, rotX, rotZ)`, `inst.upload(count)`
+  - `rotX`/`rotZ` **tilt** instances around their pivot (applied X, Z, then Y): toppled columns, swinging chandeliers (pivot at the hook + `K.Pendulum`), path-aligned props. On billboards `rotZ` spins the sprite in its plane (tumbling leaves, debris).
+  - A **negative `heightScale`** flips the mesh vertically (cheap wing flaps for birds and bats).
 - `r.drawInstanced(mesh, inst, { ...same options, billboard: 0 | 1 | 2, sway })`. `billboard: 1` stays upright (trees), `2` faces the camera fully (glows, particles). `sway` bends vertices by height (wind, bass).
 - `mat4.trs(out, x, y, z, rx, ry, rz, sx, sy, sz)` for model matrices.
 
@@ -80,7 +89,9 @@ r.setLight(dir, P.role('light') scaled, P.role('ambient') scaled);
 
 - Lights switching on in sequence (`stage`), windows lighting up, neon flickering into life.
 - Weather building: drizzle → storm, light ash → heavy ash (`Particles.amount`).
-- The world transforming: clean → rusted (crossfade two textures by drawing the second with `stage`-driven additive glow, or swap meshes beyond the fog).
+- The world transforming: clean → rusted, frozen → thawed (`texture2` + `blend: K.stage(k, …)` dither-crossfade), or swap meshes beyond the fog.
+- Signs and screens booting letter by letter (`K.NeonText.setAll` + `K.stage`), animated screens (`r.updateTexture`).
+- Hanging things that swing harder as the bass builds (`K.Pendulum` + instance tilt).
 - Camera waking up: slow pan → flying (`idleSpeed` → `activeSpeed`).
 - Use `History` so a bass hit ripples away from the camera instead of everything pulsing at once.
 

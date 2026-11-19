@@ -52,3 +52,27 @@ export class History {
   /** t in [0,1]: 0 = now, 1 = oldest */
   at(t) { return this.buf[Math.min(this.buf.length - 1, Math.max(0, Math.floor(t * (this.buf.length - 1))))]; }
 }
+
+/**
+ * Lightly damped pendulum: swings back and forth after a push (Spring is
+ * critically damped and won't). Chandeliers, hanging signs, lanterns, cables.
+ * Pump it with bass in phase with its motion so the swing builds up:
+ *   if (Math.sign(p.v) === Math.sign(p.x)) p.push(bass * k * 0.4 * dt * Math.sign(p.v));
+ * Read .x (radians) and feed it to an instance tilt or mat4.trs.
+ */
+export class Pendulum {
+  constructor(freq = 1.5, damping = 0.18, limit = 0.3) { this.w = freq; this.c = damping; this.limit = limit; this.x = 0; this.v = 0; }
+  /** Pushes taper off as the swing nears `limit`, so it saturates softly instead of hitting the stop. */
+  push(a) { this.v += a * Math.max(0, 1 - Math.abs(this.x) / this.limit); }
+  update(dt) {
+    this.v += (-this.w * this.w * this.x - this.c * this.v) * dt;
+    this.x += this.v * dt;
+    if (Math.abs(this.x) > this.limit) { this.x = Math.sign(this.x) * this.limit; this.v *= 0.5; }
+    return this.x;
+  }
+}
+
+/** 1 up to `near`, easing to 0 at `far`: fade scattered things by camera distance (scale or shade). */
+export const fadeOut = (d, near, far) => 1 - smoothstep(clamp((d - near) / Math.max(1e-4, far - near)));
+/** 0 up to `near`, easing to 1 at `far` (e.g. hide things right in front of the camera). */
+export const fadeIn = (d, near, far) => smoothstep(clamp((d - near) / Math.max(1e-4, far - near)));

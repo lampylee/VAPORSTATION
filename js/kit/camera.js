@@ -121,16 +121,20 @@ export class SweepRig extends CameraRig {
   }
 }
 
-/** Travels an endless path function s -> [x,y,z] (tunnels, roads, tracks). */
+/**
+ * Travels an endless path function s -> [x,y,z] (tunnels, roads, tracks).
+ * rollFn(s) -> radians banks the camera with the path (e.g. PathFrames.rollAt), scaled by rollAmount.
+ */
 export class PathRig extends CameraRig {
-  constructor(pathFn, { lookAhead = 6, ...o } = {}) {
+  constructor(pathFn, { lookAhead = 6, rollFn = null, rollAmount = 0.85, ...o } = {}) {
     super(o);
-    this.pathFn = pathFn; this.lookAhead = lookAhead; this.s = 0;
+    this.pathFn = pathFn; this.lookAhead = lookAhead; this.rollFn = rollFn; this.rollAmount = rollAmount; this.s = 0;
   }
   update(audio, k, dt) {
     super.update(audio, k, dt);
     this.s += this.speed * dt;
     this.pathFn(this.s, this.eye);
     this.pathFn(this.s + this.lookAhead, this.target);
+    if (this.rollFn) this.roll = this.rollFn(this.s) * this.rollAmount;
   }
 }

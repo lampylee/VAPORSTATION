@@ -22,6 +22,7 @@ layout(location=2) in vec2 aUV;
 layout(location=3) in vec3 aColor;
 layout(location=4) in vec4 aInst0;   // instancing: xyz position, uniform scale
 layout(location=5) in vec4 aInst1;   // instancing: rotY, shade, sway phase, height scale
+layout(location=6) in vec4 aInst2;   // instancing: rotX, rotZ (tilt / swing; rotZ spins billboards), unused, unused
 uniform mat4 uModel, uView, uProj;
 uniform vec2 uSnapGrid;      // half internal resolution / snap size in pixels
 uniform float uSnapOn;
@@ -32,10 +33,12 @@ uniform vec2 uUVOffset, uUVScale;
 uniform float uInstanced;    // 1 = use aInst0/aInst1
 uniform float uBillboard;    // 0 off, 1 upright (cylindrical), 2 face camera fully
 uniform float uTime, uSway;  // sway bends vertices by their height (foliage, banners)
+uniform vec2 uFade;          // distance fade: near, far (far <= near = off)
 out vec3 vUVw;               // uv * w, w  -> undoes perspective correction
 out vec2 vUVp;               // perspective-correct uv (for blending amount)
 out vec3 vColor;
 out float vFog;
+out float vFade;
 void main() {
   vec3 p = aPos;
   vec3 nrm = aNormal;
@@ -44,12 +47,19 @@ void main() {
     p.x += sin(uTime * 1.7 + aInst1.z) * uSway * max(p.y, 0.0);
     p.y *= aInst1.w;
     shade = aInst1.y;
+    float cx = cos(aInst2.x), sx = sin(aInst2.x), cz = cos(aInst2.y), sz = sin(aInst2.y);
     if (uBillboard > 0.5) {
       vec3 right = vec3(uView[0][0], uView[1][0], uView[2][0]);
       vec3 up = uBillboard > 1.5 ? vec3(uView[0][1], uView[1][1], uView[2][1]) : vec3(0.0, 1.0, 0.0);
+      p.xy = vec2(cz * p.x - sz * p.y, sz * p.x + cz * p.y);   // rotZ spins the sprite in its plane
       p = aInst0.xyz + (right * p.x + up * p.y) * aInst0.w;
       nrm = vec3(uView[0][2], uView[1][2], uView[2][2]);
     } else {
+      // tilt around the pivot: X (pitch), then Z (roll), then Y (yaw)
+      p = vec3(p.x, cx * p.y - sx * p.z, sx * p.y + cx * p.z);
+      nrm = vec3(nrm.x, cx * nrm.y - sx * nrm.z, sx * nrm.y + cx * nrm.z);
+      p = vec3(cz * p.x - sz * p.y, sz * p.x + cz * p.y, p.z);
+      nrm = vec3(cz * nrm.x - sz * nrm.y, sz * nrm.x + cz * nrm.y, nrm.z);
       float c = cos(aInst1.x), s = sin(aInst1.x);
       p = vec3(c * p.x + s * p.z, p.y, -s * p.x + c * p.z) * aInst0.w + aInst0.xyz;
       nrm = vec3(c * nrm.x + s * nrm.z, nrm.y, -s * nrm.x + c * nrm.z);
@@ -72,7 +82,9 @@ void main() {
   vec2 uv = aUV * uUVScale + uUVOffset;
   vUVp = uv;
   vUVw = vec3(uv * clip.w, clip.w);
-  vFog = clamp((length(view.xyz) - uFog.x) / max(uFog.y - uFog.x, 0.001), 0.0, 1.0);
+  float dist = length(view.xyz);
+  vFog = clamp((dist - uFog.x) / max(uFog.y - uFog.x, 0.001), 0.0, 1.0);
+  vFade = uFade.y > uFade.x ? smoothstep(uFade.x, uFade.y, dist) : 0.0;
 }`;
 
 const WORLD_FS = `#version 300 es
@@ -81,23 +93,34 @@ in vec3 vUVw;
 in vec2 vUVp;
 in vec3 vColor;
 in float vFog;
-uniform sampler2D uTex;
+in float vFade;
+uniform sampler2D uTex, uTex2;
 uniform sampler2D uClut;     // 16x1 palette (colour lookup table)
 uniform float uIndexed;      // 1 = uTex holds palette indices, like PS1 4-bit textures
 uniform float uAffine;
+uniform float uBlend;        // 0..1 dither-crossfade uTex -> uTex2 (same kind: both indexed or both RGBA)
 uniform vec3 uTint, uEmissive, uFogColor;
 uniform float uFogOn;
 out vec4 outColor;
+const float BAYER[16] = float[16](0.,8.,2.,10.,12.,4.,14.,6.,3.,11.,1.,9.,15.,7.,13.,5.);
 void main() {
   vec2 uv = mix(vUVp, vUVw.xy / vUVw.z, uAffine);
   vec4 t = texture(uTex, uv);
+  if (uBlend > 0.0) {
+    // per-texel threshold, so it sticks to the surface: blotchy 4x4-texel blocks + ordered dither inside
+    ivec2 q = ivec2(floor(uv * vec2(textureSize(uTex, 0))));
+    float h = fract(sin(dot(vec2(q >> 2), vec2(127.1, 311.7))) * 43758.5453);
+    float th = h * 0.6 + (BAYER[(q.y & 3) * 4 + (q.x & 3)] + 0.5) / 16.0 * 0.4;
+    if (uBlend >= 1.0 || uBlend > th) t = texture(uTex2, uv);
+  }
   if (uIndexed > 0.5) {
     int idx = int(t.r * 255.0 + 0.5);
     if (idx > 15) discard;          // index 255 = transparent
     t = vec4(texelFetch(uClut, ivec2(idx, 0), 0).rgb, 1.0);
   } else if (t.a < 0.5) discard;    // PS1-style 1-bit transparency
   vec3 c = t.rgb * vColor * uTint + uEmissive;
-  c = mix(c, uFogColor, vFog * uFogOn);
+  // distance fade also melts into the fog colour (black for additive draws), even with fog off
+  c = mix(c, uFogColor, max(vFog * uFogOn, vFade));
   outColor = vec4(c, 1.0);
 }`;
 
@@ -219,28 +242,34 @@ class Mesh {
 }
 
 /**
- * Per-instance data for drawInstanced: 8 floats each
- * [x, y, z, scale, rotY, shade, swayPhase, heightScale].
+ * Per-instance data for drawInstanced: 12 floats each
+ * [x, y, z, scale, rotY, shade, swayPhase, heightScale, rotX, rotZ, -, -].
+ * A negative heightScale flips the mesh vertically (handy for wing flaps).
  */
+const INST_STRIDE = 12;
 class InstanceBuffer {
   constructor(gl, max) {
     this.gl = gl; this.max = max; this.count = 0;
-    this.data = new Float32Array(max * 8);
+    this.data = new Float32Array(max * INST_STRIDE);
     this.buffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
     gl.bufferData(gl.ARRAY_BUFFER, this.data.byteLength, gl.DYNAMIC_DRAW);
   }
-  set(i, x, y, z, scale = 1, rotY = 0, shade = 1, phase = 0, heightScale = 1) {
-    const d = this.data, o = i * 8;
+  /** rotX / rotZ tilt the instance around its pivot (before rotY). On billboards rotZ spins the sprite. */
+  set(i, x, y, z, scale = 1, rotY = 0, shade = 1, phase = 0, heightScale = 1, rotX = 0, rotZ = 0) {
+    const d = this.data, o = i * INST_STRIDE;
     d[o] = x; d[o + 1] = y; d[o + 2] = z; d[o + 3] = scale;
     d[o + 4] = rotY; d[o + 5] = shade; d[o + 6] = phase; d[o + 7] = heightScale;
+    d[o + 8] = rotX; d[o + 9] = rotZ;
   }
+  /** Change only the tilt of instance i (after set()). */
+  tilt(i, rotX = 0, rotZ = 0) { const o = i * INST_STRIDE; this.data[o + 8] = rotX; this.data[o + 9] = rotZ; }
   /** Upload the first `count` instances (call after set()). */
   upload(count = this.count) {
     this.count = Math.min(count, this.max);
     const gl = this.gl;
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
-    gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.data, 0, this.count * 8);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.data, 0, this.count * INST_STRIDE);
   }
   dispose() { this.gl.deleteBuffer(this.buffer); }
 }
@@ -248,6 +277,7 @@ class InstanceBuffer {
 const IDENTITY = mat4.create();
 const WHITE = [1, 1, 1];
 const BLACK = [0, 0, 0];
+const NO_FADE = [0, 0];
 
 export class PS1Renderer {
   constructor(canvas) {
@@ -290,6 +320,7 @@ export class PS1Renderer {
     const t = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, t);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
+    t._w = width; t._h = height;
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     const wrap = repeat ? gl.REPEAT : gl.CLAMP_TO_EDGE;
@@ -306,6 +337,7 @@ export class PS1Renderer {
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, width, height, 0, gl.RED, gl.UNSIGNED_BYTE, data);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+    t._w = width; t._h = height;
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
@@ -316,6 +348,26 @@ export class PS1Renderer {
 
   /** Make a texture from generator output (indexed or RGBA). */
   texture(gen) { return gen.indexed ? this.createIndexedTexture(gen) : this.createTexture(gen); }
+
+  /**
+   * Re-upload a texture in place from generator output ({data, width, height, indexed}):
+   * animated screens, a surface that changes with the swell. Same size = texSubImage2D.
+   * rows = [y0, y1) uploads only that band of rows.
+   */
+  updateTexture(tex, gen, rows = null) {
+    const gl = this.gl, { data, width, height } = gen, idx = !!gen.indexed, fmt = idx ? gl.RED : gl.RGBA, bpp = idx ? 1 : 4;
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    if (idx) gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    if (tex._w === width && tex._h === height) {
+      const y0 = rows ? rows[0] : 0, y1 = rows ? rows[1] : height;
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, y0, width, y1 - y0, fmt, gl.UNSIGNED_BYTE, data.subarray(y0 * width * bpp, y1 * width * bpp));
+    } else {
+      gl.texImage2D(gl.TEXTURE_2D, 0, idx ? gl.R8 : gl.RGBA8, width, height, 0, fmt, gl.UNSIGNED_BYTE, data);
+      tex._w = width; tex._h = height;
+    }
+    if (idx) gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+    tex.indexed = idx;
+  }
 
   createClutTexture() {
     const gl = this.gl;
@@ -420,6 +472,7 @@ export class PS1Renderer {
     gl.uniform1f(u.uAffine, P.affine);
     gl.uniform1i(u.uTex, 0);
     gl.uniform1i(u.uClut, 1);
+    gl.uniform1i(u.uTex2, 2);
     gl.uniform1f(u.uTime, P.time || 0);
     this.setPalette(null);
     this.setLight([0.3, -0.8, -0.5], [0.9, 0.9, 0.9], [0.25, 0.25, 0.3]);
@@ -460,7 +513,10 @@ export class PS1Renderer {
   /**
    * Draw a mesh. Options:
    *  texture, tint [r,g,b], emissive [r,g,b], uvOffset [u,v], uvScale [u,v],
-   *  unlit (bool), fog (bool, default true), additive (bool), depthWrite (bool)
+   *  unlit (bool), fog (bool, default true), additive (bool), depthWrite (bool),
+   *  texture2 + blend (0..1): dither-crossfade to a second texture of the same kind and size,
+   *  fade [near, far]: fade out with camera distance into the fog colour (to black when additive),
+   *    even with fog: false. Use it for lights that shine through fog, so nothing pops at the edge.
    */
   draw(mesh, model = IDENTITY, o = {}) {
     this._begin(model, o, 0);
@@ -481,10 +537,12 @@ export class PS1Renderer {
     this._begin(o.model || IDENTITY, o, 1);
     gl.bindVertexArray(mesh.vao);
     gl.bindBuffer(gl.ARRAY_BUFFER, inst.buffer);
-    gl.enableVertexAttribArray(4); gl.vertexAttribPointer(4, 4, gl.FLOAT, false, 32, 0); gl.vertexAttribDivisor(4, 1);
-    gl.enableVertexAttribArray(5); gl.vertexAttribPointer(5, 4, gl.FLOAT, false, 32, 16); gl.vertexAttribDivisor(5, 1);
+    const st = INST_STRIDE * 4;
+    gl.enableVertexAttribArray(4); gl.vertexAttribPointer(4, 4, gl.FLOAT, false, st, 0); gl.vertexAttribDivisor(4, 1);
+    gl.enableVertexAttribArray(5); gl.vertexAttribPointer(5, 4, gl.FLOAT, false, st, 16); gl.vertexAttribDivisor(5, 1);
+    gl.enableVertexAttribArray(6); gl.vertexAttribPointer(6, 4, gl.FLOAT, false, st, 32); gl.vertexAttribDivisor(6, 1);
     gl.drawArraysInstanced(gl.TRIANGLES, 0, mesh.count, n);
-    gl.disableVertexAttribArray(4); gl.disableVertexAttribArray(5);
+    gl.disableVertexAttribArray(4); gl.disableVertexAttribArray(5); gl.disableVertexAttribArray(6);
     this._end(o);
     this.stats.draws++; this.stats.tris += (mesh.count / 3) * n;
   }
@@ -506,6 +564,11 @@ export class PS1Renderer {
     gl.uniform1f(u.uInstanced, instanced);
     gl.uniform1f(u.uBillboard, o.billboard || 0);
     gl.uniform1f(u.uSway, o.sway || 0);
+    const fade = o.fade || NO_FADE;
+    gl.uniform2f(u.uFade, fade[0], fade[1]);
+    const blend = o.texture2 ? Math.max(0, Math.min(1, o.blend ?? 0)) : 0;
+    gl.uniform1f(u.uBlend, blend);
+    if (blend > 0) { gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, o.texture2); gl.activeTexture(gl.TEXTURE0); }
     // additive (PS1 "semi-transparency" B+F) fades to black in fog, not to the fog colour
     if (o.additive) { gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE); gl.uniform3fv(u.uFogColor, BLACK); }
     gl.depthMask(o.depthWrite !== false && !o.additive);
