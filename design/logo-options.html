@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vaporstation logo options</title>
+<style>
+  :root { --bg: #0d0a14; --card: #17121f; --ink: #e9e2f5; --dim: #8a7fa0; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.4 ui-monospace, Consolas, monospace; }
+  header { padding: 24px 16px 8px; max-width: 1200px; margin: auto; }
+  h1 { font-size: 16px; letter-spacing: .2em; margin: 0 0 4px; }
+  header p { color: var(--dim); margin: 0; }
+  main { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px; padding: 16px; max-width: 1200px; margin: auto; }
+  figure { margin: 0; background: var(--card); border: 1px solid #2a2236; }
+  canvas { display: block; width: 100%; image-rendering: pixelated; }
+  figcaption { padding: 8px 10px; display: flex; gap: 8px; color: var(--dim); }
+  figcaption b { color: var(--ink); }
+</style>
+</head>
+<body>
+<header>
+  <h1>VAPORSTATION / LOGO OPTIONS</h1>
+  <p>20 directions, rendered at 256×128 and scaled up with nearest-neighbour, using the project's own 5×7 font, ordered dither and no smooth gradients.</p>
+</header>
+<main id="grid"></main>
+<script type="module">
+import { FONT } from '../js/kit/text.js';
+
+let W = 256, H = 128;
+const B = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+const bay = (x, y) => (B[(y & 3) * 4 + (x & 3)] + 0.5) / 16;
+const hash = (x, y, s = 0) => { const h = Math.sin(x * 12.9898 + y * 78.233 + s * 37.7) * 43758.5453; return h - Math.floor(h); };
+
+// ---- palettes ----
+const P = {
+  vapor: ['#1a0b2e', '#b967ff', '#ff71ce', '#01cdfe', '#fffb96'],
+  sunset: ['#160a1f', '#5b1e5e', '#e0446b', '#ff9a3c', '#ffe27a'],
+  chrome: ['#0b0e1f', '#3a3f6b', '#9fb4d8', '#f2f4ff', '#ff71ce'],
+  toxic: ['#071209', '#1f4d1a', '#4cbb17', '#c6ff3d', '#f4ffd1'],
+  blood: ['#120406', '#4a0a12', '#a3122a', '#ff4d4d', '#ffd1c2'],
+  amber: ['#120a02', '#4a2a06', '#a86412', '#ffb000', '#ffe2a1'],
+  handheld: ['#0f380f', '#306230', '#8bac0f', '#9bbc0f', '#c4d48a'],
+  glacier: ['#060d1a', '#173a5e', '#3f88c5', '#9fd8ff', '#f0fbff'],
+  mono: ['#050505', '#3a3a3a', '#8a8a8a', '#d6d6d6', '#ffffff'],
+  deepsea: ['#020b14', '#06324a', '#0a7f8c', '#3ee6c8', '#d8fff4'],
+};
+
+// ---- painting ----
+let ctx;
+const px = (x, y, c) => { if (x >= 0 && y >= 0 && x < W && y < H) { ctx.fillStyle = c; ctx.fillRect(x | 0, y | 0, 1, 1); } };
+const fill = (c) => { ctx.fillStyle = c; ctx.fillRect(0, 0, W, H); };
+/** dithered pick along stops, t in 0..1 */
+const grad = (stops, t, x, y) => { t = Math.max(0, Math.min(1, t)) * (stops.length - 1); const i = Math.min(stops.length - 2, Math.floor(t)); return t - i > bay(x, y) ? stops[i + 1] : stops[i]; };
+const sky = (stops, y0 = 0, y1 = H) => { for (let y = y0; y < y1; y++) for (let x = 0; x < W; x++) px(x, y, grad(stops, (y - y0) / (y1 - y0), x, y)); };
+function line(x0, y0, x1, y1, c) {
+  x0 |= 0; y0 |= 0; x1 |= 0; y1 |= 0;
+  const dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0), sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1; let e = dx + dy;
+  for (let i = 0; i < 2000; i++) { px(x0, y0, c); if (x0 === x1 && y0 === y1) break; const e2 = 2 * e; if (e2 >= dy) { e += dy; x0 += sx; } if (e2 <= dx) { e += dx; y0 += sy; } }
+}
+function sun(cx, cy, r, stops, cuts = 5, clipY = H) {
+  for (let y = cy - r; y <= cy + r && y < clipY; y++) {
+    const v = (y - (cy - r)) / (2 * r);
+    // horizontal gaps that widen towards the bottom
+    if (v > 0.5) { const band = (v - 0.5) * 2 * cuts, f = band - Math.floor(band); if (f < 0.15 + (v - 0.5) * 0.6) continue; }
+    const hw = Math.sqrt(Math.max(0, r * r - (y - cy) ** 2));
+    for (let x = Math.round(cx - hw); x <= cx + hw; x++) px(x, y, grad(stops, v, x, y));
+  }
+}
+function grid(hy, c, { cols = 18, rows = 9, spread = 3.2 } = {}) {
+  for (let i = -cols; i <= cols; i++) line(W / 2 + i * 6, hy, W / 2 + i * 6 * spread * 3, H, c);
+  for (let j = 1; j <= rows; j++) { const y = hy + (H - hy) * Math.pow(j / rows, 1.8); line(0, y, W, y, c); }
+  line(0, hy, W, hy, c);
+}
+const stars = (n, cols, y1 = H) => { for (let i = 0; i < n; i++) px(hash(i, 1) * W, hash(i, 2) * y1, cols[i % cols.length]); };
+function mountains(base, amp, c, seed = 1, step = 12) {
+  let prev = [0, base - hash(0, seed) * amp];
+  for (let x = step; x <= W + step; x += step) {
+    const cur = [x, base - hash(x, seed) * amp];
+    for (let xx = prev[0]; xx < cur[0]; xx++) { const t = (xx - prev[0]) / step, y = prev[1] + (cur[1] - prev[1]) * t; for (let yy = Math.round(y); yy < base; yy++) px(xx, yy, c); }
+    prev = cur;
+  }
+}
+function cube(cx, cy, s, a, c, tilt = 0.5) {
+  const v = [];
+  for (const X of [-1, 1]) for (const Y of [-1, 1]) for (const Z of [-1, 1]) {
+    const x = X * Math.cos(a) - Z * Math.sin(a), z = X * Math.sin(a) + Z * Math.cos(a);
+    const y = Y * Math.cos(tilt) - z * Math.sin(tilt);
+    v.push([cx + x * s, cy + y * s]);
+  }
+  [[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [4, 6], [5, 7], [0, 4], [1, 5], [2, 6], [3, 7]].forEach(([i, j]) => line(v[i][0], v[i][1], v[j][0], v[j][1], c));
+}
+function bars(x, y, w, h, n, stops, seed = 3) {
+  const bw = Math.floor(w / n);
+  for (let i = 0; i < n; i++) {
+    const bh = Math.round(h * (0.25 + 0.75 * Math.abs(Math.sin(i * 0.9 + seed)) * (0.6 + 0.4 * hash(i, seed))));
+    for (let yy = 0; yy < bh; yy += 2) for (let xx = 0; xx < bw - 1; xx++) px(x + i * bw + xx, y - yy, grad(stops, yy / h, xx, yy));
+  }
+}
+function wave(y, amp, c, freq = 0.09, ph = 0) { let p = null; for (let x = 0; x < W; x++) { const q = [x, y + Math.sin(x * freq + ph) * amp * Math.sin(x / W * Math.PI)]; if (p) line(p[0], p[1], q[0], q[1], c); p = q; } }
+function frame(c, inset = 4) { for (let x = inset; x < W - inset; x++) { px(x, inset, c); px(x, H - 1 - inset, c); } for (let y = inset; y < H - inset; y++) { px(inset, y, c); px(W - 1 - inset, y, c); } }
+const scan = (c, every = 2) => { for (let y = 0; y < H; y += every) for (let x = 0; x < W; x++) if ((x + y) % 2) px(x, y, c); };
+
+// ---- pixel text ----
+/**
+ * t: { text, s (scale), y, x ('c' = centred), gap, fill(u, v, x, y) -> colour,
+ *      outline, shadow [dx, dy, c], extrude [dx, dy, n, stops], shear, wave [amp, freq], scanGap }
+ */
+function text(t) {
+  const s = t.s || 3, gap = t.gap ?? 1, str = t.text, cw = (5 + gap) * s, w = str.length * cw - gap * s, h = 7 * s;
+  const x0 = t.x === undefined || t.x === 'c' ? Math.round((W - w - (t.shear || 0) * h) / 2) : t.x, y0 = t.y;
+  const on = (lx, ly) => { if (lx < 0 || ly < 0 || ly >= h || lx >= w) return false; const g = FONT[str[Math.floor(lx / cw)]]; const gx = Math.floor((lx % cw) / s), gy = Math.floor(ly / s); return gx < 5 && !!g && g[gy][gx] === '1'; };
+  const off = (ly) => Math.round((t.shear || 0) * (h - ly)) + (t.wave ? 0 : 0);
+  const yoff = (lx) => (t.wave ? Math.round(Math.sin(lx * t.wave[1]) * t.wave[0]) : 0);
+  const pass = (fn) => { for (let ly = 0; ly < h; ly++) for (let lx = 0; lx < w; lx++) if (on(lx, ly)) fn(x0 + lx + off(ly), y0 + ly + yoff(lx), lx, ly); };
+  if (t.extrude) { const [dx, dy, n, st] = t.extrude; for (let k = n; k >= 1; k--) pass((X, Y) => px(X + dx * k, Y + dy * k, grad(st, k / n, X, Y))); }
+  if (t.shadow) pass((X, Y) => px(X + t.shadow[0], Y + t.shadow[1], t.shadow[2]));
+  if (t.outline) pass((X, Y) => { for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) px(X + i, Y + j, t.outline); });
+  pass((X, Y, lx, ly) => { if (t.scanGap && ly % t.scanGap === t.scanGap - 1) return; px(X, Y, t.fill(lx / w, ly / h, X, Y)); });
+  return { x0, y0, w, h };
+}
+const solid = (c) => () => c;
+const vgrad = (stops) => (u, v, x, y) => grad(stops, v, x, y);
+const hgrad = (stops) => (u, v, x, y) => grad(stops, u, x, y);
+// chrome: bright top, hard horizon line at the middle, dark-to-bright below
+const chrome = (top, bot) => (u, v, x, y) => v < 0.5 ? grad(top, v * 2, x, y) : grad(bot, (v - 0.5) * 2, x, y);
+
+// ---- the 20 options ----
+const OPTS = [
+  ['Outrun Sun', () => { const p = P.vapor; fill(p[0]); sky([p[0], p[1]], 0, 70); stars(40, [p[4], p[3]], 60); sun(128, 62, 34, [p[4], p[2], p[1]], 5, 74); grid(74, p[2]); text({ text: 'VAPORSTATION', s: 3, y: 50, fill: chrome([p[4], p[3]], [p[1], p[3]]), outline: p[0], shadow: [2, 2, p[2]] }); }],
+  ['Chrome Stack', () => { const p = P.chrome; fill(p[0]); stars(60, [p[2], p[3]]); text({ text: 'VAPOR', s: 5, y: 14, fill: chrome([p[3], p[2]], [p[1], p[3]]), outline: p[0], extrude: [1, 1, 5, [p[4], p[1]]] }); text({ text: 'STATION', s: 3, y: 66, gap: 2, fill: solid(p[4]), outline: p[0] }); }],
+  ['Memory Card', () => { const p = P.mono; fill(p[0]); for (let y = 18; y < 110; y++) for (let x = 40; x < 216; x++) px(x, y, (y < 24 || y > 103 || x < 46 || x > 209) ? p[1] : p[0]); for (let i = 0; i < 9; i++) for (let y = 104; y < 110; y++) for (let x = 0; x < 10; x++) px(60 + i * 16 + x, y, p[2]); text({ text: 'VAPOR', s: 4, y: 32, fill: vgrad([p[4], p[2]]) }); text({ text: 'STATION', s: 2, y: 70, gap: 2, fill: solid(p[3]) }); text({ text: '15 BLOCKS FREE', s: 1, y: 88, fill: solid(p[2]) }); }],
+  ['Low-Poly Peaks', () => { const p = P.glacier; sky([p[0], p[1], p[2]], 0, 90); stars(30, [p[4]], 50); mountains(100, 40, p[1], 3, 16); mountains(110, 26, p[0], 7, 10); text({ text: 'VAPORSTATION', s: 3, y: 20, fill: vgrad([p[4], p[3], p[2]]), outline: p[0] }); fill; for (let y = 110; y < H; y++) for (let x = 0; x < W; x++) px(x, y, p[0]); }],
+  ['Neon Tube', () => { const p = P.vapor; fill('#07040c'); for (let y = 0; y < H; y += 8) for (let x = 0; x < W; x += 16) px(x + (y / 8 % 2) * 8, y, '#1c1428'); text({ text: 'VAPOR', s: 5, y: 16, fill: (u, v, x, y) => (x + y) % 5 ? p[2] : p[4], outline: p[1] }); text({ text: 'STATION', s: 3, y: 70, gap: 2, fill: (u, v, x, y) => (x + y) % 5 ? p[3] : p[4], outline: '#0a4a5c' }); }],
+  ['VS Monogram', () => { const p = P.sunset; fill(p[0]); sun(128, 64, 54, [p[4], p[3], p[2], p[1]], 7); text({ text: 'VS', s: 9, y: 33, fill: (u, v, x, y) => (v < 0.5 ? '#ffffff' : grad(['#ffffff', p[4]], (v - 0.5) * 2, x, y)), outline: p[0], extrude: [2, 2, 3, [p[1], p[0]]] }); }],
+  ['CRT Boot', () => { const p = P.amber; fill(p[0]); frame(p[1], 6); frame(p[1], 8); text({ text: 'VAPORSTATION', s: 3, y: 34, fill: vgrad([p[4], p[3]]), scanGap: 3 }); text({ text: 'READY.', s: 2, x: 30, y: 74, fill: solid(p[3]) }); for (let y = 74; y < 88; y++) for (let x = 104; x < 114; x++) px(x, y, p[3]); scan('#00000055', 2); }],
+  ['Equalizer', () => { const p = P.toxic; fill(p[0]); bars(16, 116, 224, 50, 28, [p[1], p[2], p[3]]); text({ text: 'VAPORSTATION', s: 3, y: 22, fill: vgrad([p[4], p[3], p[2]]), outline: p[0], shadow: [2, 2, p[1]] }); }],
+  ['Wireframe Cube', () => { const p = P.deepsea; fill(p[0]); grid(92, p[1]); cube(60, 56, 22, 0.6, p[3]); cube(60, 56, 12, 1.3, p[2]); text({ text: 'VAPOR', s: 4, x: 104, y: 30, fill: vgrad([p[4], p[3]]) }); text({ text: 'STATION', s: 2, x: 106, y: 66, gap: 2, fill: solid(p[3]) }); }],
+  ['Italic Speed', () => { const p = P.blood; fill(p[0]); for (let i = 0; i < 26; i++) { const y = 10 + hash(i, 4) * 108; line(hash(i, 5) * 80, y, 120 + hash(i, 6) * 136, y, i % 3 ? p[1] : p[2]); } text({ text: 'VAPORSTATION', s: 3, y: 50, shear: 0.35, fill: chrome([p[4], p[3]], [p[2], p[3]]), outline: p[0], shadow: [3, 2, p[1]] }); }],
+  ['Handheld', () => { const p = P.handheld; fill(p[3]); for (let y = 16; y < 112; y++) for (let x = 24; x < 232; x++) px(x, y, (y < 19 || y > 108 || x < 27 || x > 228) ? p[1] : p[4]); text({ text: 'VAPOR', s: 5, y: 26, fill: solid(p[0]), shadow: [2, 2, p[2]] }); text({ text: 'STATION', s: 3, y: 76, gap: 2, fill: solid(p[1]) }); }],
+  ['Sound Wave', () => { const p = P.vapor; sky([p[0], '#2a0f45'], 0, H); for (let k = 0; k < 4; k++) wave(96, 10 + k * 5, [p[1], p[2], p[3], p[4]][k], 0.07 + k * 0.012, k); text({ text: 'VAPORSTATION', s: 3, y: 26, fill: hgrad([p[3], p[1], p[2]]), outline: p[0] }); }],
+  ['Extruded 3D', () => { const p = P.sunset; sky([p[1], p[0]], 0, H); text({ text: 'VAPOR', s: 5, y: 12, extrude: [1, 2, 8, [p[2], p[0]]], fill: vgrad([p[4], p[3]]), outline: p[0] }); text({ text: 'STATION', s: 3, y: 74, gap: 2, extrude: [1, 1, 3, [p[2], p[0]]], fill: solid(p[4]) }); }],
+  ['Pyramid Sun', () => { const p = P.amber; sky([p[0], p[1], p[2]], 0, 96); sun(170, 40, 20, [p[4], p[3]], 4); for (let y = 0; y < 50; y++) for (let x = -y; x <= y; x++) px(80 + x, 46 + y, x < 0 ? (x + y) % 3 ? p[1] : p[0] : p[2]); for (let y = 96; y < H; y++) for (let x = 0; x < W; x++) px(x, y, grad([p[2], p[1]], (y - 96) / 32, x, y)); text({ text: 'VAPORSTATION', s: 3, y: 104, fill: solid(p[4]), outline: p[0] }); }],
+  ['Glitch Split', () => { const p = P.vapor; fill('#0a0612'); const t = { text: 'VAPOR', s: 5, y: 22 }; text({ ...t, fill: solid(p[3]), x: 57 }); text({ ...t, fill: solid(p[2]), x: 53 }); text({ ...t, fill: solid('#ffffff'), x: 55 }); text({ text: 'STATION', s: 3, gap: 2, y: 80, fill: solid(p[3]) }); for (let i = 0; i < 3; i++) { const y = 26 + hash(i, 9) * 28 | 0, sh = (hash(i, 8) - 0.5) * 14 | 0; const row = ctx.getImageData(0, y, W, 2); ctx.putImageData(row, sh, y); } }],
+  ['Disc Ring', () => { const p = P.chrome; fill(p[0]); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const d = Math.hypot(x - 128, (y - 64) * 1.1), a = Math.atan2(y - 64, x - 128); if (d < 60 && d > 12) px(x, y, grad([p[1], p[2], p[3], p[4], p[2]], ((a / Math.PI + 1) / 2 * 3 + d / 60) % 1, x, y)); } text({ text: 'VAPORSTATION', s: 2, gap: 1, y: 57, fill: solid(p[3]), outline: p[0] }); }],
+  ['Arcade Marquee', () => { const p = P.blood; fill(p[0]); for (let x = 8; x < W - 8; x += 6) { px(x, 10, p[4]); px(x, 117, p[4]); } for (let y = 10; y < 118; y += 6) { px(8, y, p[4]); px(W - 9, y, p[4]); } text({ text: 'VAPOR', s: 5, y: 20, fill: chrome([p[4], p[3]], [p[2], p[3]]), outline: '#000', shadow: [3, 3, p[1]] }); text({ text: '- STATION -', s: 2, y: 82, fill: solid(p[4]) }); }],
+  ['Minimal Mono', () => { const p = P.mono; fill(p[0]); text({ text: 'VAPORSTATION', s: 2, gap: 3, y: 57, fill: solid(p[4]) }); for (let x = 30; x < 226; x++) if (x % 2) px(x, 75, p[2]); for (let i = 0; i < 5; i++) for (let y = 0; y < 3; y++) for (let x = 0; x < 3; x++) px(110 + i * 8 + x, 38 + y, i === 2 ? p[4] : p[2]); }],
+  ['Tropic Sunset', () => { const p = P.sunset; sky([p[1], p[2], p[3]], 0, 84); sun(128, 70, 30, [p[4], p[3]], 4, 84); for (let y = 84; y < H; y++) for (let x = 0; x < W; x++) px(x, y, (y + Math.round(Math.sin(x * 0.2 + y) * 1)) % 4 ? p[0] : p[2]); for (const [bx, h] of [[26, 40], [222, 34]]) { line(bx, 84, bx + 4, 84 - h, p[0]); line(bx + 1, 84, bx + 5, 84 - h, p[0]); for (let k = 0; k < 7; k++) { const a = Math.PI * (0.05 + k * 0.15), ex = bx + 4 + Math.cos(a) * 16, ey = 84 - h - Math.sin(a) * 6; line(bx + 4, 84 - h, ex, ey, p[0]); line(ex, ey, ex + Math.cos(a) * 2, ey + 4, p[0]); } } text({ text: 'VAPORSTATION', s: 3, y: 16, fill: solid(p[4]), outline: p[0] }); }],
+  ['Dither Fade', () => { const p = P.glacier; fill(p[0]); text({ text: 'VAPOR', s: 6, y: 14, fill: (u, v, x, y) => (v > bay(x, y) * 1.1 ? p[1] : grad([p[4], p[3]], v, x, y)) }); text({ text: 'STATION', s: 3, y: 74, gap: 3, fill: (u, v, x, y) => (u > bay(x, y) ? p[2] : p[4]) }); }],
+];
+
+const gridEl = document.getElementById('grid');
+OPTS.forEach(([name, draw], i) => {
+  const fig = document.createElement('figure'), cv = document.createElement('canvas');
+  cv.width = W; cv.height = H; ctx = cv.getContext('2d');
+  try { draw(); } catch (e) { console.error(name, e); }
+  fig.append(cv);
+  const cap = document.createElement('figcaption');
+  cap.innerHTML = `<b>${String(i + 1).padStart(2, '0')}</b> ${name}`;
+  fig.append(cap); gridEl.append(fig);
+});
+
+// ---- final picks: export versions (open with ?export to write PNGs via the local receiver) ----
+const vsIcon = (n) => () => { const p = P.sunset, s = n >= 128 ? 9 : 4; fill(p[0]); sun(n / 2, n / 2, n * 0.42, [p[4], p[3], p[2], p[1]], n >= 128 ? 7 : 4); text({ text: 'VS', s, y: Math.round(n / 2 - 3.5 * s), fill: (u, v, x, y) => (v < 0.5 ? '#ffffff' : grad(['#ffffff', p[4]], (v - 0.5) * 2, x, y)), outline: p[0], extrude: [n >= 128 ? 2 : 1, n >= 128 ? 2 : 1, n >= 128 ? 3 : 2, [p[1], p[0]]] }); };
+const FINALS = [
+  // name, w, h, draw, scales
+  ['vaporstation-poster', 256, 128, OPTS[0][1], [4, 8]],
+  ['vaporstation-icon-128', 128, 128, vsIcon(128), [4, 8]],
+  ['vaporstation-icon-64', 64, 64, vsIcon(64), [1, 4]],
+  ['vaporstation-wordmark', 256, 104, () => { const p = P.sunset; text({ text: 'VAPOR', s: 5, y: 12, extrude: [1, 2, 8, [p[2], p[0]]], fill: vgrad([p[4], p[3]]), outline: p[0] }); text({ text: 'STATION', s: 3, y: 74, gap: 2, extrude: [1, 1, 3, [p[2], p[0]]], fill: solid(p[4]), outline: p[0] }); }, [4, 8]],
+];
+const sec = document.createElement('main');
+sec.innerHTML = '<h1 style="grid-column:1/-1;font-size:14px;letter-spacing:.2em">FINAL PICKS</h1>';
+document.body.append(sec);
+const exporting = location.search.includes('export');
+for (const [name, w, h, draw, scales] of FINALS) {
+  W = w; H = h;
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h; ctx = cv.getContext('2d');
+  draw();
+  const fig = document.createElement('figure'); fig.style.background = 'repeating-conic-gradient(#221a2e 0 25%, #17121f 0 50%) 0 0/16px 16px';
+  fig.append(cv); const cap = document.createElement('figcaption'); cap.innerHTML = `<b>${name}</b> ${w}×${h}`; fig.append(cap); sec.append(fig);
+  if (exporting) for (const k of scales) {
+    const big = document.createElement('canvas'); big.width = w * k; big.height = h * k;
+    const b = big.getContext('2d'); b.imageSmoothingEnabled = false; b.drawImage(cv, 0, 0, w * k, h * k);
+    const blob = await new Promise((r) => big.toBlob(r, 'image/png'));
+    await fetch(`http://localhost:8091/${name}-${w * k}x${h * k}.png`, { method: 'POST', body: await blob.arrayBuffer() }); // no content-type, so no CORS preflight
+  }
+}
+if (exporting) document.title = 'EXPORTED';
+</script>
+</body>
+</html>
