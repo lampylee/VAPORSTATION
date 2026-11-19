@@ -25,5 +25,6 @@ import { RainWindow } from './rain-window.js';
 import { CloudSea } from './cloud-sea.js';
 import { PetalSteps } from './petal-steps.js';
 import { MoonlitShallows } from './moonlit-shallows.js';
+import { GreenhouseDusk } from './greenhouse-dusk.js';
 
-export const STYLES = [TestScene, Fogway, Monoliths, Relic, KitDemo, AshfallTown, LostValley, NeonCircuit, NightManor, DrownedRuins, RouteNine, ColdBase, StationDeck, DreamJournal, GraveyardHill, ArcadeAfterHours, AuroraField, KitCalm, LanternRiver, RainWindow, CloudSea, PetalSteps, MoonlitShallows];
+export const STYLES = [TestScene, Fogway, Monoliths, Relic, KitDemo, AshfallTown, LostValley, NeonCircuit, NightManor, DrownedRuins, RouteNine, ColdBase, StationDeck, DreamJournal, GraveyardHill, ArcadeAfterHours, AuroraField, KitCalm, LanternRiver, RainWindow, CloudSea, PetalSteps, MoonlitShallows, GreenhouseDusk];
