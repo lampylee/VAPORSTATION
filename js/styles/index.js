@@ -20,5 +20,6 @@ import { GraveyardHill } from './graveyard-hill.js';
 import { ArcadeAfterHours } from './arcade-after-hours.js';
 import { AuroraField } from './aurora-field.js';
 import { KitCalm } from './kit-calm.js';
+import { CloudSea } from './cloud-sea.js';
 
-export const STYLES = [TestScene, Fogway, Monoliths, Relic, KitDemo, AshfallTown, LostValley, NeonCircuit, NightManor, DrownedRuins, RouteNine, ColdBase, StationDeck, DreamJournal, GraveyardHill, ArcadeAfterHours, AuroraField, KitCalm];
+export const STYLES = [TestScene, Fogway, Monoliths, Relic, KitDemo, AshfallTown, LostValley, NeonCircuit, NightManor, DrownedRuins, RouteNine, ColdBase, StationDeck, DreamJournal, GraveyardHill, ArcadeAfterHours, AuroraField, KitCalm, CloudSea];
