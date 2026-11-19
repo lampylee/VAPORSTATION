@@ -55,7 +55,7 @@ Number keys only reach 0–9; indices 10–16 (Route 9 and all of wave 2) are re
 2. ~~Kit v2 pass~~ — done, see below.
 3. ~~Wave 2 environments~~ — done: built in six parallel sessions, merged 2026-11-19 (smoke-tested at k=0/1 + crossfades; real-fps `?bench` still pending, see item 1). Their reports list suggested kit additions (Kit v3).
 4. **Setlist mode** (ROADMAP Phase 1): song/album → palette + environment(s), advance with a key/footswitch; also the natural fix for the 0–9 number-key limit (or add an environment browser in Phase 4).
-5. Housekeeping: all twelve `claude/env-*` branches (wave 1 + wave 2) and their worktrees are merged and can be deleted; the twelve environment sessions can be archived.
+5. ~~Housekeeping~~ — done 2026-11-19: all twelve `claude/env-*` branches and worktrees deleted, the twelve environment sessions archived.
 6. Add a GitHub remote and push, so work is backed up off this machine.
 7. Phase 4 (UI pass with the `frontend-design` plugin, MIDI, tap tempo, manual overrides), then Phase 5.
 
