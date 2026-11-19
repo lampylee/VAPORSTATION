@@ -21,5 +21,6 @@ import { ArcadeAfterHours } from './arcade-after-hours.js';
 import { AuroraField } from './aurora-field.js';
 import { KitCalm } from './kit-calm.js';
 import { LanternRiver } from './lantern-river.js';
+import { RainWindow } from './rain-window.js';
 
-export const STYLES = [TestScene, Fogway, Monoliths, Relic, KitDemo, AshfallTown, LostValley, NeonCircuit, NightManor, DrownedRuins, RouteNine, ColdBase, StationDeck, DreamJournal, GraveyardHill, ArcadeAfterHours, AuroraField, KitCalm, LanternRiver];
+export const STYLES = [TestScene, Fogway, Monoliths, Relic, KitDemo, AshfallTown, LostValley, NeonCircuit, NightManor, DrownedRuins, RouteNine, ColdBase, StationDeck, DreamJournal, GraveyardHill, ArcadeAfterHours, AuroraField, KitCalm, LanternRiver, RainWindow];
