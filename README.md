@@ -46,13 +46,16 @@ The input is opened with echo cancellation, noise suppression and auto gain cont
 | F | fullscreen |
 | H | hide / show UI (hidden by default in fullscreen) |
 | D | debug overlay: fps, input dB + threshold, level/bass/mid/high, beat, state, intensity |
-| 1 / 2 / 3 | crossfade to Fogway / Monoliths / Relic |
-| N | crossfade to next style |
+| 1 – 9 | crossfade to style 1–9 (see the Style dropdown) |
+| N / Shift+N | crossfade to next / previous style (within the song's environments in setlist mode) |
 | 0 | pipeline test scene |
 | A | toggle auto style-switching while idle |
 | C | toggle CRT scanlines + vignette |
 | P / Shift+P | next / previous palette (crossfades) |
 | O | back to each style's own palette |
+| S | setlist mode on / off |
+| PageDown / → / ] | next song (most USB page-turner footswitches send these) |
+| PageUp / ← / [ | previous song |
 
 ## Palettes (album colours)
 
@@ -68,6 +71,16 @@ A palette is 16 colours: 4 **ramps** (Base, Secondary, Accent, Atmosphere/fog) �
 
 To add a built-in palette, add one line to `js/palette/library.js`:
 `fromKeys('my-album', 'My Album', [base, secondary, accent, fog])`.
+
+## Setlist mode
+
+A setlist is a list of songs (or albums), each with a **palette** and one or more **environments**. Step through it with a key or a USB footswitch.
+
+- **Make one:** Setlist → *New*. Each row is a song: a label, a palette (or *keep current* / *each style's own*) and environments (none = keep the current one). *+ Song from current look* adds the palette and environment showing right now, so you can build a set by browsing with P and N and adding as you go.
+- **Several environments per song:** the first one opens the song; **N** and idle auto-switch then rotate only through that song's list.
+- **Step:** *Next ▶* / **PageDown** / **→** / **]**, and back with *◀ Prev* / **PageUp** / **←** / **[**. Click a song in the list to jump to it. **S** turns setlist mode on and off.
+- **Wait for silence** (on by default): pressing Next while the band is still playing only *cues* the next song (shown in pink). It crossfades in as soon as the room goes quiet, so the change lands between songs. Press Next again to go right away (for segues); Prev cancels the cue.
+- Setlists live in localStorage. *Export* writes a `.setlist.json`; *Import…* or dropping that file on the window loads it. Songs reference palettes by id, so export any of your own palettes too when moving to another laptop.
 
 All settings are saved in localStorage and restored on load. **Reset settings** restores the defaults.
 
@@ -93,6 +106,7 @@ js/gfx/ps1.js           shared PS1 pipeline (all the look lives here)
 js/gfx/geometry.js      low-poly mesh builders
 js/gfx/textures.js      procedural 64×64 indexed textures
 js/palette/             palette model, crossfading, library, editor/import UI
+js/setlist/             setlists: store, player (cue / step), panel + editor UI
 js/kit/                 world kit for building environments (see docs/ENVIRONMENT-GUIDE.md)
 js/styles/*.js          styles + StyleManager (crossfades, idle auto-switch)
 ```

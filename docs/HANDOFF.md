@@ -11,7 +11,7 @@ All work is committed on `main` (local only: **no git remote yet**, nothing push
 |---|---|
 | v1: PS1 pipeline, audio analysis, play/silence state machine, 3 styles | done |
 | 0: housekeeping (`.gitignore`, `CLAUDE.md`, `?bench`) | done |
-| 1: CLUT palettes, editor, album-art extraction, import/export, P/O keys | done, **except setlist mode** |
+| 1: CLUT palettes, editor, album-art extraction, import/export, P/O keys, setlist mode | done |
 | 2: world kit (`js/kit/`), Kit Demo, environment guide | done |
 | 3: environment library | **done: 12/12 merged** (wave 1 + wave 2) |
 | 4: UI pass, MIDI, tap tempo, overrides | not started |
@@ -39,7 +39,7 @@ All work is committed on `main` (local only: **no git remote yet**, nothing push
 | 15 | Arcade After Hours | yes | 32 / 14–15k |
 | 16 | Aurora Field | yes | 12–17 / 8.9–11.3k |
 
-Number keys only reach 0–9; indices 10–16 (Route 9 and all of wave 2) are reachable only via **N**, the dropdown or auto-switch. Setlist mode or an environment browser should fix this; see open items.
+Number keys only reach 0–9; indices 10–16 are reachable via **N / Shift+N**, the dropdown, auto-switch, or a setlist song (setlist mode reaches every environment). An environment browser is still a Phase 4 item.
 
 ### Verified vs. not verified
 
@@ -54,7 +54,7 @@ Number keys only reach 0–9; indices 10–16 (Route 9 and all of wave 2) are re
 1. Run `?bench` + Scarlett live test in real Chrome (5 minutes, unblocks confidence).
 2. ~~Kit v2 pass~~ — done, see below.
 3. ~~Wave 2 environments~~ — done: built in six parallel sessions, merged 2026-11-19 (smoke-tested at k=0/1 + crossfades; real-fps `?bench` still pending, see item 1). Their reports list suggested kit additions (Kit v3).
-4. **Setlist mode** (ROADMAP Phase 1): song/album → palette + environment(s), advance with a key/footswitch; also the natural fix for the 0–9 number-key limit (or add an environment browser in Phase 4).
+4. ~~Setlist mode~~ — done 2026-11-19 (`js/setlist/`): songs pick a palette + an environment pool; PageDown/→/] next, PageUp/←/[ prev, S toggles; while playing, Next cues the song until silence (press again to force). Verified in the pane: stepping/cue logic, editor, import, persistence. **Not verified:** a real USB footswitch (check which key it sends; add it in `main.js` if it isn't one of those). Also fixed a manager bug where a style queued mid-crossfade was rendered once before its first `update()` (crashed Cold Base / Arcade for one frame).
 5. ~~Housekeeping~~ — done 2026-11-19: all twelve `claude/env-*` branches and worktrees deleted, the twelve environment sessions archived.
 6. Add a GitHub remote and push, so work is backed up off this machine.
 7. Phase 4 (UI pass with the `frontend-design` plugin, MIDI, tap tempo, manual overrides), then Phase 5.

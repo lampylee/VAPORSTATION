@@ -10,6 +10,8 @@ import { UI } from './ui.js';
 import { PaletteStore } from './palette/store.js';
 import { PaletteUI } from './palette/ui.js';
 import { Bench } from './bench.js';
+import { SetlistStore, SetlistPlayer, styleKey, looksLikeSetlist } from './setlist/setlist.js';
+import { SetlistUI } from './setlist/ui.js';
 
 const s = loadSettings();
 const canvas = document.getElementById('view');
@@ -44,7 +46,7 @@ const ui = new UI(s, STYLES.map((C) => C.meta.name), {
   onDemo: () => playFile('demo/demo.wav', 'demo track'),
   onRefresh: () => refreshDevices(),
   onFullscreen: () => toggleFullscreen(),
-  onReset() { resetSettings(s); ui.refresh(); applyLook(); engine.setGainDb(s.inputGainDb); engine.setChannel(s.channel); selectPalette(''); },
+  onReset() { resetSettings(s); ui.refresh(); applyLook(); engine.setGainDb(s.inputGainDb); engine.setChannel(s.channel); selectPalette(''); setlist.cancelCue(); syncPool(); setlistUI.refresh(); },
 });
 engine.attachPlayer(ui.player);
 engine.channel = s.channel;
@@ -78,6 +80,64 @@ const paletteUI = new PaletteUI(store, s, {
 });
 ui.insertSectionBefore(paletteUI.section, 'Styles');
 
+// ---------------- setlist ----------------
+// Each song picks a palette and environment(s); a key or USB footswitch steps songs.
+const STYLE_KEYS = STYLES.map(styleKey);
+const setlists = new SetlistStore();
+if (s.setlistId && !setlists.get(s.setlistId)) s.setlistId = setlists.all[0]?.id || '';
+
+const songPool = (song) => (song?.styles || []).map((k) => STYLE_KEYS.indexOf(k)).filter((i) => i >= 0);
+/** N and idle auto-switch rotate only through the current song's environments. */
+function syncPool() { const p = setlist.active ? songPool(setlist.song) : []; styles.pool = p.length ? p : null; }
+
+function applySong(song, i) {
+  syncPool();
+  if (song.palette !== null) {
+    if (song.palette === '' || store.get(song.palette)) selectPalette(song.palette);
+    else ui.setStatus(`Setlist: palette for "${song.label}" is missing, keeping the current one.`, true);
+  }
+  if (styles.pool) styles.goTo(styles.pool[0]);   // crossfades; queued if one is running
+  setlistUI.tick();
+  saveSettings(s);
+}
+const setlist = new SetlistPlayer(s, setlists, { apply: applySong });
+
+function setlistOn(on) {
+  s.setlistOn = on && !!setlists.all.length;
+  if (s.setlistOn && !setlists.get(s.setlistId)) s.setlistId = setlists.all[0].id;
+  if (s.setlistOn && setlist.active) setlist.goTo(setlist.pos);
+  else { setlist.cancelCue(); syncPool(); }
+  setlistUI.refresh();
+  saveSettings(s);
+}
+function stepSong(dir) {
+  if (!setlist.active) { ui.setStatus(setlists.all.length ? 'Setlist mode is off (S turns it on).' : 'No setlist yet: Setlist → New.', true); return; }
+  setlist.step(dir, state.playing);
+  setlistUI.tick();
+}
+const setlistUI = new SetlistUI(setlists, s, {
+  player: setlist,
+  styles: STYLES.map((C, i) => ({ key: STYLE_KEYS[i], name: C.meta?.name || C.name })),
+  palettes: () => store.all,
+  current: () => ({ paletteId: s.paletteId, styleKey: STYLE_KEYS[styles.target] }),
+  onToggle: (on) => setlistOn(on),
+  onSelectList(id) { s.setlistId = id; s.setlistPos = 0; setlist.cancelCue(); if (s.setlistOn) setlist.goTo(0); syncPool(); setlistUI.refresh(); saveSettings(s); },
+  onJump(i) {
+    if (!setlists.get(s.setlistId)) s.setlistId = setlists.all[0]?.id || '';
+    s.setlistOn = true; setlist.goTo(i); setlistUI.refresh(); saveSettings(s);
+  },
+  onStep: (dir) => stepSong(dir),
+  onSaved(list) { s.setlistId = list.id; if (s.setlistOn) setlist.goTo(setlist.pos); syncPool(); setlistUI.refresh(); saveSettings(s); },
+  onDeleted(id) {
+    if (s.setlistId === id) { s.setlistId = setlists.all[0]?.id || ''; s.setlistPos = 0; }
+    if (!setlists.all.length) s.setlistOn = false;
+    setlist.cancelCue(); syncPool(); setlistUI.refresh(); saveSettings(s);
+  },
+  onSetting: () => saveSettings(s),
+});
+ui.insertSectionBefore(setlistUI.section, 'Palette');
+syncPool();   // look (palette + style) is already restored from settings; just limit the rotation
+
 // Drop anything on the window: images -> palette from art, palette files -> import, audio -> play.
 addEventListener('dragover', (e) => e.preventDefault());
 addEventListener('drop', async (e) => {
@@ -86,6 +146,7 @@ addEventListener('drop', async (e) => {
   if (!f) return;
   try {
     if (f.type.startsWith('audio/')) playFile(f, f.name);
+    else if (/\.json$/i.test(f.name) && looksLikeSetlist(await f.text())) { setUiVisible(true); await setlistUI.importFile(f); }
     else { setUiVisible(true); await paletteUI.importFile(f); }
   } catch (err) { ui.setStatus(`Could not import ${f.name}: ${err.message}`, true); }
 });
@@ -172,7 +233,7 @@ addEventListener('resize', () => renderer.resize());
 
 addEventListener('keydown', (e) => {
   if (e.ctrlKey || e.metaKey || e.altKey) return;
-  if (paletteUI.modalOpen) return;
+  if (paletteUI.modalOpen || setlistUI.modalOpen) return;
   const tag = e.target?.tagName;
   if (tag === 'TEXTAREA' || (tag === 'INPUT' && e.target.type === 'text')) return;
   const k = e.key.toLowerCase();
@@ -183,7 +244,10 @@ addEventListener('keydown', (e) => {
   else if (k === 'h') setUiVisible(!uiVisible);
   else if (k === 'd') { s.debug = !s.debug; applyLook(); }
   else if (k >= '0' && k <= '9' && Number(k) < styles.count) styles.goTo(Number(k));
-  else if (k === 'n') styles.goNext();
+  else if (k === 'n') styles.goNext(e.shiftKey ? -1 : 1);
+  else if (k === 's') setlistOn(!s.setlistOn);
+  else if (k === 'pagedown' || k === 'arrowright' || k === ']') stepSong(1);
+  else if (k === 'pageup' || k === 'arrowleft' || k === '[') stepSong(-1);
   else if (k === 'a') s.autoSwitch = !s.autoSwitch;
   else if (k === 'c') { s.crt = !s.crt; applyLook(); }
   else handled = false;
@@ -212,6 +276,9 @@ function frame(now) {
     audio = analyser.update(dt, s, engine.mode !== 'none' && engine.running);
     state.update(audio.rmsDbSmooth, dt, s);
     k = state.intensity; playing = state.playing;
+    const cued = setlist.cued;
+    setlist.update(playing);
+    if (setlist.cued !== cued) setlistUI.tick();
   }
 
   // music subtly pushes the PS1 parameters (always scaled by intensity)
@@ -234,7 +301,7 @@ function frame(now) {
       audio, fps, intensity: k, playing, state: bench && !bench.done ? bench.label : state.label, thresholdDb: s.thresholdDb,
       res: `${renderer.width}x${renderer.height}`, draws: renderer.stats.draws, tris: renderer.stats.tris,
       style: styles.name(styles.cur), transition: styles.transitioning ? styles.name(styles.next) : '',
-      autoSwitch: s.autoSwitch, idle: styles.idleTime,
+      autoSwitch: s.autoSwitch, idle: styles.idleTime, setlist: setlist.label,
       source: engine.mode === 'live' ? `live: ${engine.deviceLabel || 'default'}` : engine.mode === 'file' ? 'file playback' : 'no input',
     });
   }
@@ -242,4 +309,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for poking at things from the console
-window.viz = { s, engine, analyser, state, styles, renderer, store, selectPalette, paletteUI };
+window.viz = { s, engine, analyser, state, styles, renderer, store, selectPalette, paletteUI, setlists, setlist, setlistUI };

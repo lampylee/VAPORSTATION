@@ -21,6 +21,7 @@ export class StyleManager {
     this.idleTime = 0;
     this.nextAutoAt = Infinity;
     this.onChange = null;
+    this.pool = null;       // setlist: indices N / auto-switch rotate through (null = whole rotation)
   }
 
   get count() { return this.styles.length; }
@@ -46,8 +47,11 @@ export class StyleManager {
     this.onChange?.(i);
   }
 
-  /** Indices in the rotation (styles without meta.hidden). */
-  get rotation() { return this.styles.map((s, i) => (s.constructor.meta?.hidden ? -1 : i)).filter((i) => i >= 0); }
+  /** Indices in the rotation: the setlist song's pool if set, else styles without meta.hidden. */
+  get rotation() {
+    if (this.pool?.length) return this.pool;
+    return this.styles.map((s, i) => (s.constructor.meta?.hidden ? -1 : i)).filter((i) => i >= 0);
+  }
 
   /** Next style in the rotation (skips hidden styles like the test scene). */
   goNext(dir = 1) {
@@ -63,21 +67,23 @@ export class StyleManager {
     const idle = !playing && intensity <= 0.001;
     if (idle) this.idleTime += dt; else { this.idleTime = 0; this.nextAutoAt = s.idleSwitchDelay; }
     if (this.nextAutoAt === Infinity) this.nextAutoAt = s.idleSwitchDelay;
-    if (s.autoSwitch && idle && this.idleTime >= this.nextAutoAt && !this.transitioning) {
+    if (s.autoSwitch && idle && this.idleTime >= this.nextAutoAt && !this.transitioning && this.rotation.length > 1) {
       this.goNext();
       this.nextAutoAt = this.idleTime + s.idleSwitchInterval;
     }
 
-    for (const st of this.styles) st.pal.update(dt);
-    this.styles[this.cur].update(audio, intensity, dt);
+    // advance the crossfade first, so a queued style that starts now is
+    // updated below before it is ever rendered
     if (this.next >= 0) {
-      this.styles[this.next].update(audio, intensity, dt);
       this.t += dt / Math.max(0.1, s.transitionTime);
       if (this.t >= 1) {
         this.cur = this.next; this.next = -1; this.t = 0;
         if (this.queued >= 0) { const q = this.queued; this.queued = -1; this.goTo(q); }
       }
     }
+    for (const st of this.styles) st.pal.update(dt);
+    this.styles[this.cur].update(audio, intensity, dt);
+    if (this.next >= 0) this.styles[this.next].update(audio, intensity, dt);
   }
 
   render() {

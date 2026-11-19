@@ -37,6 +37,11 @@ export const DEFAULTS = {
   idleSwitchDelay: 10,      // s of full idle before the first auto change
   idleSwitchInterval: 45,   // s between auto changes while still idle
   transitionTime: 3.0,      // s crossfade duration
+  // setlist
+  setlistOn: false,         // setlist mode: songs pick palette + environment(s)
+  setlistId: '',            // active setlist
+  setlistPos: 0,            // current song index
+  setlistCue: true,         // while playing, Next cues the song until the room is quiet
   // ui
   debug: false,
 };

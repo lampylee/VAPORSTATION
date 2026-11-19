@@ -24,6 +24,7 @@ Plan: `ROADMAP.md`. **Current status, open items and next steps: `docs/HANDOFF.m
 - `js/gfx/textures.js` — procedural **indexed** textures (palette slot per pixel).
 - `js/palette/` — palette model (4 ramps × 4 shades + roles), live crossfading palettes, library, user store, editor UI.
 - `js/kit/` — world kit: sky, terrain, particles, sprites, props, camera rigs, swell helpers, GLB loader.
+- `js/setlist/` — setlists (song → palette + environment pool), cue-until-silence stepping, panel + editor.
 - `js/styles/` — one file per environment + `index.js` registry + `manager.js` (crossfades, idle auto-switch, palettes).
 
 ## Palettes (CLUT)

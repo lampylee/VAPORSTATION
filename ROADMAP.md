@@ -34,7 +34,7 @@ Each environment ships its own default palette but can be overridden by any pale
 - [x] **Palette editor**: 16 swatches + role mapping, live preview, save to localStorage, export/import JSON.
 - [x] **Extract from album art**: drop an image, k-means it down to 16 colours (canvas, no library), auto-assign roles by luminance/saturation. This is the fastest way to get his album colours in.
 - [x] **Lospec import**: paste a palette name or `.hex` file. Lospec offers single-palette downloads as JSON/CSV; there's no official search API, so offline we just ship a curated handful.
-- [ ] **Setlist mode**: a list of `{ song/album label, palette, environment(s) }`. Advance with a key or footswitch between songs; changes crossfade while idle.
+- [x] **Setlist mode**: a list of `{ song/album label, palette, environment(s) }`. Advance with a key or footswitch between songs; changes crossfade while idle.
 
 ## Phase 2 — World kit (makes "huge variety" cheap)
 
