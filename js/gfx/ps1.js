@@ -34,11 +34,13 @@ uniform float uInstanced;    // 1 = use aInst0/aInst1
 uniform float uBillboard;    // 0 off, 1 upright (cylindrical), 2 face camera fully
 uniform float uTime, uSway;  // sway bends vertices by their height (foliage, banners)
 uniform vec2 uFade;          // distance fade: near, far (far <= near = off)
+uniform vec2 uMirror;        // x: 1 = reflect the world in the plane y = uMirror.y, 2 = only clip below it
 out vec3 vUVw;               // uv * w, w  -> undoes perspective correction
 out vec2 vUVp;               // perspective-correct uv (for blending amount)
 out vec3 vColor;
 out float vFog;
 out float vFade;
+out float vAbove;            // world height above the mirror plane (before reflecting)
 void main() {
   vec3 p = aPos;
   vec3 nrm = aNormal;
@@ -67,7 +69,10 @@ void main() {
   } else if (uSway != 0.0) {
     p.x += sin(uTime * 1.7) * uSway * max(p.y, 0.0);
   }
-  vec4 view = uView * uModel * vec4(p, 1.0);
+  vec4 world = uModel * vec4(p, 1.0);
+  vAbove = world.y - uMirror.y;
+  if (uMirror.x > 0.5 && uMirror.x < 1.5) { world.y = 2.0 * uMirror.y - world.y; nrm.y = -nrm.y; }
+  vec4 view = uView * world;
   vec4 clip = uProj * view;
   if (uSnapOn > 0.5 && clip.w > 0.0) {
     vec2 ndc = clip.xy / clip.w;
@@ -94,6 +99,9 @@ in vec2 vUVp;
 in vec3 vColor;
 in float vFog;
 in float vFade;
+in float vAbove;
+uniform vec2 uMirror;
+uniform float uOpacity;      // < 1: screen-door transparency (ordered dither), PS1-style
 uniform sampler2D uTex, uTex2;
 uniform sampler2D uClut;     // 16x1 palette (colour lookup table)
 uniform float uIndexed;      // 1 = uTex holds palette indices, like PS1 4-bit textures
@@ -104,6 +112,11 @@ uniform float uFogOn;
 out vec4 outColor;
 const float BAYER[16] = float[16](0.,8.,2.,10.,12.,4.,14.,6.,3.,11.,1.,9.,15.,7.,13.,5.);
 void main() {
+  if (uMirror.x > 0.5 && vAbove < 0.0) discard;   // reflect / clip: only what is above the water plane
+  if (uOpacity < 1.0) {
+    ivec2 f = ivec2(gl_FragCoord.xy);
+    if (uOpacity <= (BAYER[(f.y & 3) * 4 + (f.x & 3)] + 0.5) / 16.0) discard;
+  }
   vec2 uv = mix(vUVp, vUVw.xy / vUVw.z, uAffine);
   vec4 t = texture(uTex, uv);
   if (uBlend > 0.0) {
@@ -481,6 +494,8 @@ export class PS1Renderer {
     gl.uniform1i(u.uClut, 1);
     gl.uniform1i(u.uTex2, 2);
     gl.uniform1f(u.uTime, P.time || 0);
+    gl.uniform2f(u.uMirror, 0, 0);
+    this.mirrorY = null;
     this.setPalette(null);
     this.setLight([0.3, -0.8, -0.5], [0.9, 0.9, 0.9], [0.25, 0.25, 0.3]);
     this.setFog([0, 0, 0], 10, 60);
@@ -508,6 +523,24 @@ export class PS1Renderer {
     gl.uniform2f(u.uFog, near * s, far * s);
   }
 
+  /**
+   * Planar reflection: until setMirror(null), everything drawn is reflected in
+   * the horizontal plane y (only geometry above the plane shows). Recipe:
+   *   r.setMirror(W); sky + world; r.setMirror(null); r.clearDepth();
+   *   r.setClipBelow(W); sky + world; r.setClipBelow(null);
+   *   water surface at W with { opacity } on top (see js/styles/kit-calm.js).
+   */
+  setMirror(y) {
+    this.mirrorY = y ?? null;
+    this.gl.uniform2f(this.world.u.uMirror, y == null ? 0 : 1, y ?? 0);
+  }
+
+  /** Until setClipBelow(null), discard everything below the plane y (the normal pass over a reflection). */
+  setClipBelow(y) { this.gl.uniform2f(this.world.u.uMirror, y == null ? 0 : 2, y ?? 0); }
+
+  /** Clear only the depth buffer (between a reflection pass and the normal pass). */
+  clearDepth() { const gl = this.gl; gl.depthMask(true); gl.clear(gl.DEPTH_BUFFER_BIT); }
+
   /** dir = direction the light travels. */
   setLight(dir, color, ambient) {
     const gl = this.gl, u = this.world.u;
@@ -524,6 +557,8 @@ export class PS1Renderer {
    *  texture2 + blend (0..1): dither-crossfade to a second texture of the same kind and size,
    *  fade [near, far]: fade out with camera distance into the fog colour (to black when additive),
    *    even with fog: false. Use it for lights that shine through fog, so nothing pops at the edge.
+   *  opacity (0..1): screen-door transparency with the ordered-dither pattern (mist cards, water
+   *    over a reflection, fading things in/out without alpha blending).
    */
   draw(mesh, model = IDENTITY, o = {}) {
     this._begin(model, o, 0);
@@ -575,6 +610,7 @@ export class PS1Renderer {
     gl.uniform2f(u.uFade, fade[0], fade[1]);
     const blend = o.texture2 ? Math.max(0, Math.min(1, o.blend ?? 0)) : 0;
     gl.uniform1f(u.uBlend, blend);
+    gl.uniform1f(u.uOpacity, o.opacity ?? 1);
     if (blend > 0) { gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, o.texture2); gl.activeTexture(gl.TEXTURE0); }
     // additive (PS1 "semi-transparency" B+F) fades to black in fog, not to the fog colour
     if (o.additive) { gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE); gl.uniform3fv(u.uFogColor, BLACK); }

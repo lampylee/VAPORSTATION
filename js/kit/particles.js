@@ -6,7 +6,7 @@
 //   render: this.snow.draw(r, { brightness });
 import { R } from '../palette/palette.js';
 import { GeoBuilder } from '../gfx/geometry.js';
-import { dot, streak, glow } from './sprites.js';
+import { dot, streak, glow, petal, leaf, twinkle, mistBank } from './sprites.js';
 
 /** Presets. color = palette index, area = box size around the camera. */
 export const PARTICLE_PRESETS = {
@@ -17,7 +17,17 @@ export const PARTICLE_PRESETS = {
   dust: { count: 260, sprite: 'dot', size: 0.06, vel: [0.15, 0.05, 0], jitter: [0.2, 0.2, 0.2], wobble: 0.6, area: [20, 10, 20], color: R(3, 3), additive: true, glow: 0.35 },
   fireflies: { count: 120, sprite: 'glow', size: 0.25, vel: [0, 0.1, 0], jitter: [0.6, 0.4, 0.6], wobble: 2.2, area: [30, 6, 30], yOffset: -1, color: R(2, 3), additive: true, glow: 1, flicker: 1 },
   bubbles: { count: 200, sprite: 'dot', size: 0.14, vel: [0, 1.4, 0], jitter: [0.2, 0.6, 0.2], wobble: 1, area: [24, 16, 24], color: R(1, 3), additive: true, glow: 0.6 },
+  // Kit v3: calm / slow-song presets
+  petals: { count: 160, sprite: 'petal', size: 0.16, vel: [0.4, -0.6, 0.2], jitter: [0.3, 0.25, 0.3], wobble: 1.4, spin: 2, area: [30, 16, 30], color: R(2, 3) },
+  leaves: { count: 110, sprite: 'leaf', size: 0.22, vel: [0.6, -0.85, 0], jitter: [0.4, 0.3, 0.4], wobble: 1.8, spin: 3, area: [30, 16, 30], color: R(1, 2) },
+  pollen: { count: 160, sprite: 'glow', size: 0.07, vel: [0.12, 0.06, 0.05], jitter: [0.15, 0.1, 0.15], wobble: 0.9, area: [22, 8, 22], color: R(2, 3), additive: true, glow: 0.55, flicker: 1, flickerRate: 1.6 },
+  mist: { count: 18, sprite: 'mist', size: 10, height: 0.25, vel: [0.3, 0, 0.06], jitter: [0.12, 0, 0.12], area: [56, 1.5, 56], yOffset: -1.3, color: R(3, 3), opacity: 0.4 },
+  drizzle: { count: 320, sprite: 'streak', size: 0.04, height: 6, vel: [0.2, -12, 0], jitter: [0.1, 2, 0.1], area: [30, 20, 30], color: R(3, 3), additive: true, glow: 0.3 },
+  skyLanterns: { count: 40, sprite: 'glow', size: 0.4, vel: [0.12, 0.45, 0.05], jitter: [0.15, 0.15, 0.15], wobble: 0.35, area: [60, 30, 60], yOffset: 9, color: R(2, 3), additive: true, glow: 0.9, flicker: 1, flickerRate: 1.2 },
+  starTwinkle: { count: 60, sprite: 'twinkle', size: 0.3, vel: [0, 0, 0], jitter: [0, 0, 0], area: [60, 20, 60], yOffset: 14, color: R(3, 3), additive: true, glow: 0.8, flicker: 1, flickerRate: 2.2 },
 };
+const SPRITES = { dot, streak, glow, petal, leaf, twinkle, mist: mistBank };
+const RAMP_SPRITES = new Set(['glow', 'petal', 'leaf', 'mist']);   // these take a ramp, the rest a single index
 
 let _quad = null;
 function quad() {
@@ -30,8 +40,8 @@ export class Particles {
     const p = { ...(typeof preset === 'string' ? PARTICLE_PRESETS[preset] : preset), ...overrides };
     this.p = p;
     this.mesh = r.createMesh(quad());
-    const sprite = { dot, streak, glow }[p.sprite || 'dot'];
-    this.tex = r.texture(p.sprite === 'glow' ? glow({ ramp: p.color >> 2 }) : sprite({ index: p.color }));
+    const name = p.sprite || 'dot', sprite = SPRITES[name];
+    this.tex = r.texture(RAMP_SPRITES.has(name) ? sprite({ ramp: p.color >> 2 }) : sprite({ index: p.color }));
     this.inst = r.createInstances(p.count);
     const n = p.count, [ax, ay, az] = p.area;
     this.pos = new Float32Array(n * 3);
@@ -68,18 +78,20 @@ export class Particles {
       const wz = ((P[o + 2] - center[2] + az / 2) % az + az) % az - az / 2;
       P[o] = center[0] + wx; P[o + 1] = cy + wy; P[o + 2] = center[2] + wz;
       if (i < this.visible) {
-        const fl = p.flicker ? 0.55 + 0.45 * Math.sin(t * 9 + ph * 3) : 1;
+        const fl = p.flicker ? 0.55 + 0.45 * Math.sin(t * (p.flickerRate || 9) + ph * 3) : 1;
         this.inst.set(i, P[o], P[o + 1], P[o + 2], p.size, 0, fl, 0, p.height || 1);
+        if (p.spin) this.inst.tilt(i, 0, ph + t * p.spin * (ph % 2 > 1 ? 1 : -1));   // tumbling petals / leaves
       }
     }
     this.inst.upload(this.visible);
   }
 
-  /** brightness scales colour (match your fog/intensity dimming). */
-  draw(r, { brightness = 1 } = {}) {
+  /** brightness scales colour (match your fog/intensity dimming); opacity = screen-door transparency. */
+  draw(r, { brightness = 1, opacity = this.p.opacity ?? 1 } = {}) {
     const p = this.p, b = brightness * (p.additive ? (p.glow ?? 1) : 1);
     this.tint[0] = this.tint[1] = this.tint[2] = b;
-    r.drawInstanced(this.mesh, this.inst, { texture: this.tex, billboard: p.sprite === 'streak' ? 1 : 2, unlit: true, additive: !!p.additive, tint: this.tint });
+    const upright = p.sprite === 'streak' || p.sprite === 'mist';
+    r.drawInstanced(this.mesh, this.inst, { texture: this.tex, billboard: upright ? 1 : 2, unlit: true, additive: !!p.additive, tint: this.tint, opacity });
   }
 
   dispose(r) { this.mesh.dispose(); r.deleteTexture(this.tex); this.inst.dispose(); }

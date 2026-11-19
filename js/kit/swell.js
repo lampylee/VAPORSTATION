@@ -76,3 +76,28 @@ export class Pendulum {
 export const fadeOut = (d, near, far) => 1 - smoothstep(clamp((d - near) / Math.max(1e-4, far - near)));
 /** 0 up to `near`, easing to 1 at `far` (e.g. hide things right in front of the camera). */
 export const fadeIn = (d, near, far) => smoothstep(clamp((d - near) / Math.max(1e-4, far - near)));
+
+/**
+ * Kit v3: a slow "breath" for calm songs: 0..1..0 over `beats` beats when a
+ * tempo is tapped (audio.bpm), else over `period` seconds. The phase only ever
+ * integrates (never jumps), and with a tempo it drifts into line with the bar.
+ *
+ *   this.breath = new K.Breath({ beats: 8, period: 9 });
+ *   update: const b = this.breath.update(audio, dt);   // camera rise, glow swell, mist density…
+ */
+export class Breath {
+  constructor({ beats = 8, period = 10 } = {}) { this.beats = beats; this.period = period; this.phase = 0; this.v = 0; this._bar = 0; }
+  update(audio, dt) {
+    const bpm = audio?.bpm || 0;
+    this.phase += dt * (bpm > 0 ? bpm / 60 / this.beats : 1 / this.period);
+    if (bpm > 0 && audio.bar === 0 && this._bar !== 0 && this.beats % 4 === 0) {
+      // on each downbeat, ease the phase toward the nearest bar boundary
+      const step = 4 / this.beats, target = Math.round(this.phase / step) * step;
+      this.phase += (target - this.phase) * 0.15;
+    }
+    this._bar = audio?.bar ?? 0;
+    this.phase -= Math.floor(this.phase);
+    this.v = 0.5 - 0.5 * Math.cos(this.phase * Math.PI * 2);
+    return this.v;
+  }
+}

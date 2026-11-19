@@ -215,3 +215,100 @@ export function moon({ ramp = 3, seed = 12 } = {}) {
     return dshade(ramp, 3.2 - d * d * 0.9 - (maria > 0.56 ? 0.9 : 0) + (dx + dy < 0 ? 0.15 : -0.2), x, y);
   });
 }
+
+// ---- Kit v3 additions: calm / slow-song sprites ----
+
+/** Weeping willow: rounded crown with long hanging fronds. 48x64. Sway it gently. */
+export function willow({ ramp = 1, trunk = R(0, 0), seed = 14 } = {}) {
+  const W = 48, H = 64, cx = 24;
+  return make(W, H, (x, y) => {
+    if (y > 50 && Math.abs(x - cx + 0.5) < 2) return trunk;
+    const dx = x - cx, crown = Math.hypot(dx, (y - 16) * 1.4) < 15;
+    // fronds: thin vertical strands hanging from the crown edge, longer at the sides
+    const strand = (x * 7 + Math.floor(rnd(x, 0, seed) * 5)) % 3 === 0;
+    const reach = 18 + Math.abs(dx) * 1.3 + rnd(x, 1, seed) * 10;
+    if (!crown && !(strand && y > 10 && y < reach && Math.abs(dx) < 21)) return CLEAR;
+    const light = 2.4 - (dx + 10) / 30 - y / 64;
+    return dshade(ramp, light + (rnd(x >> 1, y >> 2, seed) - 0.5) * 0.7, x, y);
+  });
+}
+
+/** Blossom tree: dark branches, a cloud of accent-ramp blossom. 48x64. */
+export function blossomTree({ ramp = 2, trunk = R(0, 0), seed = 15 } = {}) {
+  const W = 48, H = 64, cx = 24;
+  const puffs = Array.from({ length: 7 }, (_, i) => [8 + rnd(i, 0, seed) * 32, 10 + rnd(i, 1, seed) * 22, 7 + rnd(i, 2, seed) * 5]);
+  return make(W, H, (x, y) => {
+    let best = 0;
+    for (const [bx, by, br] of puffs) best = Math.max(best, 1 - Math.hypot(x - bx, (y - by) * 1.1) / br);
+    if (best > 0 && !(best < 0.25 && rnd(x, y, seed) > 0.6)) return dshade(ramp, 1.4 + best * 1.6 + (x < cx ? 0.3 : -0.2), x, y);
+    // trunk and two forks
+    const t = (y - 36) / 28;
+    if (y > 36 && Math.abs(x - cx - Math.sin(t * 2) * 2) < 2.4 - t) return trunk;
+    if (y > 24 && y <= 40 && (Math.abs(x - cx + (40 - y) * 0.7) < 1.2 || Math.abs(x - cx - (40 - y) * 0.6) < 1.2)) return trunk;
+    return CLEAR;
+  });
+}
+
+/** Reeds and cattails at the water's edge. 32x32. */
+export function reeds({ ramp = 1, head = R(0, 1), seed = 16 } = {}) {
+  return make(32, 32, (x, y) => {
+    for (let i = 0; i < 9; i++) {
+      const bx = 2 + i * 3.4 + rnd(i, 0, seed) * 2, top = 4 + rnd(i, 1, seed) * 14, lean = (rnd(i, 2, seed) - 0.5) * 0.25;
+      const sx = bx + (31 - y) * lean;
+      if (y >= top && Math.abs(x - sx) < 0.6) return dshade(ramp, 1.2 + (31 - y) / 20 + (i % 2) * 0.4, x, y);
+      if (i % 3 === 0 && y >= top - 5 && y < top && Math.abs(x - sx) < 1.2) return head;
+    }
+    return CLEAR;
+  });
+}
+
+/** Paper lantern: glowing body with dark caps and ribs. 16x24. Draw unlit; add a glow sprite behind it. */
+export function lantern({ ramp = 2, frame = R(0, 0) } = {}) {
+  return make(16, 24, (x, y) => {
+    if (y < 3 || y > 20) return Math.abs(x - 7.5) < 3 ? frame : CLEAR;
+    const t = (y - 3) / 17, half = 3 + Math.sin(t * Math.PI) * 4.5;
+    const dx = Math.abs(x - 7.5);
+    if (dx > half) return CLEAR;
+    if ((y - 3) % 4 === 0) return dshade(ramp, 1.2, x, y);        // ribs
+    return dshade(ramp, 3.3 - dx / half * 1.3 - Math.abs(t - 0.45) * 0.8, x, y);
+  });
+}
+
+/** Falling petal: small curled ellipse, two shades. 8x8. Use with the 'petals' particle preset. */
+export function petal({ ramp = 2 } = {}) {
+  return make(8, 8, (x, y) => {
+    const d = Math.hypot((x - 3.5) / 3.6, (y - 3.5) / 2.2);
+    if (d > 1) return CLEAR;
+    return R(ramp, x + y < 7 ? 3 : 2);
+  });
+}
+
+/** Falling leaf with a midrib. 8x8, secondary ramp by default. */
+export function leaf({ ramp = 1 } = {}) {
+  return make(8, 8, (x, y) => {
+    const u = x - 3.5, v = y - 3.5, d = Math.abs(u - v) / 1.6 + Math.abs(u + v) / 5.5;
+    if (d > 1) return CLEAR;
+    return Math.abs(u - v) < 0.6 ? R(ramp, 1) : R(ramp, u + v < 0 ? 3 : 2);
+  });
+}
+
+/**
+ * Low mist bank: a wide, soft-edged band (dithered top and sides). 64x16.
+ * Draw large, upright billboards near the ground with { opacity } and slow drift.
+ */
+export function mistBank({ ramp = 3, seed = 17 } = {}) {
+  return make(64, 16, (x, y) => {
+    const edge = Math.min(x, 63 - x) / 12, top = (y - 2 - Math.sin(x * 0.2 + seed) * 2 - rnd(x >> 3, 0, seed) * 3) / 8;
+    const v = Math.min(1, edge) * Math.min(1, top);
+    if (v <= 0 || v < bayer(x, y) * 0.9) return CLEAR;
+    return dshade(ramp, 2 + v * 0.9, x, y);
+  });
+}
+
+/** Four-point twinkle star (night skies, sparkles on water). 8x8. */
+export function twinkle({ index = R(3, 3) } = {}) {
+  return make(8, 8, (x, y) => {
+    const dx = Math.abs(x - 3.5), dy = Math.abs(y - 3.5);
+    return (dx < 0.6 && dy < 3.6) || (dy < 0.6 && dx < 3.6) || (dx < 1.1 && dy < 1.1) ? index : CLEAR;
+  });
+}

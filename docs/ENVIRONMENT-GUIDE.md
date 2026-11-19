@@ -67,13 +67,18 @@ r.setLight(dir, P.role('light') scaled, P.role('ambient') scaled);
 | Camera | `DollyRig(spline)`, `OrbitRig`, `SweepRig`, `PathRig(fn, {rollFn})`, `Spline(points)` | all have beat nudge, roll kick and FOV punch built in; `update(audio, k, dt)` then `apply(r)`. `rollFn: (s) => path.rollAt(s)` banks with a track |
 | Sky | `new Sky(r, {stars, moon, banded, moonTexture, clouds})`, `draw(r, eye, {horizon, zenith, brightness, starLevel, moonScale, cloudDrift})` | draw first; pass the fog colour as `horizon`. `moonTexture: K.sprites.moon({ ramp: 3 })` if the default accent glow reads wrong |
 | Terrain | `new Terrain(r, {size, cells, height, uvScale})`, `follow(x, z)`, `heightAt(x, z)`, `draw(r, opts)` | infinite, world-space UVs, Gouraud shading |
-| Particles | `new Particles(r, 'rain' \| 'snow' \| 'ash' \| 'embers' \| 'dust' \| 'fireflies' \| 'bubbles', overrides)`, `update(dt, center, {amount, speed, wind})`, `draw(r, {brightness})` | one draw call each; `amount` 0..1 fades particles in/out |
-| Sprites | `sprites.pine/broadleaf/deadTree/bush/grass/fern/kelp/cactus/flame/glow/lightShaft/moon/cloud/dot/streak/chainLink` | indexed with transparency; draw with `billboardQuad()` + `drawInstanced`. `lightShaft` = searchlight / sunbeam (additive) |
+| Particles | `new Particles(r, 'rain' \| 'snow' \| 'ash' \| 'embers' \| 'dust' \| 'fireflies' \| 'bubbles' \| 'petals' \| 'leaves' \| 'pollen' \| 'mist' \| 'drizzle' \| 'skyLanterns' \| 'starTwinkle', overrides)`, `update(dt, center, {amount, speed, wind})`, `draw(r, {brightness, opacity})` | one draw call each; `amount` 0..1 fades particles in/out. Presets with `spin` tumble (petals, leaves); `mist` draws big upright cards with screen-door `opacity`. Choose `center` and `area` so no particle can drift past the lens: a big sprite right at the camera fills the screen |
+| Sprites | `sprites.pine/broadleaf/deadTree/bush/grass/fern/kelp/cactus/flame/glow/lightShaft/moon/cloud/dot/streak/chainLink`; Kit v3: `willow/blossomTree/reeds/lantern/petal/leaf/mistBank/twinkle` | indexed with transparency; draw with `billboardQuad()` + `drawInstanced`. `lightShaft` = searchlight / sunbeam (additive) |
 | Props | `props.prism/crate/wall/arch/lampPost/panel/fence/tombstone/stairs` + textures `planks/rust/tiles/sign`; `props.shift/rotX/rotY/rotZ/transform/cloneGeo` | pivot at base centre; `merge()` to combine. Transforms modify in place |
 | Pixel | `makeIndexed(w, h, (x, y) => index)`, `dshade(ramp, shade0to3, x, y)`, `bayer(x, y)`, `rnd(x, y, seed)`, `blobNoise(x, y, cell, seed)`, `ditherPick(a, b, t, x, y)`, `CLEAR` | for your own indexed texture generators; don't re-implement them per file |
 | Shapes | `xf({pos, rot, scale})` (merge part transform), `Frame` (`f.add(parts, geo, {pos, rot})`, `f.child()`), `orientedBox(g, c, ax, ay, az)`, `quadFacing`, `flatPoly`, `decal`, `chain`, `atlasUV(geo, rect)`, `pointedArch`, `pointedCurve`, `lancet`, `vault`, vectors `vadd/vsub/vcross/vnorm/…`, `rotPoint` | rotations everywhere are applied X, then Z, then Y (same as instance tilt) |
 | Path | `new PathFrames(spline \| points, {step, bank, closed})` → `.point(s, out, x, y)`, `.frameAt(s)`, `.rollAt(s)`, `.yawAt(s)`, `.sweep(profile, {uvTile, from, to})`, `.placeEvery(spacing, fn)`; `roadStrip({...})`; `forSegments(s, {length, ahead}, fn)`; `scatter(x, z, {cell, radius}, fn)`; `repeat(x, period)` | evenly resampled frames with banking; `sweep` builds roads, walls, barriers, tubes from a cross-section; `forSegments` = endless corridors/streets with deterministic per-segment contents; `scatter` = camera-centred jittered grid |
 | Text | `new NeonText(r, 'OPEN LATE', {height, align})` → `.set(i, b)` / `.setAll((i, n) => b)` / `.draw(r, matrix, opts)`; `textTexture(text, {scale, core, mid, outline, bg})`; `FONT` | original 5x7 font (A–Z, 0–9, punctuation); one draw call, per-letter brightness for letters switching on one by one |
+| Textures (v3) | `K.tex.mossStone/cliffRock/jungleFloor/waterfall/caustics` (promoted), `K.tex.water/lilyPad/sand/paper/boards/cloudLayer` | tileable 64×64 surfaces (`lilyPad`, `paper` 32×32, `waterfall` 16×64): `r.texture(K.tex.water())` |
+| Effects (v3) | `new Caustics(r)` → `update(dt, speed)`, `draw(r, mesh, {model, inst, brightness, uvScale})`; `new Streaks(r, {count, color})` → `update(dt, eye, target, {amount, speed})`, `draw`; `new Pulses({loop, width})` → `trigger(s, amp, vel)`, `update(dt)`, `at(s)`; `new Ripples(r)` → `spawn(x, y, z, size)`, `update(dt)`, `draw` | caustic light over any mesh; speed / wind lines; pulses travelling along strips and rings; rings on still water |
+| Creatures (v3) | `new School(r, {kind: 'fish' \| 'bird', groups, perGroup, size, spread})` → `update(dt, (g, t, out) => centre, {amount, speed, flap})`, `draw(r, {tint})`; `fishGeo/birdGeo/creatureTex` | members grow in one by one with `amount`; birds glide when `flap: 0`. Keep their loop away from the camera |
+| Slow phrasing (v3) | `new Breath({beats: 8, period: 10})` → `update(audio, dt)` returns 0..1..0 | follows the tapped tempo (`audio.bpm`), else a free `period`; never jumps. Camera rise, glow, mist density for ballads |
+| Box atlas (v3) | `boxAtlas(w, h, d, {top, side, front, back, left, right, bottom})` | one texture, per-face atlas rects |
 | Models | `await loadGLB(url)` → `{geo, images}`; `imageToIndexed(image, {ramp})` | vertex colours kept; convert embedded textures to one ramp so palettes still apply |
 
 ### Renderer (`r`)
@@ -87,6 +92,14 @@ r.setLight(dir, P.role('light') scaled, P.role('ambient') scaled);
   - `rotX`/`rotZ` **tilt** instances around their pivot (applied X, Z, then Y): toppled columns, swinging chandeliers (pivot at the hook + `K.Pendulum`), path-aligned props. On billboards `rotZ` spins the sprite in its plane (tumbling leaves, debris).
   - A **negative `heightScale`** flips the mesh vertically (cheap wing flaps for birds and bats).
 - `r.drawInstanced(mesh, inst, { ...same options, billboard: 0 | 1 | 2, sway })`. `billboard: 1` stays upright (trees), `2` faces the camera fully (glows, particles). `sway` bends vertices by height (wind, bass).
+- `opacity` (0..1) on any draw: **screen-door transparency** with the ordered-dither pattern (mist cards, water over a reflection, ghosts). No alpha blending, so it stays PS1-authentic and needs no sorting.
+- **Planar reflections** (calm lakes, wet floors): `r.setMirror(y)` draws everything reflected in the plane y (only what's above it), `r.setClipBelow(y)` discards everything below it, `r.clearDepth()`. Recipe, as in `js/styles/kit-calm.js`:
+  ```js
+  r.setMirror(W); drawWorld(darker); r.setMirror(null); r.clearDepth();
+  r.setClipBelow(W); drawWorld(); r.setClipBelow(null);
+  r.draw(waterMesh, m, { texture: waterTex, opacity: 0.55 });   // a subdivided plane, so the affine warp stays mild
+  ```
+  It doubles the world's draw calls, so budget for it.
 - `mat4.trs(out, x, y, z, rx, ry, rz, sx, sy, sz)` for model matrices.
 
 ## Ideas for intensity "swells"
@@ -98,6 +111,14 @@ r.setLight(dir, P.role('light') scaled, P.role('ambient') scaled);
 - Hanging things that swing harder as the bass builds (`K.Pendulum` + instance tilt).
 - Camera waking up: slow pan → flying (`idleSpeed` → `activeSpeed`).
 - Use `History` so a bass hit ripples away from the camera instead of everything pulsing at once.
+
+### Slow songs and ballads
+
+`js/styles/kit-calm.js` (hidden style 17, "Kit calm") is the reference: copy it for calm scenes.
+- Move less, glow more: keep the camera's `idleSpeed`/`activeSpeed` tiny and `fovPunch`/`nudge`/`rollKick` near zero; let intensity raise **light**, not speed.
+- Phrase with `K.Breath` (it follows a tapped tempo) instead of reacting to every beat. On a beat, prefer one soft event (a ripple, a pulse around a ring, one lantern brightening) over a flash.
+- Things that drift: `petals`, `leaves`, `pollen`, `mist`, `skyLanterns`, gliding birds (`School` with `flap: 0`).
+- Reflections and screen-door mist read beautifully at 320×240; keep reflected glows dimmer than the real ones.
 
 ## Checklist before committing an environment
 

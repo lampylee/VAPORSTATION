@@ -221,3 +221,20 @@ export function vault(len = 12, hw = 4, wallH = 5, { sharp = 1.25, segs = 8, uvT
   return g.build();
 }
 
+
+/**
+ * Kit v3: box with each face mapped to its own atlas rect [u0, v0, u1, v1]
+ * (one texture, one draw for crates, cabinets, buildings). Pivot at the centre.
+ *   K.boxAtlas(1, 2, 1, { top: [0, 0, .5, .5], side: [.5, 0, 1, .5], front: [0, .5, .5, 1] })
+ * side covers left/right/back unless given; bottom defaults to top.
+ */
+export function boxAtlas(w = 1, h = 1, d = 1, { top = [0, 0, 1, 1], side = top, front = side, back = side, left = side, right = side, bottom = top } = {}) {
+  const x = w / 2, y = h / 2, z = d / 2, g = new GeoBuilder();
+  g.face([x, 0, 0], [0, 0, -z], [0, y, 0], right);
+  g.face([-x, 0, 0], [0, 0, z], [0, y, 0], left);
+  g.face([0, y, 0], [x, 0, 0], [0, 0, -z], top);
+  g.face([0, -y, 0], [x, 0, 0], [0, 0, z], bottom);
+  g.face([0, 0, z], [x, 0, 0], [0, y, 0], front);
+  g.face([0, 0, -z], [-x, 0, 0], [0, y, 0], back);
+  return g.build();
+}

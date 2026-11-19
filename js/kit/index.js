@@ -12,5 +12,8 @@ export * from './path.js';
 export * from './text.js';
 export * as sprites from './sprites.js';
 export * as props from './props.js';
+export * as tex from './textures.js';
+export * from './fx.js';
+export * from './life.js';
 export * from './gltf.js';
 export { billboardQuad } from './billboard.js';
