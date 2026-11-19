@@ -1,5 +1,6 @@
 // Settings panel (built from a schema) + debug overlay.
 import { RESOLUTIONS } from './gfx/ps1.js';
+import { icon, card, fold } from './icons.js';
 
 const SECTIONS = [
   ['Styles', [
@@ -38,9 +39,11 @@ const SECTIONS = [
 
 const el = (tag, props = {}, ...kids) => {
   const e = Object.assign(document.createElement(tag), props);
-  kids.forEach((k) => e.append(k));
+  kids.forEach((k) => k != null && e.append(k));
   return e;
 };
+/** Plain section heading (settings drawer); data-title lets other modules find it. */
+const heading = (title) => { const h = el('h2', { textContent: title }); h.dataset.title = title; return h; };
 
 export class UI {
   /** h = handlers: onChange(key), onDevice(id), onStartLive(), onFile(file), onDemo(), onRefresh(), onFullscreen(), onReset() */
@@ -57,7 +60,7 @@ export class UI {
     const fileIn = el('input', { type: 'file', accept: 'audio/*' });
     this.player = el('audio', { id: 'player', controls: true, loop: true });
     const src = el('section', {},
-      el('h2', { textContent: 'Audio source' }),
+      heading('Audio source'),
       el('label', { className: 'row' }, el('span', { textContent: 'Device' }), this.deviceSel),
       el('label', { className: 'row' }, el('span', { textContent: 'Channel' }), this.channelSel),
       el('div', { className: 'btns' },
@@ -68,20 +71,34 @@ export class UI {
         el('button', { textContent: 'Play demo track', onclick: () => h.onDemo() })),
       this.player,
       this.status,
-      this.meter = el('div', { className: 'meter' }, el('div', { className: 'fill' }), el('div', { className: 'thresh' })),
     );
     this.deviceSel.onchange = () => { h.onDevice(this.deviceSel.value); this.deviceSel.blur(); };
     this.channelSel.onchange = () => { settings.channel = this.channelSel.value; h.onChange('channel'); this.channelSel.blur(); };
     fileIn.onchange = () => { if (fileIn.files[0]) h.onFile(fileIn.files[0]); fileIn.blur(); };
-    panel.append(el('h1', { textContent: 'PS1 VISUALIZER' }), src);
 
-    // ---- schema sections
+    // ---- header: name, input status, level meter (always visible)
+    this.srcLabel = el('span', { className: 'src-label', textContent: 'No input' });
+    this.meter = el('div', { className: 'meter', title: 'Input level; the pink mark is the play threshold' }, el('div', { className: 'fill' }), el('div', { className: 'thresh' }));
+    panel.append(el('header', { className: 'top' },
+      el('h1', { textContent: 'VAPORSTATION' }),
+      el('span', { className: 'src' }, this.srcDot = el('i', { className: 'src-dot' }), this.srcLabel)), this.meter);
+
+    // ---- Worlds card (the live part of the Styles schema); the environment browser goes on top
+    const [, styleItems] = SECTIONS.find(([t]) => t === 'Styles');
+    this.worlds = card('Worlds', 'worlds', fold('Fine-tune: auto-switch, timing', ...styleItems.map((it) => this._control(it))));
+    panel.append(this.worlds);
+
+    // ---- settings drawer: everything you set up once
+    this.drawer = el('details', { className: 'drawer', id: 'settings' },
+      el('summary', {}, icon('gear', 14), el('span', { textContent: 'Settings: audio, look, MIDI' })), src);
     for (const [title, items] of SECTIONS) {
-      const sec = el('section', {}, el('h2', { textContent: title }));
+      if (title === 'Styles') continue;
+      const sec = el('section', {}, heading(title));
       for (const it of items) sec.append(this._control(it));
-      panel.append(sec);
+      this.drawer.append(sec);
     }
-    panel.append(el('section', {},
+    panel.append(this.drawer);
+    this.drawer.append(el('section', { className: 'foot' },
       el('div', { className: 'btns' },
         el('button', { textContent: 'Fullscreen (F)', onclick: () => h.onFullscreen() }),
         el('button', { textContent: 'Reset settings', onclick: () => h.onReset() })),
@@ -89,6 +106,7 @@ export class UI {
 
     this.debug = document.getElementById('debug');
     this._buildDebug();
+    this.refresh();
   }
 
   _control(it) {
@@ -117,31 +135,34 @@ export class UI {
     return el('label', { className: 'row' }, el('span', { textContent: it.label }), inp, val);
   }
 
-  /** Insert an extra section (e.g. the palette section) before the named section. */
+  /** Insert an extra section / card before the one whose heading has data-title = title. */
   insertSectionBefore(section, title) {
-    const h2 = [...document.querySelectorAll('#panel h2')].find((x) => x.textContent === title);
+    const h2 = [...document.querySelectorAll('#panel h2')].find((x) => x.dataset.title === title);
     if (h2) h2.parentElement.before(section); else document.getElementById('panel').append(section);
   }
 
   /**
-   * Make every panel section collapsible by clicking its heading. Call once,
-   * after all sections are in place. Collapsed titles persist per browser.
+   * Settings-drawer sections fold by clicking their heading; the drawer itself
+   * is a <details>. Call once, after all sections are in place. State persists.
    */
   makeCollapsible() {
     const KEY = 'ps1viz.ui.collapsed';
     let closed = [];
     try { closed = JSON.parse(localStorage.getItem(KEY) || '[]'); } catch { /* ignore */ }
-    for (const h2 of document.querySelectorAll('#panel > section > h2')) {
-      const sec = h2.parentElement, title = h2.textContent;
+    this.drawer.open = closed.includes('#drawer-open');
+    const save = () => {
+      closed = [...document.querySelectorAll('#settings > section.collapsed > h2')].map((x) => x.dataset.title);
+      if (this.drawer.open) closed.push('#drawer-open');
+      try { localStorage.setItem(KEY, JSON.stringify(closed)); } catch { /* ignore */ }
+    };
+    this.drawer.addEventListener('toggle', save);
+    for (const h2 of document.querySelectorAll('#settings > section > h2')) {
+      const sec = h2.parentElement, title = h2.dataset.title;
       h2.tabIndex = 0;
       h2.setAttribute('role', 'button');
       const set = (c) => { sec.classList.toggle('collapsed', c); h2.setAttribute('aria-expanded', String(!c)); };
       set(closed.includes(title));
-      const toggle = () => {
-        set(!sec.classList.contains('collapsed'));
-        closed = [...document.querySelectorAll('#panel > section.collapsed > h2')].map((x) => x.textContent);
-        try { localStorage.setItem(KEY, JSON.stringify(closed)); } catch { /* ignore */ }
-      };
+      const toggle = () => { set(!sec.classList.contains('collapsed')); save(); };
       h2.onclick = toggle;
       h2.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); toggle(); } };
     }
@@ -151,6 +172,7 @@ export class UI {
   refresh() {
     for (const [k, c] of Object.entries(this.inputs)) c.set(this.s[k]);
     this.channelSel.value = this.s.channel;
+    this.worlds.status.textContent = this.s.autoSwitch ? 'auto-switch on' : 'auto-switch off';
   }
 
   setDevices(list, selectedId) {
@@ -163,6 +185,11 @@ export class UI {
   setStatus(text, error = false) {
     this.status.textContent = text;
     this.status.classList.toggle('error', error);
+    // the header shows the latest status in short (full text on hover)
+    this.srcLabel.textContent = text.replace(/^Live: /, '');
+    this.srcLabel.title = text;
+    this.srcLabel.classList.toggle('error', error);
+    this.srcDot.classList.toggle('live', text.startsWith('Live') || text.startsWith('File'));
   }
 
   /** Live level meter in the panel, with the threshold marker. */

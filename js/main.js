@@ -81,7 +81,7 @@ const paletteUI = new PaletteUI(store, s, {
   onDeleted: (id) => { if (s.paletteId === id) selectPalette(''); else paletteUI.refresh(); },
   onSetting: () => saveSettings(s),
 });
-ui.insertSectionBefore(paletteUI.section, 'Styles');
+ui.insertSectionBefore(paletteUI.section, 'Worlds');
 
 // ---------------- setlist ----------------
 // Each song picks a palette and environment(s); a key or USB footswitch steps songs.
@@ -195,8 +195,8 @@ if (s.midiOn) midi.enable();
 const envBrowser = new EnvBrowser(STYLES.map((C) => ({ name: C.meta?.name || C.name, hidden: !!C.meta?.hidden })), {
   onPick: (i) => { styles.goTo(i); ui.refresh(); },
 });
-// under the Style dropdown
-[...document.querySelectorAll('#panel h2')].find((h) => h.textContent === 'Styles').nextElementSibling.after(envBrowser.el);
+// at the top of the Worlds card
+ui.worlds.querySelector('h2').after(envBrowser.el);
 let marked = '';
 function markEnvs() {   // cheap; called every frame, touches the DOM only on change
   const key = `${styles.cur}|${styles.next}|${styles.pool}`;

@@ -56,7 +56,7 @@ The input is opened with echo cancellation, noise suppression and auto gain cont
 | S | setlist mode on / off |
 | PageDown / → / ] | next song (most USB page-turner footswitches send these) |
 | PageUp / ← / [ | previous song |
-| I | hold intensity at the *Hold level* (toggle) |
+| I | hold intensity at the *Hold at* level (toggle) |
 | Z | freeze the picture (toggle) |
 | B | blackout: fade to black and back (toggle) |
 | G | big moment: one flash + beat + intensity push |
@@ -69,10 +69,10 @@ Every environment is drawn with **palette-indexed textures**, the way PS1 games 
 
 A palette is 16 colours: 4 **ramps** (Base, Secondary, Accent, Atmosphere/fog) × 4 shades, dark → light, plus **roles** (fog, ambient, light, glow, flash) that point at swatches.
 
-- **Pick one:** the *Palette* dropdown in the panel, or **P** live. "Each style's own" lets every environment use its default palette.
-- **From album art:** click *From album art…*, or just **drop the cover image anywhere on the window**. It's clustered into 4 ramps automatically, then opens in the editor.
+- **Pick one:** click a tile in the **Palette** card (each tile is the palette's 4×4 colour table, one ramp per row), or **P** live. The striped *own* tile (or **O**) lets every environment use its default palette.
+- **From album art:** under *Edit and import*, click *From album art…*, or just **drop the cover image anywhere on the window**. It's clustered into 4 ramps automatically, then opens in the editor.
 - **Import:** *Import…* accepts pasted hex codes (Lospec `.hex`), GIMP `.gpl`, Lospec JSON or our own exported JSON. You can also drop those files on the window. With internet you can fetch a Lospec palette by name.
-- **Edit:** click the swatch strip or *Edit*. Change a ramp's key colour to rebuild the whole ramp, or tweak single swatches; it previews live. Built-in palettes are saved as a copy.
+- **Edit:** open *Edit and import*, then click the swatch strip or *Edit*. Change a ramp's key colour to rebuild the whole ramp, or tweak single swatches; it previews live. Built-in palettes are saved as a copy.
 - **Export** writes a `.json` you can commit, back up or share. Your palettes live in this browser's localStorage, so export them before switching laptops.
 
 To add a built-in palette, add one line to `js/palette/library.js`:
@@ -82,7 +82,7 @@ To add a built-in palette, add one line to `js/palette/library.js`:
 
 A setlist is a list of songs (or albums), each with a **palette** and one or more **environments**. Step through it with a key or a USB footswitch.
 
-- **Make one:** Setlist → *New*. Each row is a song: a label, a palette (or *keep current* / *each style's own*) and environments (none = keep the current one). *+ Song from current look* adds the palette and environment showing right now, so you can build a set by browsing with P and N and adding as you go.
+- **Make one:** Setlist card → *Songs and setlists* → *New*. Each row is a song: a label, a palette (or *keep current* / *each style's own*) and environments (none = keep the current one). *+ Song from current look* adds the palette and environment showing right now, so you can build a set by browsing with P and N and adding as you go.
 - **Several environments per song:** the first one opens the song; **N** and idle auto-switch then rotate only through that song's list.
 - **Step:** *Next ▶* / **PageDown** / **→** / **]**, and back with *◀ Prev* / **PageUp** / **←** / **[**. Click a song in the list to jump to it. **S** turns setlist mode on and off.
 - **Wait for silence** (on by default): pressing Next while the band is still playing only *cues* the next song (shown in pink). It crossfades in as soon as the room goes quiet, so the change lands between songs. Press Next again to go right away (for segues); Prev cancels the cue.
@@ -90,9 +90,9 @@ A setlist is a list of songs (or albums), each with a **palette** and one or mor
 
 ## Show control
 
-The four pads at the top of the panel are for running the show by hand. They're also on keys and MIDI.
+The **Show** card at the top of the panel is for running the show by hand. Everything is also on keys and MIDI. Flash strength, blackout fade, strobe-safe and tempo nudges are under *Fine-tune*.
 
-- **Hold** (I): intensity eases to *Hold level* and stays there, even when the room is quiet (a soft song you still want big, or a talk-over you want calm). Releasing it eases back to the live level.
+- **Hold** (I): intensity eases to the *Hold at* level (.2 – 1) and stays there, even when the room is quiet (a soft song you still want big, or a talk-over you want calm). Releasing it eases back to the live level.
 - **Freeze** (Z): the picture holds still until you press it again.
 - **Blackout** (B): a dithered fade to black over *Blackout fade*, and back on the second press. Never a hard cut.
 - **Big moment** (G): one palette flash, a beat and a push to full intensity, decaying over about 1.5 s.
@@ -105,7 +105,7 @@ Hold, freeze and blackout always start off when the page loads.
 
 Works with any class-compliant USB MIDI controller or MIDI footswitch, in Chrome.
 
-1. Plug it in, open the **MIDI** section and click **Enable MIDI** (allow the permission once; it reopens on the next load).
+1. Plug it in, open **Settings** at the bottom of the panel, go to the **MIDI** section and click **Enable MIDI** (allow the permission once; it reopens on the next load).
 2. Click **Learn** next to an action, then press the pad, footswitch or move the knob. Learning a control that's already mapped moves it.
 3. Buttons fire on note-on, or when a CC goes above 64 (sustain-pedal style footswitches send CC 64). *Hold level* takes a knob, fader or expression pedal.
 4. **Program change selects setlist song** (on by default): program 0 = song 1, program 1 = song 2, and so on. It goes there right away and turns setlist mode on.
@@ -114,9 +114,11 @@ Mappings are saved in this browser. The last message received is shown under the
 
 ## Environment browser
 
-Under **Styles**, every environment has a live thumbnail (its idle look, in the current palette). Click one to crossfade to it. Teal = showing, pink = fading in; with setlist mode on, the current song's environments have brighter names. Faded tiles aren't in the auto rotation. Thumbnails only refresh while the panel is visible, so they cost nothing in fullscreen.
+In the **Worlds** card, every environment has a live thumbnail (its idle look, in the current palette). Click one to crossfade to it. Teal = showing, pink = fading in; with setlist mode on, the current song's environments have brighter names. Faded tiles aren't in the auto rotation. Thumbnails only refresh while the panel is visible, so they cost nothing in fullscreen.
 
-Click any section heading to fold it away; the panel remembers which are folded.
+## The panel
+
+The panel keeps what you touch during a show in four cards: **Show**, **Setlist**, **Palette** and **Worlds**. The header shows the input status and level meter (the pink mark is the play threshold). Anything you only set up once is out of the way: each card's *Fine-tune* / *Edit* fold-out, and the **Settings** drawer at the bottom (audio source, MIDI, input gain, play/silence detection, PS1 look, keys). Inside the drawer, click a heading to fold that section; the panel remembers what's open.
 
 All settings are saved in localStorage and restored on load. **Reset settings** restores the defaults.
 

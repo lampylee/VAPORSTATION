@@ -1,5 +1,6 @@
 // Palette UI: picker section in the panel, the palette editor and the importer.
 import { R, RAMP_NAMES, ROLE_NAMES, rampFrom, clonePalette, newId, parsePaletteText, paletteFromImage } from './palette.js';
+import { card, fold } from '../icons.js';
 
 const el = (tag, props = {}, ...kids) => {
   const e = Object.assign(document.createElement(tag), props);
@@ -35,11 +36,11 @@ export class PaletteUI {
     const imgIn = el('input', { type: 'file', accept: 'image/*' });
     imgIn.onchange = () => { if (imgIn.files[0]) this.fromImage(imgIn.files[0]); imgIn.value = ''; };
 
-    this.section = el('section', {},
-      el('h2', { textContent: 'Palette' }),
+    this.section = card('Palette', 'palette',
+      this.list = el('div', { className: 'pal-grid', ariaLabel: 'Palettes (P / Shift+P, O = each world’s own)' }),
+      fold('Edit and import',
       el('label', { className: 'row' }, el('span', { textContent: 'Palette (P / O)' }), this.select),
       this.strip,
-      this.list = el('div', { className: 'pal-list', ariaLabel: 'Palettes' }),
       el('label', { className: 'row' }, el('span', { textContent: 'Palette fade' }), fade, fadeOut),
       el('div', { className: 'btns' },
         el('button', { textContent: 'Edit', onclick: () => this.openEditor(h.active()) }),
@@ -47,7 +48,7 @@ export class PaletteUI {
         el('button', { textContent: 'Export', onclick: () => downloadPalette(h.active()) })),
       el('div', { className: 'btns' },
         el('label', { className: 'filebtn' }, 'From album art…', imgIn),
-        el('button', { textContent: 'Import…', onclick: () => this.openImport() })),
+        el('button', { textContent: 'Import…', onclick: () => this.openImport() }))),
     );
 
     this.modal = el('div', { className: 'modal', hidden: true });
@@ -65,21 +66,21 @@ export class PaletteUI {
     if (all.user.length) sel.append(g2);
     sel.value = this.s.paletteId || '';
     this.drawStrip(this.h.active());
-    // palette strip: every palette as a clickable swatch bar
+    // palette tiles: each palette as its 4×4 colour table (ramps are rows), like a PS1 CLUT
     this.list.innerHTML = '';
     const item = (id, name, colors) => {
-      const b = el('button', { className: 'pal' + (id === (this.s.paletteId || '') ? ' cur' : ''), title: name, onclick: () => { this.h.onSelect(id); b.blur(); } },
-        el('span', { textContent: name }),
-        colors ? el('span', { className: 'bar' }, ...colors.map((c) => el('i', { style: `background:${c}` }))) : el('span', { className: 'bar own', textContent: 'per environment' }));
+      const b = el('button', { className: 'pal-tile' + (id === (this.s.paletteId || '') ? ' cur' : '') + (colors ? '' : ' own'), title: name, ariaLabel: name, onclick: () => { this.h.onSelect(id); b.blur(); } },
+        ...(colors ? colors.map((c) => el('i', { style: `background:${c}` })) : [el('span', { textContent: 'own' })]));
       this.list.append(b);
     };
-    item('', 'Each style’s own', null);
+    item('', 'Each world’s own palette (O)', null);
     for (const p of all.all) item(p.id, p.name, p.colors);
     this.fadeInput.value = this.s.paletteFade;
     this.fadeOut.textContent = `${Number(this.s.paletteFade).toFixed(1)} s`;
   }
 
   drawStrip(p) {
+    this.section.status.textContent = this.s.paletteId ? (p?.name || '') : 'each world’s own';
     this.strip.innerHTML = '';
     if (!p) return;
     p.colors.forEach((c) => this.strip.append(el('i', { style: `background:${c}` })));

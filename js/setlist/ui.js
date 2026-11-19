@@ -1,6 +1,7 @@
 // Setlist UI: panel section (pick a setlist, see/step songs) and the editor modal.
 import { cloneSetlist, normSetlist, downloadSetlist } from './setlist.js';
 import { newId } from '../palette/palette.js';
+import { icon, card, fold } from '../icons.js';
 
 const el = (tag, props = {}, ...kids) => {
   const e = Object.assign(document.createElement(tag), props);
@@ -24,7 +25,9 @@ export class SetlistUI {
     this.select.onchange = () => { h.onSelectList(this.select.value); this.select.blur(); };
     this.cue = el('input', { type: 'checkbox', checked: settings.setlistCue });
     this.cue.onchange = () => { settings.setlistCue = this.cue.checked; h.onSetting(); this.cue.blur(); };
-    this.now = el('div', { className: 'sl-now' });
+    this.nowTitle = el('div', { className: 'sl-title' });
+    this.nowSub = el('div', { className: 'sl-sub' });
+    this.turnOn = el('button', { className: 'link', textContent: 'Turn on (S)', onclick: () => { h.onToggle(true); this.turnOn.blur(); } });
     this.songs = el('ol', { className: 'sl-songs' });
     const fileIn = el('input', { type: 'file', accept: '.json,application/json' });
     fileIn.onchange = async () => {
@@ -33,22 +36,22 @@ export class SetlistUI {
     };
     this.msg = el('div', { className: 'status' });
 
-    this.section = el('section', {},
-      el('h2', { textContent: 'Setlist' }),
-      el('label', { className: 'row check' }, this.on, el('span', { textContent: 'Setlist mode (S)' })),
-      el('label', { className: 'row' }, el('span', { textContent: 'Setlist' }), this.select),
-      this.now,
-      el('div', { className: 'btns' },
-        el('button', { textContent: '◀ Prev', title: 'Previous song (PageUp / ← / [)', onclick: () => h.onStep(-1) }),
-        el('button', { textContent: 'Next ▶', title: 'Next song (PageDown / → / ])', onclick: () => h.onStep(1) })),
-      this.songs,
-      el('label', { className: 'row check', title: 'While the band plays, Next only cues the song; it crossfades in when the room goes quiet. Press Next again to go now.' },
-        this.cue, el('span', { textContent: 'Wait for silence (cue while playing)' })),
-      el('div', { className: 'btns' },
-        el('button', { textContent: 'Edit', onclick: () => { const l = this.store.get(this.s.setlistId); if (l) this.openEditor(l); else this.newList(); } }),
-        el('button', { textContent: 'New', onclick: () => this.newList() }),
-        el('button', { textContent: 'Export', onclick: () => { const l = this.store.get(this.s.setlistId); if (l) downloadSetlist(l); } }),
-        el('label', { className: 'filebtn' }, 'Import…', fileIn)),
+    this.section = card('Setlist', 'list',
+      el('div', { className: 'sl-nowrow' },
+        el('button', { className: 'sq', ariaLabel: 'Previous song', title: 'Previous song (PageUp / ← / [)', onclick: (e) => { h.onStep(-1); e.currentTarget.blur(); } }, icon('prev')),
+        el('div', { className: 'sl-now' }, this.nowTitle, this.nowSub, this.turnOn),
+        el('button', { className: 'sq', ariaLabel: 'Next song', title: 'Next song (PageDown / → / ])', onclick: (e) => { h.onStep(1); e.currentTarget.blur(); } }, icon('next'))),
+      fold('Songs and setlists',
+        el('label', { className: 'row check' }, this.on, el('span', { textContent: 'Setlist mode (S)' })),
+        el('label', { className: 'row' }, el('span', { textContent: 'Setlist' }), this.select),
+        this.songs,
+        el('label', { className: 'row check', title: 'While the band plays, Next only cues the song; it crossfades in when the room goes quiet. Press Next again to go now.' },
+          this.cue, el('span', { textContent: 'Wait for silence (cue while playing)' })),
+        el('div', { className: 'btns' },
+          el('button', { textContent: 'Edit', onclick: () => { const l = this.store.get(this.s.setlistId); if (l) this.openEditor(l); else this.newList(); } }),
+          el('button', { textContent: 'New', onclick: () => this.newList() }),
+          el('button', { textContent: 'Export', onclick: () => { const l = this.store.get(this.s.setlistId); if (l) downloadSetlist(l); } }),
+          el('label', { className: 'filebtn' }, 'Import…', fileIn))),
       this.msg,
     );
 
@@ -88,8 +91,16 @@ export class SetlistUI {
       li.classList.toggle('cur', on && i === p.pos);
       li.classList.toggle('cued', on && i === p.cued);
     });
-    this.now.textContent = on ? p.label : 'Setlist mode is off.';
-    this.now.classList.toggle('off', !on);
+    const l = this.store.get(this.s.setlistId);
+    const song = on ? p.song : null;
+    this.nowTitle.textContent = song ? (song.label || 'untitled') : on ? 'Empty setlist' : l ? 'Setlist mode is off' : 'No setlist yet';
+    this.nowTitle.classList.toggle('off', !on);
+    const next = on ? l.songs[p.cued >= 0 ? p.cued : p.pos + 1] : null;
+    this.nowSub.textContent = !on ? (l ? `${l.name} · ${l.songs.length} songs` : 'Create one under Songs and setlists')
+      : p.cued >= 0 ? `next: ${next.label || 'untitled'} (cued)` : next ? `next: ${next.label || 'untitled'}` : 'last song';
+    this.nowSub.classList.toggle('cued', on && p.cued >= 0);
+    this.turnOn.hidden = on || !l;
+    this.section.status.textContent = on ? `${p.pos + 1} / ${l.songs.length}` : 'off';
   }
 
   _songMeta(song) {
