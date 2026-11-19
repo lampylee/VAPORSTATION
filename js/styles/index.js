@@ -13,5 +13,6 @@ import { NeonCircuit } from './neon-circuit.js';
 import { NightManor } from './night-manor.js';
 import { DrownedRuins } from './drowned-ruins.js';
 import { RouteNine } from './route-nine.js';
+import { AuroraField } from './aurora-field.js';
 
-export const STYLES = [TestScene, Fogway, Monoliths, Relic, KitDemo, AshfallTown, LostValley, NeonCircuit, NightManor, DrownedRuins, RouteNine];
+export const STYLES = [TestScene, Fogway, Monoliths, Relic, KitDemo, AshfallTown, LostValley, NeonCircuit, NightManor, DrownedRuins, RouteNine, AuroraField];
