@@ -16,5 +16,6 @@ import { RouteNine } from './route-nine.js';
 import { ColdBase } from './cold-base.js';
 import { StationDeck } from './station-deck.js';
 import { DreamJournal } from './dream-journal.js';
+import { GraveyardHill } from './graveyard-hill.js';
 
-export const STYLES = [TestScene, Fogway, Monoliths, Relic, KitDemo, AshfallTown, LostValley, NeonCircuit, NightManor, DrownedRuins, RouteNine, ColdBase, StationDeck, DreamJournal];
+export const STYLES = [TestScene, Fogway, Monoliths, Relic, KitDemo, AshfallTown, LostValley, NeonCircuit, NightManor, DrownedRuins, RouteNine, ColdBase, StationDeck, DreamJournal, GraveyardHill];
