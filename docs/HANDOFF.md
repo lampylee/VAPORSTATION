@@ -14,7 +14,7 @@ All work is committed on `main` (local only: **no git remote yet**, nothing push
 | 1: CLUT palettes, editor, album-art extraction, import/export, P/O keys, setlist mode | done |
 | 2: world kit (`js/kit/`), Kit Demo, environment guide | done |
 | 3: environment library | **done: 12/12 merged** (wave 1 + wave 2) |
-| 4: UI pass, MIDI, tap tempo, overrides | not started |
+| 4: UI pass, MIDI, tap tempo, overrides | done (2026-11-19), real MIDI hardware untested |
 | 5: gig hardening (PWA, kiosk, reconnect tests) | not started |
 
 ### Styles on main (`js/styles/index.js`)
@@ -39,7 +39,7 @@ All work is committed on `main` (local only: **no git remote yet**, nothing push
 | 15 | Arcade After Hours | yes | 32 / 14–15k |
 | 16 | Aurora Field | yes | 12–17 / 8.9–11.3k |
 
-Number keys only reach 0–9; indices 10–16 are reachable via **N / Shift+N**, the dropdown, auto-switch, or a setlist song (setlist mode reaches every environment). An environment browser is still a Phase 4 item.
+Number keys only reach 0–9; indices 10–16 are reachable via **N / Shift+N**, the dropdown, auto-switch, a setlist song, or the environment browser (thumbnails under Styles).
 
 ### Verified vs. not verified
 
@@ -48,6 +48,8 @@ Number keys only reach 0–9; indices 10–16 are reachable via **N / Shift+N**,
   1. **`?bench` real fps.** The Claude pane is hidden during agent work, which pauses `requestAnimationFrame`. Run `http://localhost:8080/?bench` in a **visible normal Chrome tab** and leave it ~1 min; results print via `console.table` and `window.benchResults`.
   2. **Live input with the Scarlett 2i2.** The Claude pane blocks the microphone. Test in real Chrome: pick device → Start live input → check the threshold meter during soundcheck.
   3. **The gig laptop itself** (perf, fullscreen, sleep settings).
+  4. **Real MIDI hardware** (learn + footswitch + Program Change). Tested only with simulated MIDI bytes via `viz.midi.handle([...])`.
+  5. **Thumbnail cost on the gig laptop**: one extra style update+render every 0.4 s while the panel is visible (none in fullscreen / hidden UI).
 
 ## Open items (rough priority)
 
@@ -57,7 +59,7 @@ Number keys only reach 0–9; indices 10–16 are reachable via **N / Shift+N**,
 4. ~~Setlist mode~~ — done 2026-11-19 (`js/setlist/`): songs pick a palette + an environment pool; PageDown/→/] next, PageUp/←/[ prev, S toggles; while playing, Next cues the song until silence (press again to force). Verified in the pane: stepping/cue logic, editor, import, persistence. **Not verified:** a real USB footswitch (check which key it sends; add it in `main.js` if it isn't one of those). Also fixed a manager bug where a style queued mid-crossfade was rendered once before its first `update()` (crashed Cold Base / Arcade for one frame).
 5. ~~Housekeeping~~ — done 2026-11-19: all twelve `claude/env-*` branches and worktrees deleted, the twelve environment sessions archived.
 6. Add a GitHub remote and push, so work is backed up off this machine.
-7. Phase 4 (UI pass with the `frontend-design` plugin, MIDI, tap tempo, manual overrides), then Phase 5.
+7. ~~Phase 4~~ — done 2026-11-19 (`js/show/`): show-control pads (Hold I, Freeze Z, Blackout B, Big moment G), strobe-safe limiter (≤3 beats/s), tap tempo T + BPM lock L (styles get `audio.bpm/beatPhase/bar`; no style uses them yet), Web MIDI with learn + Program Change → song, environment browser with live thumbnails, palette strip, collapsible sections. Pipeline gained composite `flash`/`fade` params and `r.snapshot(ctx)`. Next: Phase 5 (PWA, kiosk script, reconnect tests); optionally teach a few styles to phrase camera moves on `bar`.
 
 ## Kit v2 — done (2026-11-19)
 

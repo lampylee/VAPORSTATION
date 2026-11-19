@@ -2,6 +2,13 @@
 import { RESOLUTIONS } from './gfx/ps1.js';
 
 const SECTIONS = [
+  ['Styles', [
+    { key: 'style', label: 'Style', type: 'select', options: [] },
+    { key: 'autoSwitch', label: 'Auto-switch while idle (A)', type: 'check' },
+    { key: 'idleSwitchDelay', label: 'Idle before switching', min: 2, max: 120, step: 1, unit: 's' },
+    { key: 'idleSwitchInterval', label: 'Then every', min: 10, max: 300, step: 5, unit: 's' },
+    { key: 'transitionTime', label: 'Crossfade time', min: 0.5, max: 10, step: 0.1, unit: 's' },
+  ]],
   ['Input level & gain', [
     { key: 'inputGainDb', label: 'Input gain', min: -24, max: 36, step: 0.5, unit: 'dB' },
     { key: 'agc', label: 'Auto-gain (normalise songs)', type: 'check' },
@@ -27,13 +34,6 @@ const SECTIONS = [
     { key: 'audioPushesLook', label: 'Music pushes jitter & fog', type: 'check' },
     { key: 'crt', label: 'CRT scanlines (C)', type: 'check' },
   ]],
-  ['Styles', [
-    { key: 'style', label: 'Style', type: 'select', options: [] },
-    { key: 'autoSwitch', label: 'Auto-switch while idle (A)', type: 'check' },
-    { key: 'idleSwitchDelay', label: 'Idle before switching', min: 2, max: 120, step: 1, unit: 's' },
-    { key: 'idleSwitchInterval', label: 'Then every', min: 10, max: 300, step: 5, unit: 's' },
-    { key: 'transitionTime', label: 'Crossfade time', min: 0.5, max: 10, step: 0.1, unit: 's' },
-  ]],
 ];
 
 const el = (tag, props = {}, ...kids) => {
@@ -46,7 +46,7 @@ export class UI {
   /** h = handlers: onChange(key), onDevice(id), onStartLive(), onFile(file), onDemo(), onRefresh(), onFullscreen(), onReset() */
   constructor(settings, styleNames, h) {
     this.s = settings; this.h = h; this.inputs = {};
-    SECTIONS[3][1][0].options = styleNames.map((n, i) => [String(i), `${i}: ${n}`]);
+    SECTIONS.find(([t]) => t === 'Styles')[1][0].options = styleNames.map((n, i) => [String(i), `${i}: ${n}`]);
     const panel = document.getElementById('panel');
 
     // ---- audio source section
@@ -85,7 +85,7 @@ export class UI {
       el('div', { className: 'btns' },
         el('button', { textContent: 'Fullscreen (F)', onclick: () => h.onFullscreen() }),
         el('button', { textContent: 'Reset settings', onclick: () => h.onReset() })),
-      el('pre', { className: 'keys', textContent: 'F fullscreen   H hide UI   D debug\n1-9 style      N / Shift+N next/prev\n0 test scene   A auto-switch  C CRT\nP / Shift+P palette   O style palettes\nS setlist mode\nPgDn → ]  next song (footswitch)\nPgUp ← [  previous song\nDrop an image, palette, setlist or\naudio file anywhere.' })));
+      el('pre', { className: 'keys', textContent: 'F fullscreen   H hide UI   D debug\n1-9 style      N / Shift+N next/prev\n0 test scene   A auto-switch  C CRT\nP / Shift+P palette   O style palettes\nS setlist mode\nPgDn → ]  next song (footswitch)\nPgUp ← [  previous song\nI hold   Z freeze   B blackout\nG big moment   T tap   Shift+T clear\nL lock beats to tempo\nDrop an image, palette, setlist or\naudio file anywhere.' })));
 
     this.debug = document.getElementById('debug');
     this._buildDebug();
@@ -121,6 +121,30 @@ export class UI {
   insertSectionBefore(section, title) {
     const h2 = [...document.querySelectorAll('#panel h2')].find((x) => x.textContent === title);
     if (h2) h2.parentElement.before(section); else document.getElementById('panel').append(section);
+  }
+
+  /**
+   * Make every panel section collapsible by clicking its heading. Call once,
+   * after all sections are in place. Collapsed titles persist per browser.
+   */
+  makeCollapsible() {
+    const KEY = 'ps1viz.ui.collapsed';
+    let closed = [];
+    try { closed = JSON.parse(localStorage.getItem(KEY) || '[]'); } catch { /* ignore */ }
+    for (const h2 of document.querySelectorAll('#panel > section > h2')) {
+      const sec = h2.parentElement, title = h2.textContent;
+      h2.tabIndex = 0;
+      h2.setAttribute('role', 'button');
+      const set = (c) => { sec.classList.toggle('collapsed', c); h2.setAttribute('aria-expanded', String(!c)); };
+      set(closed.includes(title));
+      const toggle = () => {
+        set(!sec.classList.contains('collapsed'));
+        closed = [...document.querySelectorAll('#panel > section.collapsed > h2')].map((x) => x.textContent);
+        try { localStorage.setItem(KEY, JSON.stringify(closed)); } catch { /* ignore */ }
+      };
+      h2.onclick = toggle;
+      h2.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); toggle(); } };
+    }
   }
 
   /** Sync all controls from settings (after keyboard toggles / reset). */
@@ -186,6 +210,6 @@ export class UI {
     d.beat.textContent = `BEAT ${a.beatCount}`;
     d.state.textContent = info.state;
     d.state.className = 'dstate ' + (info.playing ? 'playing' : 'silent');
-    d.foot.textContent = `${info.source}\nstyle: ${info.style}${info.transition ? '  → ' + info.transition : ''}\nsetlist: ${info.setlist}\nauto-switch: ${info.autoSwitch ? 'on' : 'off'} · idle ${info.idle.toFixed(0)} s · auto-gain ×${a.gain.bass.toFixed(0)} (bass)`;
+    d.foot.textContent = `${info.source}\nstyle: ${info.style}${info.transition ? '  → ' + info.transition : ''}\nsetlist: ${info.setlist}\nshow: ${info.show}\nauto-switch: ${info.autoSwitch ? 'on' : 'off'} · idle ${info.idle.toFixed(0)} s · auto-gain ×${a.gain.bass.toFixed(0)} (bass)`;
   }
 }

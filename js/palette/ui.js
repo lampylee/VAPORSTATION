@@ -39,6 +39,7 @@ export class PaletteUI {
       el('h2', { textContent: 'Palette' }),
       el('label', { className: 'row' }, el('span', { textContent: 'Palette (P / O)' }), this.select),
       this.strip,
+      this.list = el('div', { className: 'pal-list', ariaLabel: 'Palettes' }),
       el('label', { className: 'row' }, el('span', { textContent: 'Palette fade' }), fade, fadeOut),
       el('div', { className: 'btns' },
         el('button', { textContent: 'Edit', onclick: () => this.openEditor(h.active()) }),
@@ -64,6 +65,16 @@ export class PaletteUI {
     if (all.user.length) sel.append(g2);
     sel.value = this.s.paletteId || '';
     this.drawStrip(this.h.active());
+    // palette strip: every palette as a clickable swatch bar
+    this.list.innerHTML = '';
+    const item = (id, name, colors) => {
+      const b = el('button', { className: 'pal' + (id === (this.s.paletteId || '') ? ' cur' : ''), title: name, onclick: () => { this.h.onSelect(id); b.blur(); } },
+        el('span', { textContent: name }),
+        colors ? el('span', { className: 'bar' }, ...colors.map((c) => el('i', { style: `background:${c}` }))) : el('span', { className: 'bar own', textContent: 'per environment' }));
+      this.list.append(b);
+    };
+    item('', 'Each style’s own', null);
+    for (const p of all.all) item(p.id, p.name, p.colors);
     this.fadeInput.value = this.s.paletteFade;
     this.fadeOut.textContent = `${Number(this.s.paletteFade).toFixed(1)} s`;
   }

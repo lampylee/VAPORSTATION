@@ -42,6 +42,15 @@ export const DEFAULTS = {
   setlistId: '',            // active setlist
   setlistPos: 0,            // current song index
   setlistCue: true,         // while playing, Next cues the song until the room is quiet
+  // show control
+  holdLevel: 0.8,           // intensity while Hold is on
+  blackoutTime: 1.0,        // s for the blackout fade
+  strobeSafe: true,         // ≤ 3 beats/flashes per second reach the styles
+  flashAmount: 0.5,         // big-moment palette flash strength
+  tempoLock: false,         // beats on the tap-tempo grid instead of detected beats
+  // midi
+  midiOn: false,            // reopen MIDI on load (Chrome remembers the permission)
+  midiProgram: true,        // Program Change n selects setlist song n + 1
   // ui
   debug: false,
 };

@@ -56,6 +56,12 @@ The input is opened with echo cancellation, noise suppression and auto gain cont
 | S | setlist mode on / off |
 | PageDown / → / ] | next song (most USB page-turner footswitches send these) |
 | PageUp / ← / [ | previous song |
+| I | hold intensity at the *Hold level* (toggle) |
+| Z | freeze the picture (toggle) |
+| B | blackout: fade to black and back (toggle) |
+| G | big moment: one flash + beat + intensity push |
+| T / Shift+T | tap tempo / clear tempo |
+| L | lock beats to the tapped tempo (toggle) |
 
 ## Palettes (album colours)
 
@@ -82,6 +88,36 @@ A setlist is a list of songs (or albums), each with a **palette** and one or mor
 - **Wait for silence** (on by default): pressing Next while the band is still playing only *cues* the next song (shown in pink). It crossfades in as soon as the room goes quiet, so the change lands between songs. Press Next again to go right away (for segues); Prev cancels the cue.
 - Setlists live in localStorage. *Export* writes a `.setlist.json`; *Import…* or dropping that file on the window loads it. Songs reference palettes by id, so export any of your own palettes too when moving to another laptop.
 
+## Show control
+
+The four pads at the top of the panel are for running the show by hand. They're also on keys and MIDI.
+
+- **Hold** (I): intensity eases to *Hold level* and stays there, even when the room is quiet (a soft song you still want big, or a talk-over you want calm). Releasing it eases back to the live level.
+- **Freeze** (Z): the picture holds still until you press it again.
+- **Blackout** (B): a dithered fade to black over *Blackout fade*, and back on the second press. Never a hard cut.
+- **Big moment** (G): one palette flash, a beat and a push to full intensity, decaying over about 1.5 s.
+- **Tap tempo** (T): tap along four or more times. The dot blinks on the beat (pink on the downbeat). **Lock beats to tempo** (L) makes the environments' beats land on that grid instead of the detected beats (detected beats keep it in phase). −1 / +1 nudge it, *Clear* (Shift+T) forgets it.
+- **Strobe-safe** (on by default): at most 3 beats per second reach the environments, at most one big moment per second, and the big-moment flash is capped. Leave it on unless you know the room.
+
+Hold, freeze and blackout always start off when the page loads.
+
+## MIDI
+
+Works with any class-compliant USB MIDI controller or MIDI footswitch, in Chrome.
+
+1. Plug it in, open the **MIDI** section and click **Enable MIDI** (allow the permission once; it reopens on the next load).
+2. Click **Learn** next to an action, then press the pad, footswitch or move the knob. Learning a control that's already mapped moves it.
+3. Buttons fire on note-on, or when a CC goes above 64 (sustain-pedal style footswitches send CC 64). *Hold level* takes a knob, fader or expression pedal.
+4. **Program change selects setlist song** (on by default): program 0 = song 1, program 1 = song 2, and so on. It goes there right away and turns setlist mode on.
+
+Mappings are saved in this browser. The last message received is shown under the table, which helps when a pedal doesn't seem to do anything.
+
+## Environment browser
+
+Under **Styles**, every environment has a live thumbnail (its idle look, in the current palette). Click one to crossfade to it. Teal = showing, pink = fading in; with setlist mode on, the current song's environments have brighter names. Faded tiles aren't in the auto rotation. Thumbnails only refresh while the panel is visible, so they cost nothing in fullscreen.
+
+Click any section heading to fold it away; the panel remembers which are folded.
+
 All settings are saved in localStorage and restored on load. **Reset settings** restores the defaults.
 
 ## How it behaves
@@ -107,6 +143,7 @@ js/gfx/geometry.js      low-poly mesh builders
 js/gfx/textures.js      procedural 64×64 indexed textures
 js/palette/             palette model, crossfading, library, editor/import UI
 js/setlist/             setlists: store, player (cue / step), panel + editor UI
+js/show/                show control (hold, freeze, blackout, flash, strobe limiter, tap tempo), MIDI, show/MIDI/environment-browser UI
 js/kit/                 world kit for building environments (see docs/ENVIRONMENT-GUIDE.md)
 js/styles/*.js          styles + StyleManager (crossfades, idle auto-switch)
 ```

@@ -30,6 +30,10 @@ Register it in `js/styles/index.js` (append to `STYLES`; the index is its number
 4. **Original work.** Evoke a mood or genre, but don't recreate a specific game's characters, logos, maps, music or assets.
 5. **Budget** at 320×240: ≤ 150 draw calls and ≤ 20k triangles per frame (see the debug overlay, D). Use instancing for anything repeated more than ~5 times.
 
+### Audio fields
+
+`update(audio, k, dt)` gets `level bass mid high` (0..1), `beat` (true on a beat frame), `beatPulse` (1 → 0 over ~0.25 s), `beatCount`, and from show control: `bpm` (0 when no tempo is tapped), `beatPhase` (0..1 through the current beat) and `bar` (0..3, beat within a 4-beat bar). Use `bpm`/`beatPhase`/`bar` to phrase slow moves (e.g. a camera turn every 4 bars), and always fall back gracefully when `bpm` is 0. Beats already respect the strobe-safe limiter, so react to `beat` freely; don't build your own fast strobes. Thumbnails for the environment browser call `update` with k = 0 and silent audio while the style is offscreen, so `update` must be safe to call before your style is ever shown.
+
 ## Palette ramps
 
 | ramp | name | typical use |

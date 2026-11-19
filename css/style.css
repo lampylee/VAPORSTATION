@@ -109,3 +109,59 @@ button.danger:hover { border-color: var(--hot); color: var(--hot); }
 .sl-chips { grid-column: 2 / 5; display: flex; flex-wrap: wrap; gap: 4px; }
 .chip { padding: 1px 6px; font-size: 11px; }
 .chip:hover { border-color: var(--hot); color: var(--hot); }
+
+/* ---------- collapsible sections ---------- */
+#panel > section > h2 { cursor: pointer; user-select: none; display: flex; justify-content: space-between; }
+#panel > section > h2::after { content: '▾'; color: var(--dim); }
+#panel > section.collapsed > h2::after { content: '▸'; }
+#panel > section.collapsed > :not(h2) { display: none; }
+#panel > section > h2:hover, #panel > section > h2:focus-visible { color: var(--text); outline: none; }
+button:focus-visible, .filebtn:focus-within, select:focus-visible { outline: 1px solid var(--acc); outline-offset: 1px; }
+
+/* ---------- show control: the pads ---------- */
+.pads { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 4px 0 8px; }
+.pad {
+  position: relative; height: 46px; text-align: left; padding: 6px 8px;
+  font-size: 13px; letter-spacing: 1px; background: #12121e;
+}
+.pad kbd { position: absolute; right: 6px; top: 5px; font: 10px var(--font); color: var(--dim); }
+.pad.on { background: var(--acc); border-color: var(--acc); color: #04140f; }
+.pad.on kbd { color: #04140f; }
+.pad-blackout.on { background: var(--hot); border-color: var(--hot); color: #1a0410; }
+.pad.fading { background: #3a1024; color: var(--hot); }
+.pad-flash.on { background: var(--text); border-color: var(--text); color: #000; }
+.tempo { display: grid; grid-template-columns: 1fr auto auto auto; gap: 4px; margin: 6px 0; }
+.tap { display: flex; align-items: center; gap: 8px; text-align: left; }
+.tap kbd { margin-left: auto; font: 10px var(--font); color: var(--dim); }
+.tap .dot { width: 8px; height: 8px; background: var(--acc); opacity: 0; flex: none; }
+.tap .dot.down { background: var(--hot); }
+
+/* ---------- MIDI ---------- */
+.midi-map { display: grid; grid-template-columns: 1fr auto auto auto; gap: 3px 4px; align-items: center; margin: 6px 0; }
+.midi-act { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.midi-bind { color: var(--acc); font-size: 11px; text-align: right; }
+.midi-bind.unset { color: var(--dim); }
+.midi-map button { padding: 1px 6px; font-size: 11px; }
+.midi-map button.on { border-color: var(--hot); color: var(--hot); }
+.midi-last { color: var(--dim); font-size: 11px; min-height: 1.4em; }
+
+/* ---------- environment browser ---------- */
+.envs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin: 6px 0 8px; }
+.env { padding: 0; display: flex; flex-direction: column; background: #000; border: 1px solid var(--line); text-align: left; }
+.env canvas { width: 100%; aspect-ratio: 4 / 3; display: block; image-rendering: pixelated; background: #000; }
+.env span { font-size: 10px; padding: 1px 4px 2px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: #10101a; }
+.env.hidden-style { opacity: 0.55; }
+.env.pool span { color: var(--text); }
+.env.cur { border-color: var(--acc); box-shadow: inset 0 0 0 1px var(--acc); }
+.env.cur span { color: var(--acc); }
+.env.next { border-color: var(--hot); }
+.env.next span { color: var(--hot); }
+
+/* ---------- palette strip ---------- */
+.pal-list { display: grid; gap: 2px; max-height: 168px; overflow-y: auto; margin: 4px 0 6px; border: 1px solid var(--line); padding: 2px; }
+.pal { display: grid; grid-template-columns: 96px 1fr; gap: 6px; align-items: center; padding: 2px 4px; border-color: transparent; background: none; text-align: left; }
+.pal > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.pal .bar { display: grid; grid-template-columns: repeat(16, 1fr); height: 12px; }
+.pal .bar.own { display: block; color: var(--dim); font-size: 10px; height: auto; }
+.pal.cur { border-color: var(--acc); }
+.pal.cur > span:first-child { color: var(--acc); }

@@ -12,6 +12,9 @@ import { PaletteUI } from './palette/ui.js';
 import { Bench } from './bench.js';
 import { SetlistStore, SetlistPlayer, styleKey, looksLikeSetlist } from './setlist/setlist.js';
 import { SetlistUI } from './setlist/ui.js';
+import { ShowControl } from './show/control.js';
+import { Midi } from './show/midi.js';
+import { ShowUI, MidiUI, EnvBrowser } from './show/ui.js';
 
 const s = loadSettings();
 const canvas = document.getElementById('view');
@@ -46,7 +49,7 @@ const ui = new UI(s, STYLES.map((C) => C.meta.name), {
   onDemo: () => playFile('demo/demo.wav', 'demo track'),
   onRefresh: () => refreshDevices(),
   onFullscreen: () => toggleFullscreen(),
-  onReset() { resetSettings(s); ui.refresh(); applyLook(); engine.setGainDb(s.inputGainDb); engine.setChannel(s.channel); selectPalette(''); setlist.cancelCue(); syncPool(); setlistUI.refresh(); },
+  onReset() { resetSettings(s); ui.refresh(); applyLook(); engine.setGainDb(s.inputGainDb); engine.setChannel(s.channel); selectPalette(''); setlist.cancelCue(); syncPool(); setlistUI.refresh(); showUI.refresh(); },
 });
 engine.attachPlayer(ui.player);
 engine.channel = s.channel;
@@ -137,6 +140,100 @@ const setlistUI = new SetlistUI(setlists, s, {
 });
 ui.insertSectionBefore(setlistUI.section, 'Palette');
 syncPool();   // look (palette + style) is already restored from settings; just limit the rotation
+
+// ---------------- show control + MIDI ----------------
+// Panic states (hold / freeze / blackout) deliberately don't persist across reloads.
+const show = new ShowControl();
+function showAction(id, v) {
+  switch (id) {
+    case 'hold': show.hold = !show.hold; break;
+    case 'freeze': show.freeze = !show.freeze; break;
+    case 'blackout': show.blackout = !show.blackout; break;
+    case 'flash': show.bigMoment(); break;
+    case 'tap': show.tap(); break;
+    case 'tempoLock': s.tempoLock = !s.tempoLock; break;
+    case 'holdLevel': s.holdLevel = Math.round(v * 20) / 20; break;
+    case 'nextSong': stepSong(1); break;
+    case 'prevSong': stepSong(-1); break;
+    case 'nextStyle': styles.goNext(1); break;
+    case 'prevStyle': styles.goNext(-1); break;
+    case 'nextPalette': stepPalette(1); break;
+    case 'prevPalette': stepPalette(-1); break;
+    default: return;
+  }
+  if (id === 'tempoLock' || id === 'holdLevel') { showUI.refresh(); saveSettings(s); }
+  showUI.update();
+  ui.refresh();
+}
+const showUI = new ShowUI(show, s, {
+  onPad: (id) => showAction(id),
+  onTap: () => showAction('tap'),
+  onTempo(cmd) { if (cmd === 'clear') show.tempo.clear(); else show.tempo.nudge(cmd); showUI.update(); },
+  onSetting: () => saveSettings(s),
+});
+ui.insertSectionBefore(showUI.section, 'Setlist');
+
+const midi = new Midi({
+  onAction: (id, v) => showAction(id, v),
+  onProgram(n) {
+    if (!s.midiProgram || !setlists.get(s.setlistId)) return;
+    if (!s.setlistOn) { s.setlistOn = true; setlistUI.refresh(); }
+    setlist.goTo(n);           // an explicit song pick goes now (no cue)
+    setlistUI.tick();
+    saveSettings(s);
+  },
+  onStatus: () => midiUI.update(),
+});
+const midiUI = new MidiUI(midi, s, {
+  async onEnable() { s.midiOn = await midi.enable(); saveSettings(s); },
+  onSetting: () => saveSettings(s),
+});
+ui.insertSectionBefore(midiUI.section, 'Input level & gain');
+if (s.midiOn) midi.enable();
+
+// ---------------- environment browser (live thumbnails) ----------------
+const envBrowser = new EnvBrowser(STYLES.map((C) => ({ name: C.meta?.name || C.name, hidden: !!C.meta?.hidden })), {
+  onPick: (i) => { styles.goTo(i); ui.refresh(); },
+});
+// under the Style dropdown
+[...document.querySelectorAll('#panel h2')].find((h) => h.textContent === 'Styles').nextElementSibling.after(envBrowser.el);
+let marked = '';
+function markEnvs() {   // cheap; called every frame, touches the DOM only on change
+  const key = `${styles.cur}|${styles.next}|${styles.pool}`;
+  if (key !== marked) { marked = key; envBrowser.mark(styles.cur, styles.next, styles.pool); }
+}
+ui.makeCollapsible();
+
+// One thumbnail per frame on load, then one every 0.4 s, only while the panel is
+// visible. Each is the style at idle (k = 0) with its current palette, rendered
+// through the full pipeline before the real frame (which then overwrites it).
+const THUMB_AUDIO = { level: 0, bass: 0, mid: 0, high: 0, beat: false, beatPulse: 0, beatCount: 0, bpm: 0, beatPhase: 0, bar: 0, rmsDb: -100, rmsDbSmooth: -100 };
+const thumbs = { pending: STYLES.map((_, i) => i), last: STYLES.map(() => -1), timer: 0, rr: 0, captureCur: false };
+function thumbFrame(dt, now) {
+  thumbs.captureCur = false;
+  if (!uiVisible || bench || show.freeze) return;
+  thumbs.timer -= dt;
+  let i = -1;
+  if (thumbs.pending.length) i = thumbs.pending.shift();
+  else if (thumbs.timer <= 0) { thumbs.timer = 0.4; i = thumbs.rr = (thumbs.rr + 1) % styles.count; }
+  if (i < 0) return;
+  if (i === styles.cur || i === styles.next) {
+    // the visible style: copy the real frame instead (unless it's mid-crossfade / flashing / fading)
+    if (i === styles.cur && !styles.transitioning) thumbs.captureCur = true;
+    else thumbs.pending.push(i);
+    return;
+  }
+  const st = styles.styles[i];
+  const steps = thumbs.last[i] < 0 ? 20 : Math.min(10, Math.max(1, Math.round((now - thumbs.last[i]) / 50)));
+  thumbs.last[i] = now;
+  for (let n = 0; n < steps; n++) st.update(THUMB_AUDIO, 0, 0.05);
+  const P = renderer.params, saved = [P.flash, P.fade, P.jitterBoost, P.fogScale];
+  P.flash = 0; P.fade = 0; P.jitterBoost = 0; P.fogScale = 1;
+  renderer.beginScene('A'); renderer.setPalette(st.pal); st.render(renderer);
+  renderer.composite(0); renderer.present();
+  renderer.snapshot(envBrowser.ctx(i));
+  [P.flash, P.fade, P.jitterBoost, P.fogScale] = saved;
+}
 
 // Drop anything on the window: images -> palette from art, palette files -> import, audio -> play.
 addEventListener('dragover', (e) => e.preventDefault());
@@ -250,6 +347,12 @@ addEventListener('keydown', (e) => {
   else if (k === 'pageup' || k === 'arrowleft' || k === '[') stepSong(-1);
   else if (k === 'a') s.autoSwitch = !s.autoSwitch;
   else if (k === 'c') { s.crt = !s.crt; applyLook(); }
+  else if (k === 'i') showAction('hold');
+  else if (k === 'z') showAction('freeze');
+  else if (k === 'b') showAction('blackout');
+  else if (k === 'g') showAction('flash');
+  else if (k === 't') { if (e.shiftKey) show.tempo.clear(); else if (!e.repeat) showAction('tap'); }
+  else if (k === 'l') { showAction('tempoLock'); }
   else handled = false;
   if (handled) {
     e.preventDefault();
@@ -279,18 +382,29 @@ function frame(now) {
     const cued = setlist.cued;
     setlist.update(playing);
     if (setlist.cued !== cued) setlistUI.tick();
+    ({ audio, k, playing } = show.process(audio, k, playing, dt, s));
   }
+
+  thumbFrame(dt, now);
 
   // music subtly pushes the PS1 parameters (always scaled by intensity)
   const P = renderer.params;
-  P.time = now / 1000;
-  P.jitterBoost = s.audioPushesLook ? audio.beatPulse * k * 1.2 : 0;
-  P.fogScale = s.audioPushesLook ? 1 + audio.level * k * 0.25 : 1;
+  if (!show.freeze) {
+    P.time = (P.time || 0) + dt;   // stops while frozen (vertex wobble holds too)
+    P.jitterBoost = s.audioPushesLook ? audio.beatPulse * k * 1.2 : 0;
+    P.fogScale = s.audioPushesLook ? 1 + audio.level * k * 0.25 : 1;
+  }
+  P.fade = show.fade;
+  P.flash = show.flashLevel(s);
+  P.flashColor = styles.styles[styles.target].pal.role('flash');
 
   renderer.resetStats();
-  styles.update(audio, k, playing, dt, s);
+  if (!show.freeze) styles.update(audio, k, playing, dt, s);
   styles.render();
   renderer.present();
+  if (thumbs.captureCur && !P.fade && P.flash < 0.01) renderer.snapshot(envBrowser.ctx(styles.cur));
+  markEnvs();
+  if (uiVisible) showUI.update();
   if (bench && !bench.done) { bench.record(dt, performance.now() - cpuStart); overlay.hidden = false; overlay.textContent = bench.label; }
   else if (bench && bench.done && overlay.textContent !== bench.label) overlay.textContent = bench.label;
 
@@ -301,7 +415,7 @@ function frame(now) {
       audio, fps, intensity: k, playing, state: bench && !bench.done ? bench.label : state.label, thresholdDb: s.thresholdDb,
       res: `${renderer.width}x${renderer.height}`, draws: renderer.stats.draws, tris: renderer.stats.tris,
       style: styles.name(styles.cur), transition: styles.transitioning ? styles.name(styles.next) : '',
-      autoSwitch: s.autoSwitch, idle: styles.idleTime, setlist: setlist.label,
+      autoSwitch: s.autoSwitch, idle: styles.idleTime, setlist: setlist.label, show: show.label,
       source: engine.mode === 'live' ? `live: ${engine.deviceLabel || 'default'}` : engine.mode === 'file' ? 'file playback' : 'no input',
     });
   }
@@ -309,4 +423,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for poking at things from the console
-window.viz = { s, engine, analyser, state, styles, renderer, store, selectPalette, paletteUI, setlists, setlist, setlistUI };
+window.viz = { s, engine, analyser, state, styles, renderer, store, selectPalette, paletteUI, setlists, setlist, setlistUI, show, showUI, midi, midiUI, envBrowser, showAction };

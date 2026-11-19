@@ -80,10 +80,10 @@ Plus v1's Fogway, Monoliths and Relic. More can be added any time from the same 
 
 ## Phase 4 — Show control & UI pass
 
-- [ ] **UI pass** (keep the current look, refine it): environment browser with live thumbnails, palette strip, setlist view.
-- [ ] **MIDI controller support** (Web MIDI, built into Chrome): map knobs/pads/footswitch to next environment, palette, intensity override, "blackout"/"freeze" panic buttons.
-- [ ] **Tap tempo / BPM lock** so camera moves can phrase to the song. Optional Essentia.js beat tracker if our onset detector isn't enough.
-- [ ] Manual overrides: hold intensity at a level, force "big moment" flash, strobe-safe limiter.
+- [x] **UI pass** (keep the current look, refine it): environment browser with live thumbnails, palette strip, setlist view.
+- [x] **MIDI controller support** (Web MIDI, built into Chrome): map knobs/pads/footswitch to next environment, palette, intensity override, "blackout"/"freeze" panic buttons.
+- [x] **Tap tempo / BPM lock** so camera moves can phrase to the song. Optional Essentia.js beat tracker if our onset detector isn't enough.
+- [x] Manual overrides: hold intensity at a level, force "big moment" flash, strobe-safe limiter.
 
 ## Phase 5 — Gig hardening
 

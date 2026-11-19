@@ -139,6 +139,9 @@ uniform float uMix;          // 0 = all A, 1 = all B
 uniform float uLevels;       // 2^bits - 1
 uniform float uDither;
 uniform float uSeed;
+uniform float uFlash;        // show control: "big moment" flash toward uFlashColor (0..1)
+uniform vec3 uFlashColor;
+uniform float uFade;         // show control: blackout, 0 = normal, 1 = black (dithered fade)
 out vec4 outColor;
 const float BAYER[16] = float[16](0.,8.,2.,10.,12.,4.,14.,6.,3.,11.,1.,9.,15.,7.,13.,5.);
 float bayer4(ivec2 p) { return (BAYER[(p.y & 3) * 4 + (p.x & 3)] + 0.5) / 16.0; }
@@ -151,6 +154,7 @@ void main() {
     float th = hash(vec2(p / 4)) * 0.6 + bayer4(p / 2) * 0.4;
     if (uMix > th) c = texelFetch(uB, p, 0).rgb;
   }
+  c = mix(c, uFlashColor, uFlash) * (1.0 - uFade);
   float d = mix(0.5, bayer4(p), uDither);
   c = floor(clamp(c, 0.0, 1.0) * uLevels + d) / uLevels;
   outColor = vec4(c, 1.0);
@@ -302,6 +306,9 @@ export class PS1Renderer {
       jitter: 1, affine: 1, dither: 1, colorBits: 5, crt: false,
       jitterBoost: 0,   // added by audio (beats)
       fogScale: 1,      // multiplies fog distances (audio level)
+      flash: 0,         // show control: 0..1 flash toward flashColor (composite pass)
+      flashColor: [1, 1, 1],
+      fade: 0,          // show control: 0..1 fade to black (blackout)
     };
     this.width = 0; this.height = 0;
     this.targets = {};
@@ -596,6 +603,9 @@ export class PS1Renderer {
     gl.uniform1f(u.uLevels, Math.pow(2, P.colorBits) - 1);
     gl.uniform1f(u.uDither, P.dither);
     gl.uniform1f(u.uSeed, 0);
+    gl.uniform1f(u.uFlash, P.flash);
+    gl.uniform3fv(u.uFlashColor, P.flashColor);
+    gl.uniform1f(u.uFade, P.fade);
     gl.bindVertexArray(this.emptyVao);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.activeTexture(gl.TEXTURE0);
@@ -614,7 +624,8 @@ export class PS1Renderer {
       const s = Math.min(cw / this.width, ch / this.height);
       vw = Math.round(this.width * s); vh = Math.round(this.height * s);
     }
-    gl.viewport(Math.floor((cw - vw) / 2), Math.floor((ch - vh) / 2), vw, vh);
+    this.shown = [Math.floor((cw - vw) / 2), Math.floor((ch - vh) / 2), vw, vh];
+    gl.viewport(...this.shown);
     gl.useProgram(this.present_.p);
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.targets.C.tex);
     gl.uniform1i(u.uTex, 0);
@@ -622,6 +633,16 @@ export class PS1Renderer {
     gl.uniform1f(u.uCrt, P.crt ? 1 : 0);
     gl.bindVertexArray(this.emptyVao);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+
+  /**
+   * Copy the frame just presented into a 2D canvas (thumbnails). Must be called in
+   * the same task as present(), before anything else draws to the canvas.
+   */
+  snapshot(ctx) {
+    const [x, y, w, h] = this.shown || [0, 0, this.canvas.width, this.canvas.height];
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(this.canvas, x, this.canvas.height - y - h, w, h, 0, 0, ctx.canvas.width, ctx.canvas.height);
   }
 
   resetStats() { this.stats.draws = 0; this.stats.tris = 0; }
