@@ -13,7 +13,7 @@ All work is committed on `main` (local only: **no git remote yet**, nothing push
 | 0: housekeeping (`.gitignore`, `CLAUDE.md`, `?bench`) | done |
 | 1: CLUT palettes, editor, album-art extraction, import/export, P/O keys, setlist mode | done |
 | 2: world kit (`js/kit/`), Kit Demo, environment guide | done |
-| 3: environment library | **done: 12/12 merged** (wave 1 + wave 2) |
+| 3: environment library | **done: 18 merged** (wave 1 + wave 2 + wave 3 slow songs) |
 | 4: UI pass, MIDI, tap tempo, overrides | done (2026-11-19), real MIDI hardware untested |
 | 5: gig hardening (PWA, kiosk, reconnect tests) | not started |
 
@@ -39,8 +39,14 @@ All work is committed on `main` (local only: **no git remote yet**, nothing push
 | 15 | Arcade After Hours | yes | 32 / 14–15k |
 | 16 | Aurora Field | yes | 12–17 / 8.9–11.3k |
 | 17 | Kit calm (pond): Kit v3 reference for slow songs | hidden | 25–29 / 11.8–12.4k (the reflection doubles the world) |
+| 18 | Lantern River | yes | 35–36 / 15.9–16.2k |
+| 19 | Rain Window | yes | 42–45 / 7.2–8.1k |
+| 20 | Cloud Sea | yes | 8 / 7.9–9.1k |
+| 21 | Petal Steps | yes | 14–15 / 8.6–9.1k |
+| 22 | Moonlit Shallows | yes | 23–25 / 15–15.1k |
+| 23 | Greenhouse at Dusk | yes | 28–30 / 5.9–6.3k |
 
-Number keys only reach 0–9; indices 10–16 are reachable via **N / Shift+N**, the dropdown, auto-switch, a setlist song, or the environment browser (thumbnails under Styles).
+Number keys only reach 0–9; indices 10–23 are reachable via **N / Shift+N**, the dropdown, auto-switch, a setlist song, or the environment browser (thumbnails under Styles).
 
 ### Verified vs. not verified
 
@@ -151,7 +157,9 @@ Start each with `start_session` (`initiation: user_asked`, `use_worktree: true`,
 | **Arcade After Hours** | `arcade-after-hours` / `ArcadeAfterHours` | 8111 | A 90s mall arcade at closing time (evokes the era, recreates nothing; **no real cabinets, games, brands or logos**). Rows of original cabinet shapes with glowing screens showing abstract animated indexed patterns, patterned carpet, neon ceiling tubes, a prize counter, a light-up dance-floor tile area. Dolly slowly through the aisles. **Idle:** mostly dark, attract-mode screens dimly cycling. **Swell:** cabinets power on row by row, ceiling neon flickers to life, floor tiles start chasing. **Beat:** floor tile pattern steps + screen flash + nudge; **bass:** tile brightness + subtle camera bob; **highs:** screen sparkle/flicker. | dark carpet purple, chrome/teal secondary, neon pink-yellow accent, near-black fog | `ashfall`, `glacier`, `jungle` |
 | **Aurora Field** | `aurora-field` / `AuroraField` | 8112 | Calm, beautiful snowfield at night: the between-songs favourite (original). Gentle snowy terrain, a pine-forest edge, a frozen lake, and big aurora ribbons in the sky (additive animated ribbon meshes rippling like curtains), stars. Slow, wide camera glides. **Idle:** faint aurora, gentle snowfall, very calm (must look great at k=0, since it will often be on between songs). **Swell:** aurora brightens and spreads, more ribbons, colour shifts across the accent ramp. **Beat:** soft aurora pulse (keep it gentle) + tiny nudge; **mids:** ribbon ripple speed; **highs:** star twinkle + snow sparkle. | snow white-blue base, pine green secondary, aurora green-or-magenta accent, deep night-blue fog | `bloodmoon`, `amber`, `vapor` |
 
-## Wave 3 — slow-song environments (drafted 2026-11-19, not started)
+## Wave 3 — slow-song environments (done: built in six parallel sessions, merged 2026-11-19)
+
+Smoke-tested after the merge: all 24 styles at k=0/1 with no GL or console errors, plus a crossfade chain through all six (peak during a crossfade: 107 draws / 27k tris, two styles at once). Real-fps `?bench` is still pending (open item 1). Before starting a wave, check `git branch` for existing `claude/env-*` branches: this wave was nearly launched twice because this file was stale.
 
 Same background and prompt template as wave 2, with two changes to the prompt: **read `js/styles/kit-calm.js` too and copy it instead of `kit-demo.js`**, and follow the guide's "Slow songs and ballads" section (light rises with intensity, not speed; phrase with `K.Breath`; one soft event per beat). Use the Kit v3 pieces (reflections, `opacity`, `K.tex`, `Ripples`, `Pulses`, `School`, the calm sprites and particle presets).
 
