@@ -1,4 +1,4 @@
-# Handoff — state as of 2026-11-18
+# Handoff — state as of 2026-11-19
 
 Read this first when picking the project back up. Also read `CLAUDE.md` (rules),
 `ROADMAP.md` (plan) and `docs/ENVIRONMENT-GUIDE.md` (how environments are built).
@@ -13,7 +13,7 @@ All work is committed on `main` (local only: **no git remote yet**, nothing push
 | 0: housekeeping (`.gitignore`, `CLAUDE.md`, `?bench`) | done |
 | 1: CLUT palettes, editor, album-art extraction, import/export, P/O keys | done, **except setlist mode** |
 | 2: world kit (`js/kit/`), Kit Demo, environment guide | done |
-| 3: environment library | **wave 1 merged (6/12)**, wave 2 not started |
+| 3: environment library | **done: 12/12 merged** (wave 1 + wave 2) |
 | 4: UI pass, MIDI, tap tempo, overrides | not started |
 | 5: gig hardening (PWA, kiosk, reconnect tests) | not started |
 
@@ -32,8 +32,14 @@ All work is committed on `main` (local only: **no git remote yet**, nothing push
 | 8 | Night Manor | yes | 21–25 / 14–15.5k |
 | 9 | Drowned Ruins | yes | 13–16 / 10–12.5k |
 | 10 | Route 9 | yes | 16–17 / 7–8.5k (up to 55 draws at some road points) |
+| 11 | Cold Base | yes | 23–24 / 12–14k |
+| 12 | Station Deck | yes | 15–17 / 6.6–6.8k |
+| 13 | Dream Journal | yes | 20–21 / 5.5–5.9k |
+| 14 | Graveyard Hill | yes | 14–18 / 16.2–16.8k |
+| 15 | Arcade After Hours | yes | 32 / 14–15k |
+| 16 | Aurora Field | yes | 12–17 / 8.9–11.3k |
 
-Number keys only reach 0–9; Route 9 (index 10) is reachable via **N**, the dropdown or auto-switch. Wave 2 makes this worse; see open items.
+Number keys only reach 0–9; indices 10–16 (Route 9 and all of wave 2) are reachable only via **N**, the dropdown or auto-switch. Setlist mode or an environment browser should fix this; see open items.
 
 ### Verified vs. not verified
 
@@ -47,9 +53,9 @@ Number keys only reach 0–9; Route 9 (index 10) is reachable via **N**, the dro
 
 1. Run `?bench` + Scarlett live test in real Chrome (5 minutes, unblocks confidence).
 2. ~~Kit v2 pass~~ — done, see below.
-3. **Wave 2 environments** (briefs below) — launched 2026-11-19, one session per environment.
+3. ~~Wave 2 environments~~ — done: built in six parallel sessions, merged 2026-11-19 (smoke-tested at k=0/1 + crossfades; real-fps `?bench` still pending, see item 1). Their reports list suggested kit additions (Kit v3).
 4. **Setlist mode** (ROADMAP Phase 1): song/album → palette + environment(s), advance with a key/footswitch; also the natural fix for the 0–9 number-key limit (or add an environment browser in Phase 4).
-5. Housekeeping: the six wave-1 branches `claude/env-*` and their worktrees are merged and can be deleted; the six wave-1 sessions can be archived.
+5. Housekeeping: all twelve `claude/env-*` branches (wave 1 + wave 2) and their worktrees are merged and can be deleted; the twelve environment sessions can be archived.
 6. Add a GitHub remote and push, so work is backed up off this machine.
 7. Phase 4 (UI pass with the `frontend-design` plugin, MIDI, tap tempo, manual overrides), then Phase 5.
 
@@ -112,7 +118,7 @@ Each was implemented locally inside one environment file. Starred = asked for by
 
 Every environment branch adds one file plus one line in `js/styles/index.js`, so each merge after the first conflicts only in that registry. Wave 1 was merged with a loop that runs `git merge --no-ff` per branch and, on conflict, regenerates `index.js` from the cumulative list of `file:Class` pairs (base styles first, then environments in merge order). Afterwards, smoke-test all styles with the stepping snippet above at k=0 and k=1.
 
-## Wave 2 — ready-to-send session briefs
+## Wave 2 — session briefs (used 2026-11-19; reuse the template for future waves)
 
 Start each with `start_session` (`initiation: user_asked`, `use_worktree: true`, fresh context), one per environment, cut from `main`. Use this **background** for all six:
 
