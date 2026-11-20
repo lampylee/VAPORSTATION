@@ -1,6 +1,6 @@
 # Radiohead setlist environments — design
 
-Date: 2026-11-20 · Status: awaiting approval (builder check done)
+Date: 2026-11-20 · Status: approved; album palettes added and signed off 2026-11-20, waves not started
 
 ## Intent
 
@@ -45,8 +45,8 @@ Keys are `[base, secondary, accent, atmosphere/fog]` for `fromKeys`. These are f
 | id | Name | Keys | Mood |
 |---|---|---|---|
 | `bends` | The Bends | `#c8b49a`, `#6aa8c8`, `#f0f4f8`, `#1c3448` | bleached skin tones, clinical pale blue, white, washed blue haze |
-| `okc` | OK Computer | `#b8bcc0`, `#5a8aa0`, `#e8603a`, `#1a2430` | cold off-white and grey, motorway blue, small red-orange warning accent, milky fog |
-| `kida` | Kid A | `#dce8f0`, `#4a6a8a`, `#e04a2a`, `#101418` | glacier white, ice blue, scorched red-orange, black |
+| `okc` | OK Computer | `#b8bcc0`, `#58a8c0`, `#d8e070`, `#1a2430` | cold off-white and grey, motorway cyan, sickly pale yellow-green glow (ties to No Surprises' green fog), cold fog |
+| `kida` | Kid A | `#dce8f0`, `#4a6a8a`, `#f05a1e`, `#141a22` | glacier white, ice blue, scorched red-orange, black |
 | `amnesiac` | Amnesiac | `#7a2a2a`, `#d8c8a0`, `#e04040`, `#24140e` | maroon and oxblood, aged cream paper, red, sepia-black |
 | `inrainbows` | In Rainbows | `#a83a2a`, `#3a8a4a`, `#f0b020`, `#08080a` | paint-drip red, green and ochre on near-black |
 | `amsp` | A Moon Shaped Pool | `#9a9a98`, `#d8a0a8`, `#e8eef4`, `#16181c` | smeared greys, muted pink, blue-white, black |
