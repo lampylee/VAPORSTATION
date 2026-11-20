@@ -42,4 +42,6 @@ import { PaperCrowd } from './paper-crowd.js';
 
 import { Newsprint } from './newsprint.js';
 
-export const STYLES = [TestScene, Fogway, Monoliths, Relic, KitDemo, AshfallTown, LostValley, NeonCircuit, NightManor, DrownedRuins, RouteNine, ColdBase, StationDeck, DreamJournal, GraveyardHill, ArcadeAfterHours, AuroraField, KitCalm, LanternRiver, RainWindow, CloudSea, PetalSteps, MoonlitShallows, GreenhouseDusk, QuietHouse, MothLamp, UnderTheHull, StillPool, Underriver, BeforeDawn, SaltFlat, SearchlightTown, BackRoadLights, PaperCrowd, Newsprint];
+import { RightPlace } from './right-place.js';
+
+export const STYLES = [TestScene, Fogway, Monoliths, Relic, KitDemo, AshfallTown, LostValley, NeonCircuit, NightManor, DrownedRuins, RouteNine, ColdBase, StationDeck, DreamJournal, GraveyardHill, ArcadeAfterHours, AuroraField, KitCalm, LanternRiver, RainWindow, CloudSea, PetalSteps, MoonlitShallows, GreenhouseDusk, QuietHouse, MothLamp, UnderTheHull, StillPool, Underriver, BeforeDawn, SaltFlat, SearchlightTown, BackRoadLights, PaperCrowd, Newsprint, RightPlace];
