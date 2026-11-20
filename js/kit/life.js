@@ -67,10 +67,13 @@ export class School {
   /**
    * centre(g, t, out): writes group g's centre at time t into out (call it
    * with any t; it's used for headings too). amount 0..1 = share of members shown.
-   * flap: wingbeat speed for birds (0 = glide).
+   * flap: wingbeat speed for birds (0 = glide). Safe to change every frame: the wing
+   * phase integrates, and gliding blends in below flap 1.
    */
   update(dt, centre, { amount = 1, speed = 1, flap = 1 } = {}) {
     this.t += dt * speed;
+    this.fp = (this.fp || 0) + dt * speed * Math.max(0, flap);   // wing phase: integrates, so changing flap never jumps
+    const glide = 1 - Math.max(0, Math.min(1, flap));
     this.amount += (amount - this.amount) * Math.min(1, dt * 1.5);   // eased, so a jump in amount still grows in
     const N = this.groups * this.per, f = this.inst, T = this.t, bird = this.kind === 'bird';
     const pos = (g, j, t, out) => {
@@ -93,7 +96,7 @@ export class School {
         if (grow <= 0.001) continue;
         const p0 = pos(g, j, T, this._a), p1 = pos(g, j, T + 0.05, this._b);
         const rot = Math.atan2(-(p1[2] - p0[2]), p1[0] - p0[0]);
-        const hs = bird ? Math.sin(T * flap * (5 + r2 * 2) + r3 * TAU) * (flap > 0 ? 1 : 0.15) + (flap > 0 ? 0 : 0.6) : 1;
+        const hs = bird ? Math.sin(this.fp * (5 + r2 * 2) + r3 * TAU) * (1 - glide * 0.85) + glide * 0.6 : 1;
         f.set(n++, p0[0], p0[1], p0[2], this.size * grow * (0.8 + r2 * 0.4), rot, 0.8 + r3 * 0.4, 0, hs);
       }
     }

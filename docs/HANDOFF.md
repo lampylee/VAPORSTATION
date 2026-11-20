@@ -82,6 +82,14 @@ Also promoted: `K.Pendulum` (soft limit), `K.fadeOut/fadeIn`, pixel helpers (`ma
 Ashfall Town now uses `r.updateTexture`; the other wave-1 styles keep their local copies (working code, not worth the churn).
 **Kit v3 (2026-11-19)** promoted the rest into `js/kit/`: `K.tex` (moss stone, cliff rock, jungle floor, waterfall, caustic frames, plus new water, lily pad, sand, paper, boards, cloud layer), `fx.js` (`Caustics`, `Streaks`, `Pulses`, `Ripples`), `life.js` (`School`: fish and birds), `boxAtlas`, `Breath`. It also adds slow-song sprites (willow, blossom tree, reeds, lantern, petal, leaf, mist bank, twinkle) and particle presets (petals, leaves, pollen, mist, drizzle, skyLanterns, starTwinkle; per-particle spin). Pipeline: draw `opacity` (screen-door transparency) and planar reflections (`setMirror`, `setClipBelow`, `clearDepth`). Reference scene: `js/styles/kit-calm.js` (hidden, index 17). The wave-1/2 environments keep their local copies (working code, not migrated).
 
+**Kit v4 (2026-11-20, from the wave 4b reports, landed before merging wave 4b)**, all in `docs/ENVIRONMENT-GUIDE.md` and exercised by `js/styles/kit-demo.js` (gabled house, two searchlights turning round once per bar, a sky band, snow gusts):
+- Pipeline (default off, existing styles unchanged): draw options `twoSided` (light the face towards the camera) and `wave: [amp, freq, speed]` (shared GPU world-space wave; `K.waveAt` is the CPU copy), and `r.setJitterBoost(extra)` (per-style snap wobble, reset by `beginScene`).
+- `js/kit/lights.js`: `K.Searchlights` (cone + pool + lens glow, dims near the lens, `boostAt`), `coneGeo`, `poolSprite`.
+- `swell.js`: `K.BarClock` (bar steps with the beatCount fallback and a backup timer), `K.Stager` (ordered rows that keep their order on jumps), `K.Follow3` (springy 3D follower).
+- Geometry: `K.centredQuad`, `worldFace`, `worldBox`, `terrainDecal`, `skyBand`, `K.props.gableHouse`. Textures: `K.tex.cracks`, `K.tileBlob` (seamless `blobNoise`).
+- `K.Wobble` (CPU vertex wobble), `Particles` `texture` override + `gust()`, `Ripples` `{additive: false}` solid mode + per-ring `amp`. Fix: `School` wings no longer jump when `flap` changes (phase integrates; Kit calm now eases its flap).
+- Not promoted (scene-specific): Right Place's slot shuffler, Paper Crowd's glide-past rig and silhouette buckets, Salt Flat's horizon strip, Newsprint's bending stacks and full `PageStorm` (gust + texture cover most of it). The wave 4b environments keep their local copies (working code), as earlier waves did.
+
 ### Original backlog (for reference)
 
 Each was implemented locally inside one environment file. Starred = asked for by 2+ sessions or clearly reusable.

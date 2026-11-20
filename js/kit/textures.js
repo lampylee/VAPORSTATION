@@ -5,7 +5,7 @@
 //   this.stone = r.texture(K.tex.mossStone({ seed: 2 }));
 //   this.water = r.texture(K.tex.water());
 import { R } from '../palette/palette.js';
-import { CLEAR, bayer, rnd, blobNoise as blobN, makeIndexed as make, dshade } from './pixel.js';
+import { CLEAR, bayer, rnd, blobNoise as blobN, tileBlob, makeIndexed as make, dshade } from './pixel.js';
 
 const TAU = Math.PI * 2;
 /** Per-pixel shade jitter of ±amt around a base index (stays in its ramp). */
@@ -146,5 +146,32 @@ export function cloudLayer({ ramp = 3, seed = 8 } = {}) {
     const v = blobN(x, y, 16, seed) * 0.65 + blobN(x, y, 7, seed + 1) * 0.35;
     if (v < 0.42) return CLEAR;
     return dshade(ramp, 1.2 + (v - 0.42) * 4.5, x, y);
+  });
+}
+
+// ---------------------------------------------------------------- Kit v4 (wave 4b)
+
+/**
+ * Cracked cells (salt crust, dried mud, hex tiles, crazed glaze): an offset lattice of
+ * jittered points, so the cells come out roughly hexagonal, with dark cracks and a
+ * raised rim lit on one side. Tileable. cells = cells per side (4 → 16 px cells);
+ * jitter in px; rim = rim highlight index (null = no rim); patches = flat blotch index (null = none).
+ */
+export function cracks({ ramp = 0, cells = 4, jitter = 5, seed = 3, crack = R(ramp, 1), fill = R(ramp, 3), rim = R(ramp, 2), patches = R(ramp, 2), patchAmount = 0.34 } = {}) {
+  const N = cells, S = 64 / N, pts = [];
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+    pts.push([i * S + (j & 1) * S / 2 + (rnd(i, j, seed) - 0.5) * jitter, j * S + (rnd(i, j, seed + 2) - 0.5) * jitter]);
+  }
+  return make(64, 64, (x, y) => {
+    let d1 = 1e9, d2 = 1e9, nx = 0, ny = 0;
+    for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) for (const p of pts) {
+      const px = p[0] + ox * 64, py = p[1] + oy * 64, d = Math.hypot(x - px, y - py);
+      if (d < d1) { d2 = d1; d1 = d; nx = x - px; ny = y - py; } else if (d < d2) d2 = d;
+    }
+    const e = d2 - d1;                                    // ~distance to the cell edge
+    if (e < 0.7) return crack;
+    if (rim != null && e < 1.8) return nx + ny > 0 ? crack : rim;
+    // cell interior: flat patches, no fine dither (it shimmers into noise at a distance)
+    return patches != null && tileBlob(x, y, 8, seed + 1) > 1 - patchAmount ? patches : fill;
   });
 }

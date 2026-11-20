@@ -125,3 +125,88 @@ export class Breath {
     return this.v;
   }
 }
+
+// ---- Kit v4 (wave 4b) ------------------------------------------------------
+
+/**
+ * Fires once per bar. With tap tempo (audio.bpm > 0) it fires when audio.bar
+ * wraps (3 → 0, or 3 → 1 after a frame hitch); without one, on every
+ * `beatsPerBar`-th beatCount. Never faster than `minGap` s. With `backup` = [min, max]
+ * seconds it also fires on a slow timer when no beats arrive (quiet passages).
+ *
+ *   this.bar = new K.BarClock({ backup: [6, 15] });
+ *   update: if (this.bar.update(audio, dt)) this.rearrange();
+ */
+export class BarClock {
+  constructor({ beatsPerBar = 4, minGap = 0.6, backup = null } = {}) {
+    this.per = beatsPerBar; this.minGap = minGap; this.backup = backup;
+    this.lastBar = -1; this.lastBC = -1; this.since = 0; this.count = 0;
+    this._wait = backup ? backup[0] + Math.random() * (backup[1] - backup[0]) : Infinity;
+  }
+  update(audio, dt) {
+    this.since += dt;
+    let fire = false;
+    const bpm = audio?.bpm || 0, bar = Number.isFinite(audio?.bar) ? audio.bar | 0 : -1, bc = Number.isFinite(audio?.beatCount) ? audio.beatCount | 0 : 0;
+    if (bpm > 0 && bar >= 0) {
+      if (this.lastBar >= 0 && bar < this.lastBar) fire = true;
+      this.lastBar = bar; this.lastBC = bc;              // keep the fallback in sync for when the tempo is cleared
+    } else {
+      this.lastBar = -1;
+      if (this.lastBC < 0 || bc < this.lastBC) this.lastBC = bc;   // first frame, or the counter was reset
+      else if (bc - this.lastBC >= this.per) { fire = true; this.lastBC = bc; }
+    }
+    if (!fire && this.since > this._wait) fire = true;
+    if (fire && this.since < this.minGap) fire = false;
+    if (fire) {
+      this.since = 0; this.count++;
+      if (this.backup) this._wait = this.backup[0] + Math.random() * (this.backup[1] - this.backup[0]);
+    }
+    return fire;
+  }
+}
+
+/**
+ * Staged swell for n ordered groups (rows front to back, lamps up a path, …) that keeps
+ * its order even when intensity jumps: group i targets stage(k, from_i, to_i) and eases
+ * toward it, later groups more slowly. Read .v[i] (0..1).
+ *
+ *   this.rows = new K.Stager(ROWS, { from: [0.04, 0.62], to: [0.26, 0.86] });
+ *   update: this.rows.update(k, dt);  then rise = this.rows.v[row]
+ */
+export class Stager {
+  constructor(n, { from = [0.05, 0.6], to = [0.25, 0.85], rise = [0.6, 2.2], fall = 1.2 } = {}) {
+    this.n = n; this.from = from; this.to = to; this.rise = rise; this.fall = fall;
+    this.v = new Float32Array(n);
+  }
+  update(k, dt) {
+    for (let i = 0; i < this.n; i++) {
+      const f = this.n > 1 ? i / (this.n - 1) : 0;
+      const tgt = stage(k, lerp(this.from[0], this.from[1], f), lerp(this.to[0], this.to[1], f));
+      const tau = tgt > this.v[i] ? lerp(this.rise[0], this.rise[1], f) : this.fall;
+      this.v[i] += (tgt - this.v[i]) * (1 - Math.exp(-dt / Math.max(1e-3, tau)));
+    }
+    return this.v;
+  }
+}
+
+/**
+ * Spring-damped 3D follower: glides toward a moving target with a little overshoot
+ * (formations, flocks, a light that drifts to a new spot). Never jumps.
+ *   this.f = new K.Follow3([x, y, z], { freq: 0.8, damping: 0.8 });
+ *   update: const p = this.f.update(target, dt);
+ */
+export class Follow3 {
+  constructor(start = [0, 0, 0], { freq = 1, damping = 0.85 } = {}) {
+    this.p = [...start]; this.v = [0, 0, 0]; this.w = freq * Math.PI * 2; this.z = damping;
+  }
+  /** Jump straight to a point (only for setup, never during a show). */
+  snap(p) { this.p[0] = p[0]; this.p[1] = p[1]; this.p[2] = p[2]; this.v[0] = this.v[1] = this.v[2] = 0; }
+  update(target, dt) {
+    const w = this.w, h = Math.min(dt, 0.05);
+    for (let i = 0; i < 3; i++) {
+      this.v[i] += ((target[i] - this.p[i]) * w * w - 2 * this.z * w * this.v[i]) * h;
+      this.p[i] += this.v[i] * h;
+    }
+    return this.p;
+  }
+}

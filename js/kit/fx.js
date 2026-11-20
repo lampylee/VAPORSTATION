@@ -3,9 +3,11 @@
 //   K.Caustics  animated caustic light network, drawn additively over any mesh
 //   K.Streaks   direction-aligned streak lines that stream past the camera (speed / wind lines)
 //   K.Pulses    pulses that travel along a 1D path (light strips, ribbons, corridors)
-//   K.Ripples   expanding rings on still water (beats, drips, fish rising)
+//   K.Ripples   expanding rings on still water (beats, drips, fish rising); solid mode for bright ground
+//   K.Wobble    per-frame CPU vertex wobble of a static mesh (heat shimmer, underwater wobble, melt)
 import { R } from '../palette/palette.js';
 import { GeoBuilder } from '../gfx/geometry.js';
+import { mat4 } from '../gfx/math.js';
 import { caustics } from './textures.js';
 import { CLEAR, bayer, makeIndexed as make } from './pixel.js';
 import { decal } from './shapes.js';
@@ -89,6 +91,13 @@ export class Streaks {
 
   draw(r, { brightness = 1 } = {}) {
     this.tint[0] = this.tint[1] = this.tint[2] = brightness;
+    if (!this.additive) {
+      for (const p of this.list) {
+        if (p.f < 0.02) continue;
+        r.draw(this.mesh, mat4.trs(this.m, p.x, p.y, p.z, 0, 0, 0, p.s), { texture: this.tex, unlit: true, tint: this.tint, opacity: p.f });
+      }
+      return;
+    }
     r.drawInstanced(this.mesh, this.inst, { texture: this.tex, unlit: true, additive: true, tint: this.tint });
   }
   dispose(r) { this.mesh.dispose(); r.deleteTexture(this.tex); this.inst.dispose(); }
@@ -150,18 +159,23 @@ export function ringSprite({ index = R(3, 3) } = {}) {
  *   on a beat:  this.ripples.spawn(x, waterY, z, 2.5)
  *   update:     this.ripples.update(dt)
  *   render:     this.ripples.draw(r, { brightness: lerp(0.3, 0.8, k) })
+ *
+ * additive: false = solid rings that fade by screen-door opacity instead of brightness
+ * (dust on a white salt flat, ink on paper: additive rings vanish on bright ground).
+ * Solid mode draws one call per live ring, so keep max small (6-8).
  */
 export class Ripples {
-  constructor(r, { max = 32, color = R(3, 3), life = 3.5, grow = 1 } = {}) {
-    this.mesh = r.createMesh(decal(1, 1, 0.03));
+  constructor(r, { max = 32, color = R(3, 3), life = 3.5, grow = 1, additive = true, lift = 0.03 } = {}) {
+    this.additive = additive; this.m = mat4.create();
+    this.mesh = r.createMesh(decal(1, 1, lift));
     this.tex = r.texture(ringSprite({ index: color }));
     this.inst = r.createInstances(max);
     this.life = life; this.grow = grow; this.max = max; this.tint = [1, 1, 1];
     this.list = [];
   }
-  /** size = final diameter in world units. */
-  spawn(x, y, z, size = 3) {
-    this.list.push({ x, y, z, size, t: 0 });
+  /** size = final diameter in world units; amp = this ring's strength 0..1 (opacity in solid mode). */
+  spawn(x, y, z, size = 3, amp = 1) {
+    this.list.push({ x, y, z, size, amp, t: 0 });
     if (this.list.length > this.max) this.list.shift();
   }
   update(dt) {
@@ -169,7 +183,8 @@ export class Ripples {
     this.list = this.list.filter((p) => (p.t += dt) < this.life);
     for (const p of this.list) {
       const a = p.t / this.life, e = 1 - (1 - a) * (1 - a);                  // ease-out growth
-      this.inst.set(n++, p.x, p.y, p.z, p.size * (0.15 + 0.85 * e) * this.grow, 0, (1 - a) * (1 - a), 0, 1);
+      p.s = p.size * (0.15 + 0.85 * e) * this.grow; p.f = (1 - a) * (1 - a) * p.amp;
+      this.inst.set(n++, p.x, p.y, p.z, p.s, 0, p.f, 0, 1);
     }
     this.inst.upload(n);
   }
@@ -181,3 +196,37 @@ export class Ripples {
   dispose(r) { this.mesh.dispose(); r.deleteTexture(this.tex); this.inst.dispose(); }
 }
 
+
+
+// ---------------------------------------------------------------- wobble (Kit v4)
+
+/**
+ * A static mesh whose vertices are displaced on the CPU each frame from their rest
+ * positions: heat shimmer on distant mesas, wobbling underwater rocks, a melting skyline.
+ * For a whole-scene wave that ground and props share, use the draw option wave instead.
+ *
+ *   this.mesas = new K.Wobble(r, mesaGeo());
+ *   update: this.mesas.update((x, y, z, out) => { out[0] = x + Math.sin(t * 2 + y) * amp; out[1] = y; out[2] = z; });
+ *   render: r.draw(this.mesas.mesh, M, { texture })
+ * Skips the upload while fn leaves every vertex at rest (call rest() once amp reaches 0).
+ */
+export class Wobble {
+  constructor(r, geo) {
+    this.geo = geo; this.base = geo.positions.slice(); this.mesh = r.createMesh(geo, true);
+    this.atRest = true; this._o = [0, 0, 0];
+  }
+  update(fn) {
+    const B = this.base, P = this.geo.positions, o = this._o;
+    for (let i = 0; i < B.length; i += 3) {
+      fn(B[i], B[i + 1], B[i + 2], o, i / 3);
+      P[i] = o[0]; P[i + 1] = o[1]; P[i + 2] = o[2];
+    }
+    this.mesh.update({ positions: P }); this.atRest = false;
+  }
+  /** Put every vertex back (one upload) and stop updating until the next update(). */
+  rest() {
+    if (this.atRest) return;
+    this.geo.positions.set(this.base); this.mesh.update({ positions: this.geo.positions }); this.atRest = true;
+  }
+  dispose() { this.mesh.dispose(); }
+}

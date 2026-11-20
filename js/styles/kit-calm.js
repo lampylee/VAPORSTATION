@@ -135,7 +135,7 @@ export class KitCalm {
     // birds glide a wide loop well beyond the camera's orbit (never right past the lens);
     // they flap only when the song is up
     this.birds.update(dt, (g, tt, out) => { const ang = tt * 0.04; out[0] = Math.cos(ang) * 75; out[1] = 20 + Math.sin(tt * 0.3) * 3; out[2] = Math.sin(ang) * 75; },
-      { amount: K.stage(k, 0.3, 0.8), speed: 1, flap: k > 0.5 ? 0.6 : 0 });
+      { amount: K.stage(k, 0.3, 0.8), speed: 1, flap: K.stage(k, 0.4, 0.6) * 0.6 });   // flap can change every frame (Kit v4)
 
     const eye = this.cam.eye;
     this.petals.update(dt, eye, { amount: K.stage(k, 0.2, 0.7) * 0.8, speed: 0.6 + d.mid * 0.5, wind: [0.3, 0.1] });

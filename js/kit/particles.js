@@ -4,6 +4,9 @@
 //   this.snow = new Particles(r, 'snow');
 //   update: this.snow.update(dt, eye, { amount: swell(k, 0.3, 1), speed: 1 + bass * k });
 //   render: this.snow.draw(r, { brightness });
+//
+// Kit v4: overrides.texture = your own indexed generator (pages, confetti, feathers),
+// and gust(strength) = a wind burst that whips the field and eases off (beats, bass hits).
 import { R } from '../palette/palette.js';
 import { GeoBuilder } from '../gfx/geometry.js';
 import { dot, streak, glow, petal, leaf, twinkle, mistBank } from './sprites.js';
@@ -41,7 +44,7 @@ export class Particles {
     this.p = p;
     this.mesh = r.createMesh(quad());
     const name = p.sprite || 'dot', sprite = SPRITES[name];
-    this.tex = r.texture(RAMP_SPRITES.has(name) ? sprite({ ramp: p.color >> 2 }) : sprite({ index: p.color }));
+    this.tex = r.texture(p.texture ? (typeof p.texture === 'function' ? p.texture() : p.texture) : RAMP_SPRITES.has(name) ? sprite({ ramp: p.color >> 2 }) : sprite({ index: p.color }));
     this.inst = r.createInstances(p.count);
     const n = p.count, [ax, ay, az] = p.area;
     this.pos = new Float32Array(n * 3);
@@ -55,6 +58,16 @@ export class Particles {
     this.time = 0;
     this.visible = n;
     this.tint = [1, 1, 1];
+    this.g = 0; this.gDir = [1, 0];
+  }
+
+  /**
+   * Wind burst: speeds the field up by about 1 + strength and pushes it along dir [x, z],
+   * easing off over `decay` s. Scale strength by audio.accent so Gentle stays gentle.
+   */
+  gust(strength = 1, dir = null, decay = 0.9) {
+    this.g = Math.min(4, this.g + strength); this.gDecay = decay;
+    if (dir) { const l = Math.hypot(dir[0], dir[1]) || 1; this.gDir[0] = dir[0] / l; this.gDir[1] = dir[1] / l; }
   }
 
   /**
@@ -65,13 +78,16 @@ export class Particles {
     const p = this.p, n = p.count, [ax, ay, az] = p.area, P = this.pos, V = this.vj;
     this.time += dt;
     const t = this.time, wob = p.wobble || 0;
+    this.g *= Math.exp(-dt / (this.gDecay || 0.9));
+    const g = this.g, gs = speed * (1 + g), gw = g * 2.5;
+    wind = [wind[0] + this.gDir[0] * gw, wind[1] + this.gDir[1] * gw];
     this.visible = Math.round(n * Math.max(0, Math.min(1, amount)));
     const cy = center[1] + (p.yOffset || 0);
     for (let i = 0; i < n; i++) {
       const o = i * 3, ph = this.phase[i];
-      P[o] += ((p.vel[0] + V[o] + wind[0]) * speed + Math.sin(t * 0.9 + ph) * wob) * dt;
-      P[o + 1] += (p.vel[1] + V[o + 1]) * speed * dt;
-      P[o + 2] += ((p.vel[2] + V[o + 2] + wind[1]) * speed + Math.cos(t * 0.7 + ph) * wob) * dt;
+      P[o] += ((p.vel[0] + V[o] + wind[0]) * gs + Math.sin(t * 0.9 + ph) * wob) * dt;
+      P[o + 1] += (p.vel[1] + V[o + 1]) * gs * dt;
+      P[o + 2] += ((p.vel[2] + V[o + 2] + wind[1]) * gs + Math.cos(t * 0.7 + ph) * wob) * dt;
       // wrap into the box around the camera
       const wx = ((P[o] - center[0] + ax / 2) % ax + ax) % ax - ax / 2;
       const wy = ((P[o + 1] - cy + ay / 2) % ay + ay) % ay - ay / 2;

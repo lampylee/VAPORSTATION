@@ -238,3 +238,56 @@ export function boxAtlas(w = 1, h = 1, d = 1, { top = [0, 0, 1, 1], side = top, 
   g.face([0, 0, -z], [-x, 0, 0], [0, y, 0], back);
   return g.build();
 }
+
+// ---- Kit v4 (wave 4b) ------------------------------------------------------
+
+/**
+ * Face whose texture repeats every `tile` world units (walls, floors, roads), so
+ * big and small faces show the same texel size. Same args as GeoBuilder.face.
+ */
+export function worldFace(g, c, u, v, tile = 2, segs = 1) {
+  const lu = Math.hypot(u[0], u[1], u[2]) * 2 / tile, lv = Math.hypot(v[0], v[1], v[2]) * 2 / tile;
+  return g.face(c, u, v, [0, 0, lu, lv], segs);
+}
+
+/** Box with world-scaled UVs (one repeat per `tile` units on every face). Pivot at the centre. */
+export function worldBox(w = 1, h = 1, d = 1, tile = 1) {
+  const s = 1 / tile;
+  return boxAtlas(w, h, d, { top: [0, 0, w * s, d * s], side: [0, 0, d * s, h * s], front: [0, 0, w * s, h * s], back: [0, 0, w * s, h * s], bottom: [0, 0, w * s, d * s] });
+}
+
+/**
+ * Decal that follows the ground: a segs x segs grid over [cx ± rad, cz ± rad] lifted
+ * `lift` above height(x, z). Light pools and shadows on hilly terrain (a flat decal
+ * cuts into slopes). Build it once for static spots; rebuild or move it in steps for moving ones.
+ */
+export function terrainDecal(cx, cz, rad, height, { segs = 4, lift = 0.12 } = {}) {
+  const g = new GeoBuilder(), n = segs, P = (i, j) => {
+    const x = cx + (i / n * 2 - 1) * rad, z = cz + (j / n * 2 - 1) * rad;
+    return [x, height(x, z) + lift, z];
+  };
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+    g.quad(P(i, j + 1), P(i + 1, j + 1), P(i + 1, j), P(i, j), [i / n, (j + 1) / n], [(i + 1) / n, (j + 1) / n], [(i + 1) / n, j / n], [i / n, j / n], [0, 1, 0]);
+  }
+  return g.build();
+}
+
+/**
+ * Sky band: a ring around the eye between elevations e0 and e1 (radians), three rows
+ * whose vertex colour fades both edges to black, so an additive band has no hard rims.
+ * Draw it centred on the eye, additive, fog: false; scroll with uvOffset: [t * speed, 0].
+ * Used for burning skies (Before Dawn), red streaks (Right Place), aurora-ish haze.
+ */
+export function skyBand(e0, e1, { radius = 85, segs = 24, uRepeat = 3 } = {}) {
+  const TAU = Math.PI * 2, g = new GeoBuilder(), em = (e0 + e1) / 2;
+  const P = (i, e) => { const a = (i / segs) * TAU; return [Math.cos(a) * Math.cos(e) * radius, Math.sin(e) * radius, Math.sin(a) * Math.cos(e) * radius]; };
+  const rows = [[e0, 0, 0], [em, 0.5, 1], [e1, 1, 0]];
+  for (let j = 0; j < 2; j++) for (let i = 0; i < segs; i++) {
+    const [ea, va, ca] = rows[j], [eb, vb, cb] = rows[j + 1];
+    const u0 = (i / segs) * uRepeat, u1 = ((i + 1) / segs) * uRepeat, n = [0, -1, 0];
+    const A = [ca, ca, ca], B = [cb, cb, cb];
+    g.tri(P(i, ea), P(i + 1, ea), P(i + 1, eb), [u0, 1 - va], [u1, 1 - va], [u1, 1 - vb], n, [A, A, B]);
+    g.tri(P(i, ea), P(i + 1, eb), P(i, eb), [u0, 1 - va], [u1, 1 - vb], [u0, 1 - vb], n, [A, B, B]);
+  }
+  return g.build();
+}

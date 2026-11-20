@@ -13,6 +13,11 @@
 //           lamp glows shine through fog without popping          draw { fog: false, fade }
 //           neon sign whose letters switch on one by one          K.NeonText
 //           custom moon disc, scatter with distance fade          Sky { moonTexture }, K.scatter, K.fadeOut
+//   Kit v4: gabled house with world-scaled UVs, cracked roof      K.props.gableHouse, K.tex.cracks
+//           two searchlights sweep the ground, wake with the swell K.Searchlights, K.Follow3
+//           the sweep turns round once per bar                    K.BarClock
+//           a red streak band in the sky at full intensity        K.skyBand + K.tileBlob, uvOffset scroll
+//           beats gust the snow                                   Particles.gust
 //
 // Intensity: idle = dim dusk, slow drift, snow. Playing = lamps on, faster
 // flight, trees sway with bass, fireflies, moon pulses on beats.
@@ -95,6 +100,22 @@ export class KitDemo {
     }
     this.fenceInst.upload(n);
 
+    // ---- Kit v4: a gabled house behind the sign, two searchlights, a sky band
+    const hx = sx - (tz / tl) * 7, hz = sz + (tx / tl) * 7, house = K.props.gableHouse(6, 5, 3, 2.2);
+    this.wallMesh = r.createMesh(house.walls); this.roofMesh = r.createMesh(house.roof);
+    this.houseM = mat4.trs(mat4.create(), hx, height(hx, hz) - 0.3, hz, 0, this.signPos[3], 0);
+    this.wallTex = r.texture(K.props.planks({ ramp: 0 }));
+    this.roofTex = r.texture(K.tex.cracks({ ramp: 3, cells: 4, patches: null }));
+    this.towers = [[hx + 9, hz - 6], [hx - 10, hz + 7]].map(([x, z]) => [x, height(x, z) + 10, z]);
+    this.mastMesh = r.createMesh(merge(this.towers.map(([x, y, z]) => ({ geo: K.props.shift(K.props.prism(4, 0.35, 10.2, { taper: 0.4 }), x, y - 10.1, z) }))));
+    this.search = new K.Searchlights(r, { max: 2 });
+    this.aims = this.towers.map((t) => new K.Follow3([t[0], t[1] - 10, t[2]], { freq: 0.5, damping: 0.9 }));
+    this.bar = new K.BarClock({ backup: [8, 14] });
+    this.sweep = 0; this.sweepDir = 1; this.aimT = [0, 0, 0];
+    this.bandMesh = r.createMesh(K.skyBand(0.04, 0.32, { uRepeat: 4 }));
+    this.bandTex = r.texture(K.makeIndexed(64, 32, (x, y) => (K.tileBlob(x, y * 2, 16, 5) * (1 - Math.abs(y - 16) / 16) > 0.32 + K.bayer(x, y) * 0.2 ? R(2, 2) : K.CLEAR)));
+    this.height = height;
+
     // ---- weather
     this.snow = new K.Particles(r, 'snow');
     this.flies = new K.Particles(r, 'fireflies');
@@ -102,7 +123,7 @@ export class KitDemo {
     this.moonPulse = new K.Envelope(0.25);
     this.m = mat4.create();
     this.time = 0; this.k = 0; this.a = null;
-    this.col = { fog: [0, 0, 0], tint: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], glow: [0, 0, 0] };
+    this.col = { fog: [0, 0, 0], tint: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], glow: [0, 0, 0], band: [0, 0, 0] };
   }
 
   update(a, k, dt) {
@@ -121,6 +142,17 @@ export class KitDemo {
     const n = this.sign.n;
     this.sign.setAll((i) => K.stage(k, 0.1 + (i / n) * 0.5, 0.18 + (i / n) * 0.5) * (0.85 + 0.15 * Math.sin(this.time * 17 + i * 3) * d.high + d.pulse * 0.5));
     const eye = this.cam.eye;
+    // searchlights: each bar the sweep turns round; Follow3 glides the aim, so the turn never snaps
+    if (this.bar.update(a, dt)) this.sweepDir = -this.sweepDir;
+    this.sweep += dt * (0.12 + 0.25 * k) * this.sweepDir;
+    this.towers.forEach((t, i) => {
+      const ang = this.sweep * (i ? 1.3 : 1) + i * 2.1, T = this.aimT;
+      T[0] = t[0] + Math.cos(ang) * 14; T[2] = t[2] + Math.sin(ang) * 14; T[1] = this.height(T[0], T[2]);
+      const wake = K.stage(k, 0.2 + i * 0.2, 0.4 + i * 0.2);
+      this.search.set(i, t, this.aims[i].update(T, dt), { width: 5, brightness: wake * (0.65 + this.moonPulse.v * 0.35) });
+    });
+    this.search.upload(eye);
+    if (d.beat) this.snow.gust(0.8 * d.accent);
     this.snow.update(dt, eye, { amount: K.swell(k, 0.7, 0.15), speed: 1 + d.level });
     this.flies.update(dt, [eye[0], this.ground.heightAt(eye[0], eye[2]) + 2, eye[2]], { amount: k, speed: 1 + d.high * 2 });
     this._scatter();
@@ -159,11 +191,18 @@ export class KitDemo {
     r.setLight([-0.4, -0.7, 0.5], scaleColor(col.light, P.role('light'), lerp(0.45, 0.85, k)), scaleColor(col.amb, P.role('ambient'), 0.45));
     col.tint[0] = col.tint[1] = col.tint[2] = dim;
 
+    // sky band behind everything: centred on the eye, additive, scrolling, only near full intensity
+    scaleColor(col.band, P.role('glow'), K.stage(k, 0.6, 1) * 0.7);
+    if (col.band[0] + col.band[1] + col.band[2] > 0.01) r.draw(this.bandMesh, mat4.trs(this.m, eye[0], eye[1], eye[2]), { texture: this.bandTex, unlit: true, fog: false, additive: true, depthWrite: false, tint: col.band, uvOffset: [this.time * 0.01, 0] });
+
     this.ground.draw(r, { texture: this.groundTex, texture2: this.groundTex2, blend: K.stage(k, 0.15, 0.9) * 0.85, tint: col.tint });
     const sway = 0.02 + d.bass * 0.12;
     r.drawInstanced(this.quad, this.trees, { texture: this.pineTex, billboard: 1, sway, tint: col.tint });
     r.drawInstanced(this.quad, this.bushes, { texture: this.bushTex, billboard: 1, sway: sway * 0.5, tint: col.tint });
     r.drawInstanced(this.fenceMesh, this.fenceInst, { texture: this.fenceTex, tint: col.tint });
+    r.draw(this.wallMesh, this.houseM, { texture: this.wallTex, tint: col.tint });
+    r.draw(this.roofMesh, this.houseM, { texture: this.roofTex, tint: col.tint });
+    r.draw(this.mastMesh, mat4.identity(this.m), { texture: this.poleTex, tint: col.tint });
 
     // lamps switch on one after another as the band swells in
     const nl = this.lamps.length;
@@ -184,15 +223,16 @@ export class KitDemo {
     const sp = this.signPos;
     this.sign.draw(r, mat4.trs(this.m, sp[0], sp[1], sp[2], 0, sp[3], 0), { additive: true, fog: false, fade: [30, 60], tint: P.role('glow') });
 
+    this.search.draw(r, { fade: [50, 90] });
     this.snow.draw(r, { brightness: dim * 0.9 });
     this.flies.draw(r, { brightness: k });
   }
 
   dispose(r) {
     this.ground.dispose(); this.sky.dispose(r); this.snow.dispose(r); this.flies.dispose(r);
-    this.sign.dispose(r);
-    [this.quad, this.lampMesh, this.fenceMesh, this.lanternMesh].forEach((m) => m.dispose());
-    [this.groundTex, this.groundTex2, this.pineTex, this.bushTex, this.poleTex, this.glowTex, this.fenceTex].forEach((t) => r.deleteTexture(t));
+    this.sign.dispose(r); this.search.dispose(r);
+    [this.quad, this.lampMesh, this.fenceMesh, this.lanternMesh, this.wallMesh, this.roofMesh, this.bandMesh, this.mastMesh].forEach((m) => m.dispose());
+    [this.groundTex, this.groundTex2, this.pineTex, this.bushTex, this.poleTex, this.glowTex, this.fenceTex, this.wallTex, this.roofTex, this.bandTex].forEach((t) => r.deleteTexture(t));
     [this.trees, this.bushes, this.lampInst, this.glowInst, this.fenceInst, this.lanternInst].forEach((i) => i.dispose());
   }
 }

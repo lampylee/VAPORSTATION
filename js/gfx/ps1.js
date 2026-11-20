@@ -35,6 +35,8 @@ uniform float uBillboard;    // 0 off, 1 upright (cylindrical), 2 face camera fu
 uniform float uTime, uSway;  // sway bends vertices by their height (foliage, banners)
 uniform vec2 uFade;          // distance fade: near, far (far <= near = off)
 uniform vec2 uMirror;        // x: 1 = reflect the world in the plane y = uMirror.y, 2 = only clip below it
+uniform vec4 uWave;          // world-space wave on y: amp, spatial freq, speed, 0 (amp 0 = off); same field for every draw that uses it
+uniform float uTwoSided;     // 1 = flip the normal toward the camera (paper cards, leaves, banners lit on both faces)
 out vec3 vUVw;               // uv * w, w  -> undoes perspective correction
 out vec2 vUVp;               // perspective-correct uv (for blending amount)
 out vec3 vColor;
@@ -70,6 +72,11 @@ void main() {
     p.x += sin(uTime * 1.7) * uSway * max(p.y, 0.0);
   }
   vec4 world = uModel * vec4(p, 1.0);
+  if (uWave.x != 0.0) {
+    float wt = uTime * uWave.z;
+    world.y += uWave.x * (sin(world.x * uWave.y + wt) * cos(world.z * uWave.y * 0.83 - wt * 0.71)
+                        + 0.5 * sin((world.x + world.z) * uWave.y * 0.47 + wt * 1.3));
+  }
   vAbove = world.y - uMirror.y;
   if (uMirror.x > 0.5 && uMirror.x < 1.5) { world.y = 2.0 * uMirror.y - world.y; nrm.y = -nrm.y; }
   vec4 view = uView * world;
@@ -81,7 +88,8 @@ void main() {
   }
   gl_Position = clip;
   vec3 n = normalize(mat3(uModel) * nrm);
-  float d = max(dot(n, -uLightDir), 0.0);
+  if (uTwoSided > 0.5 && dot(mat3(uView) * n, view.xyz) > 0.0) n = -n;
+  float d =max(dot(n, -uLightDir), 0.0);
   vec3 lit = uAmbient + uLightColor * d;
   vColor = aColor * shade * mix(lit, vec3(1.0), uUnlit);
   vec2 uv = aUV * uUVScale + uUVOffset;
@@ -295,6 +303,7 @@ const IDENTITY = mat4.create();
 const WHITE = [1, 1, 1];
 const BLACK = [0, 0, 0];
 const NO_FADE = [0, 0];
+const NO_WAVE = [0, 0.15, 1];
 
 export class PS1Renderer {
   constructor(canvas) {
@@ -541,6 +550,18 @@ export class PS1Renderer {
   /** Clear only the depth buffer (between a reflection pass and the normal pass). */
   clearDepth() { const gl = this.gl; gl.depthMask(true); gl.clear(gl.DEPTH_BUFFER_BIT); }
 
+  /**
+   * Extra vertex-snap wobble for the rest of this style's render (0 = none, 1 = about double
+   * the base snap). beginScene() resets it, so a style owns it for its own frame only and
+   * the show-control beat wobble (params.jitterBoost) is left alone.
+   */
+  setJitterBoost(extra = 0) {
+    const gl = this.gl, u = this.world.u, P = this.params;
+    const snap = Math.max(0, P.jitter + P.jitterBoost + extra * Math.max(1, P.jitter));
+    gl.uniform1f(u.uSnapOn, snap > 0.05 ? 1 : 0);
+    gl.uniform2f(u.uSnapGrid, this.width * 0.5 / Math.max(snap, 0.05), this.height * 0.5 / Math.max(snap, 0.05));
+  }
+
   /** dir = direction the light travels. */
   setLight(dir, color, ambient) {
     const gl = this.gl, u = this.world.u;
@@ -559,6 +580,10 @@ export class PS1Renderer {
    *    even with fog: false. Use it for lights that shine through fog, so nothing pops at the edge.
    *  opacity (0..1): screen-door transparency with the ordered-dither pattern (mist cards, water
    *    over a reflection, fading things in/out without alpha blending).
+   *  wave [amp, freq = 0.15, speed = 1]: world-space vertical wave applied on the GPU. It is the
+   *    same field for every draw given the same values, so ground and the things standing on it
+   *    move together (melting / rolling peaks). CPU height for placing things: waveAt(x, z, wave, time).
+   *  twoSided (bool): light whichever face is towards the camera (flat paper cards, leaves).
    */
   draw(mesh, model = IDENTITY, o = {}) {
     this._begin(model, o, 0);
@@ -611,6 +636,9 @@ export class PS1Renderer {
     const blend = o.texture2 ? Math.max(0, Math.min(1, o.blend ?? 0)) : 0;
     gl.uniform1f(u.uBlend, blend);
     gl.uniform1f(u.uOpacity, o.opacity ?? 1);
+    const wv = o.wave || NO_WAVE;
+    gl.uniform4f(u.uWave, wv[0] || 0, wv[1] ?? 0.15, wv[2] ?? 1, 0);
+    gl.uniform1f(u.uTwoSided, o.twoSided ? 1 : 0);
     if (blend > 0) { gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, o.texture2); gl.activeTexture(gl.TEXTURE0); }
     // additive (PS1 "semi-transparency" B+F) fades to black in fog, not to the fog colour
     if (o.additive) { gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE); gl.uniform3fv(u.uFogColor, BLACK); }
@@ -682,4 +710,11 @@ export class PS1Renderer {
   }
 
   resetStats() { this.stats.draws = 0; this.stats.tris = 0; }
+}
+
+/** CPU copy of the draw option `wave` (see PS1Renderer.draw): world-space y offset at (x, z). */
+export function waveAt(x, z, wave, time) {
+  if (!wave || !wave[0]) return 0;
+  const f = wave[1] ?? 0.15, wt = time * (wave[2] ?? 1);
+  return wave[0] * (Math.sin(x * f + wt) * Math.cos(z * f * 0.83 - wt * 0.71) + 0.5 * Math.sin((x + z) * f * 0.47 + wt * 1.3));
 }

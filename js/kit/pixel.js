@@ -40,3 +40,15 @@ export function dshade(ramp, s, x, y) {
 
 /** Pick index a or b with an ordered dither: t = 0 all a, 1 all b. */
 export const ditherPick = (a, b, t, x, y) => (t > bayer(x, y) ? b : a);
+
+/**
+ * Kit v4: blobNoise that tiles every `size` px (cell must divide size), so
+ * 64 px textures have no seams when repeated (blobNoise leaves one at the wrap).
+ */
+export function tileBlob(x, y, cell, seed = 0, size = 64) {
+  const n = Math.max(1, Math.round(size / cell)), fx = x / cell, fy = y / cell, ix = Math.floor(fx), iy = Math.floor(fy), u = fx - ix, v = fy - iy;
+  const h = (i, j) => rnd(((i % n) + n) % n, ((j % n) + n) % n, seed);
+  const a = h(ix, iy), b = h(ix + 1, iy), c = h(ix, iy + 1), d = h(ix + 1, iy + 1);
+  const su = u * u * (3 - 2 * u), sv = v * v * (3 - 2 * v);
+  return a + (b - a) * su + (c - a) * sv + (a - b - c + d) * su * sv;
+}

@@ -81,6 +81,10 @@ r.setLight(dir, P.role('light') scaled, P.role('ambient') scaled);
 | Creatures (v3) | `new School(r, {kind: 'fish' \| 'bird', groups, perGroup, size, spread})` → `update(dt, (g, t, out) => centre, {amount, speed, flap})`, `draw(r, {tint})`; `fishGeo/birdGeo/creatureTex` | members grow in one by one with `amount`; birds glide when `flap: 0`. Keep their loop away from the camera |
 | Slow phrasing (v3) | `new Breath({beats: 8, period: 10})` → `update(audio, dt)` returns 0..1..0 | follows the tapped tempo (`audio.bpm`), else a free `period`; never jumps. Camera rise, glow, mist density for ballads |
 | Box atlas (v3) | `boxAtlas(w, h, d, {top, side, front, back, left, right, bottom})` | one texture, per-face atlas rects |
+| Lights (v4) | `new Searchlights(r, {max, ramp})` → `set(i, lamp, aim, {width, brightness, glow, pool})`, `off(i)`, `upload(eye)`, `boostAt(x, z)`, `draw(r, {tint, fade})`; `coneGeo(base, sides)`, `poolSprite({ramp})` | cone + ground pool + lens glow, three draws for all lights; shines through fog, dims a cone that passes the lens. `boostAt` = how lit a ground point is (add it to house shades under a sweeping pool) |
+| Phrasing (v4) | `new BarClock({beatsPerBar, minGap, backup: [min, max]})` → `update(audio, dt)` true once per bar; `new Stager(n, {from, to, rise, fall})` → `update(k, dt)`, read `.v[i]`; `new Follow3(start, {freq, damping})` → `update(target, dt)` | `BarClock` steps on `audio.bar` wrapping with tap tempo, else every 4th `beatCount`; `backup` fires on a slow timer when no beats come. `Stager` = rows rising front to back that keep their order even when `k` jumps. `Follow3` = springy glide to a moving point (formations, aim points) |
+| Geometry (v4) | `centredQuad(w, h)`, `worldFace(g, c, u, v, tile)`, `worldBox(w, h, d, tile)`, `terrainDecal(cx, cz, rad, height, {segs, lift})`, `skyBand(e0, e1, {radius, segs, uRepeat})`, `props.gableHouse(w, d, wallH, roofH, {tile})` → `{walls, roof}` | `billboardQuad` pivots at the bottom; `centredQuad` spins in place and lies flat as a pool. `world*` = texel size stays the same on big and small faces. `skyBand` = additive ring around the eye with faded edges (draw at the eye, scroll with `uvOffset`) |
+| Textures / motion (v4) | `K.tex.cracks({ramp, cells, jitter, crack, fill, rim, patches})`; `tileBlob(x, y, cell, seed, size)`; `new Wobble(r, geo)` → `update((x, y, z, out, i) => …)`, `rest()`, `.mesh`; `Particles` `texture` override + `gust(strength, dir, decay)`; `Ripples` `{additive: false}` + `spawn(…, amp)` | `cracks` = salt crust, dried mud, hex tiles (tileable). `tileBlob` = `blobNoise` without the seam. `Wobble` = CPU heat shimmer / melt on one mesh. Gusts whip a particle field and ease off (scale by `audio.accent`). Solid ripples fade by screen-door, for bright ground where additive rings vanish |
 | Models | `await loadGLB(url)` → `{geo, images}`; `imageToIndexed(image, {ramp})` | vertex colours kept; convert embedded textures to one ramp so palettes still apply |
 
 ### Renderer (`r`)
@@ -102,6 +106,10 @@ r.setLight(dir, P.role('light') scaled, P.role('ambient') scaled);
   r.draw(waterMesh, m, { texture: waterTex, opacity: 0.55 });   // a subdivided plane, so the affine warp stays mild
   ```
   It doubles the world's draw calls, so budget for it.
+- Kit v4 draw options:
+  - `twoSided: true`: lights whichever face is towards the camera (flat paper cut-outs, leaves, banners). Without it a card seen from behind is lit as if from the back.
+  - `wave: [amp, freq = 0.15, speed = 1]`: world-space vertical wave applied on the GPU. Every draw given the same values shares one field, so the ground and the houses on it roll together (a melting peak). `waveAt(x, z, wave, r.params.time)` (also `K.waveAt`) is the CPU height, for placing lights or the camera on it. Ease `amp` in with `K.stage`.
+- `r.setJitterBoost(extra)`: extra vertex-snap wobble for the rest of this style's frame (0 = none, 1 ≈ double). `beginScene` resets it, so it never leaks into the next style or the crossfade partner, and the show-control beat wobble is left alone. Set it in `render()` before drawing, scaled by intensity.
 - `mat4.trs(out, x, y, z, rx, ry, rz, sx, sy, sz)` for model matrices.
 
 ## Ideas for intensity "swells"
@@ -113,6 +121,10 @@ r.setLight(dir, P.role('light') scaled, P.role('ambient') scaled);
 - Hanging things that swing harder as the bass builds (`K.Pendulum` + instance tilt).
 - Camera waking up: slow pan → flying (`idleSpeed` → `activeSpeed`).
 - Use `History` so a bass hit ripples away from the camera instead of everything pulsing at once.
+- Rows or groups that wake in order (a crowd standing up, lamps up a hill): `K.Stager`, so the order holds when the song slams in.
+- Rearrange or change formation once per bar (`K.BarClock`), not every beat.
+- A peak that melts the world: `wave` on the ground and props, plus `r.setJitterBoost`, both eased in near the top of the range.
+- Pitfalls from wave 4b: `damp(cur, target, tau, dt)` takes a time constant in seconds, not a rate. The `mist` particle preset reads as a dotted fence at ground level at 320×240; use it above the camera's eye line or rely on fog.
 
 ### Slow songs and ballads
 

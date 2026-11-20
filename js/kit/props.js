@@ -156,3 +156,33 @@ export function shift(geo, dx, dy, dz) {
   for (let i = 0; i < p.length; i += 3) { p[i] += dx; p[i + 1] += dy; p[i + 2] += dz; }
   return geo;
 }
+
+/**
+ * Kit v4: gabled house shell, pivot at the base centre, ridge along X. Returns two geos so
+ * walls and roof can take their own textures: { walls, roof }. UVs are world-scaled
+ * (one repeat per `tile` units). eave / overhang = how far the roof sticks out.
+ * Add doors, windows and chimneys as separate parts (instanced windows glow on their own).
+ *   const { walls, roof } = K.props.gableHouse(6, 5, 3, 2.2);
+ * Quiet House and Back Road Lights each built this by hand.
+ */
+export function gableHouse(width = 6, depth = 5, wallH = 3, roofH = 2, { tile = 2, eave = 0.4, overhang = 0.35 } = {}) {
+  const hw = width / 2, hd = depth / 2, H = wallH, RH = roofH, s = 1 / tile;
+  const walls = new GeoBuilder();
+  const face = (c, u, v) => walls.face(c, u, v, [0, 0, Math.hypot(...u) * 2 * s, Math.hypot(...v) * 2 * s]);
+  face([0, H / 2, hd], [hw, 0, 0], [0, H / 2, 0]);          // front (+z)
+  face([0, H / 2, -hd], [-hw, 0, 0], [0, H / 2, 0]);        // back
+  face([hw, H / 2, 0], [0, 0, -hd], [0, H / 2, 0]);         // right (+x)
+  face([-hw, H / 2, 0], [0, 0, hd], [0, H / 2, 0]);         // left
+  for (const sx of [1, -1]) {                                // gable ends, wound so the normal points outward
+    const x = sx * hw;
+    walls.tri([x, H, sx * hd], [x, H, -sx * hd], [x, H + RH, 0], [0, 0], [depth * s, 0], [depth * s / 2, -RH * s]);
+  }
+  const roof = new GeoBuilder();
+  const ex = hw + overhang, ez = hd + eave, eh = H - eave * (RH / Math.max(0.01, hd));
+  const slope = Math.hypot(ez, RH + H - eh) * s;
+  for (const sz of [1, -1]) {
+    const a = [-sz * ex, eh, sz * ez], b = [sz * ex, eh, sz * ez], c = [sz * ex, H + RH, 0], e = [-sz * ex, H + RH, 0];
+    roof.quad(a, b, c, e, [0, slope], [ex * 2 * s, slope], [ex * 2 * s, 0], [0, 0]);
+  }
+  return { walls: walls.build(), roof: roof.build() };
+}

@@ -16,4 +16,6 @@ export * as tex from './textures.js';
 export * from './fx.js';
 export * from './life.js';
 export * from './gltf.js';
-export { billboardQuad } from './billboard.js';
+export * from './lights.js';
+export { billboardQuad, centredQuad } from './billboard.js';
+export { waveAt } from '../gfx/ps1.js';
