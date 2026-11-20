@@ -126,13 +126,20 @@ export function rust({ metal = 0, rust: rustRamp = 2, seed = 3 } = {}) {
 }
 
 /** Floor / wall tiles with grout. */
-export function tiles({ ramp = 0, grout = R(3, 0), cells = 4, cracked = 0.15 } = {}) {
+/**
+ * Floor tiles. Default: tiles split between shades 1 and 2 (busy). Pass `shades`
+ * (repeat a shade to make it more common, e.g. [1, 1, 1, 2]) for a calmer floor;
+ * `speck` is then the chance of a one-step-lighter pixel.
+ */
+export function tiles({ ramp = 0, grout = R(3, 0), cells = 4, cracked = 0.15, shades = null, speck = 0.1 } = {}) {
   const c = 64 / cells;
   return make(64, 64, (x, y) => {
     if (x % c === 0 || y % c === 0) return grout;
     const ti = Math.floor(x / c), tj = Math.floor(y / c);
     if (rnd(ti, tj, 9) < cracked && Math.abs((x % c) - (y % c) - 2) < 1) return grout;
-    return R(ramp, rnd(ti, tj) > 0.5 ? 2 : 1 + (rnd(x, y) > 0.9 ? 1 : 0));
+    if (!shades) return R(ramp, rnd(ti, tj) > 0.5 ? 2 : 1 + (rnd(x, y) > 0.9 ? 1 : 0));
+    const sh = shades[Math.min(shades.length - 1, Math.floor(rnd(ti, tj) * shades.length))];
+    return R(ramp, Math.min(3, sh + (rnd(x, y) < speck ? 1 : 0)));
   });
 }
 

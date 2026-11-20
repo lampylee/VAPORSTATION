@@ -39,6 +39,16 @@ const inBedZ = (z) => BEDS.some(([a, b]) => z > a + 0.4 && z < b - 0.4);
 /** Height of the bulb wire under a tie beam at x (sags in the middle). */
 const wireY = (x) => WALL - 0.12 - 0.6 * (1 - (x / (HW - 0.2)) ** 2);
 
+/** The four board sides of a raised bed (no top or bottom), centred like box(). */
+function bedSides(sx, sy, sz, rep) {
+  const hx = sx / 2, hy = sy / 2, hz = sz / 2, g = new GeoBuilder();
+  g.face([hx, 0, 0], [0, 0, -hz], [0, hy, 0], [0, 0, rep, 1]);
+  g.face([-hx, 0, 0], [0, 0, hz], [0, hy, 0], [0, 0, rep, 1]);
+  g.face([0, 0, hz], [hx, 0, 0], [0, hy, 0], [0, 0, rep, 1]);
+  g.face([0, 0, -hz], [-hx, 0, 0], [0, hy, 0], [0, 0, rep, 1]);
+  return g.build();
+}
+
 /** Octagonal pond rim: outer wall, inner wall and a flat top (angles match K.flatPoly). */
 function rimGeo(sides, rOut, rIn, h) {
   const g = new GeoBuilder();
@@ -165,9 +175,15 @@ export class GreenhouseDusk {
     this.pines.upload(n);
 
     // the building: floor, knee wall, beds, iron frame, glass
-    const fl = new GeoBuilder().face([0, 0, (Z0 + Z1) / 2], [HW, 0, 0], [0, 0, -(Z1 - Z0) / 2], [0, 0, HW * 0.8, (Z1 - Z0) * 0.4], 12).build();
-    this.floorMesh = r.createMesh(fl);
-    this.floorTex = r.texture(K.props.tiles({ ramp: 0, grout: R(0, 0), cells: 4, cracked: 0.2 }));
+    // Near-square ~1.4-unit cells: long thin quads made the affine warp kink every grout line.
+    const fl = new GeoBuilder(), NX = 12, NZ = 40, cw = (2 * HW) / NX, cd = (Z1 - Z0) / NZ, UX = 0.8 / 2, UZ = 0.4;
+    for (let j = 0; j < NZ; j++) for (let i = 0; i < NX; i++) {
+      const x0 = -HW + i * cw, z0 = Z1 - j * cd;   // rows run from the far gable toward the camera, as before
+      fl.face([x0 + cw / 2, 0, z0 - cd / 2], [cw / 2, 0, 0], [0, 0, -cd / 2], [(x0 + HW) * UX, j * cd * UZ, (x0 + cw + HW) * UX, (j + 1) * cd * UZ], 1);
+    }
+    this.floorMesh = r.createMesh(fl.build());
+    // calmer tiles: mostly one shade with an occasional lighter one, so the floor reads as a floor, not a checkerboard
+    this.floorTex = r.texture(K.props.tiles({ ramp: 0, grout: R(0, 0), cells: 4, cracked: 0.12, shades: [1, 1, 1, 2], speck: 0.06 }));
     const zc = (Z0 + Z1) / 2;
     const knee = [], beds = [], soil = new GeoBuilder();
     for (const sx of [-1, 1]) {
@@ -175,8 +191,14 @@ export class GreenhouseDusk {
       const bx = sx * (BED_X0 + BED_X1) / 2, bw = BED_X1 - BED_X0;
       for (const [a, b] of BEDS) {
         const len = b - a, bz = (a + b) / 2;
-        beds.push({ geo: box(bw, BED_H, len, { uvRepeat: [Math.round(len / 2), 1] }), xf: K.xf({ pos: [bx, BED_H / 2, bz] }) });
-        soil.face([bx, BED_H + 0.01, bz], [bw / 2, 0, 0], [0, 0, -len / 2], [0, 0, bw * 0.3, len * 0.3], 5);
+        // Board sides only: a board top 0.01 under the soil z-fought with it (the soil vanished in patches).
+        // The soil is the bed's top, in near-square cells so the affine warp stays calm.
+        beds.push({ geo: bedSides(bw, BED_H, len, Math.round(len / 2)), xf: K.xf({ pos: [bx, BED_H / 2, bz] }) });
+        const nx = 4, nz = Math.max(1, Math.round(len / (bw / nx))), cw = bw / nx, cd = len / nz;
+        for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
+          const x0 = bx - bw / 2 + i * cw, z0 = bz + len / 2 - j * cd;
+          soil.face([x0 + cw / 2, BED_H, z0 - cd / 2], [cw / 2, 0, 0], [0, 0, -cd / 2], [i * cw * 0.3, j * cd * 0.3, (i + 1) * cw * 0.3, (j + 1) * cd * 0.3], 1);
+        }
       }
     }
     for (const z of [Z0, Z1]) knee.push({ geo: box(2 * HW, KNEE, 0.3, { uvRepeat: [10, 1] }), xf: K.xf({ pos: [0, KNEE / 2, z] }) });
