@@ -29,5 +29,6 @@ import { GreenhouseDusk } from './greenhouse-dusk.js';
 import { QuietHouse } from './quiet-house.js';
 import { MothLamp } from './moth-lamp.js';
 import { UnderTheHull } from './under-the-hull.js';
+import { StillPool } from './still-pool.js';
 
-export const STYLES = [TestScene, Fogway, Monoliths, Relic, KitDemo, AshfallTown, LostValley, NeonCircuit, NightManor, DrownedRuins, RouteNine, ColdBase, StationDeck, DreamJournal, GraveyardHill, ArcadeAfterHours, AuroraField, KitCalm, LanternRiver, RainWindow, CloudSea, PetalSteps, MoonlitShallows, GreenhouseDusk, QuietHouse, MothLamp, UnderTheHull];
+export const STYLES = [TestScene, Fogway, Monoliths, Relic, KitDemo, AshfallTown, LostValley, NeonCircuit, NightManor, DrownedRuins, RouteNine, ColdBase, StationDeck, DreamJournal, GraveyardHill, ArcadeAfterHours, AuroraField, KitCalm, LanternRiver, RainWindow, CloudSea, PetalSteps, MoonlitShallows, GreenhouseDusk, QuietHouse, MothLamp, UnderTheHull, StillPool];
