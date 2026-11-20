@@ -13,7 +13,7 @@ All work is committed on `main` (local only: **no git remote yet**, nothing push
 | 0: housekeeping (`.gitignore`, `CLAUDE.md`, `?bench`) | done |
 | 1: CLUT palettes, editor, album-art extraction, import/export, P/O keys, setlist mode | done |
 | 2: world kit (`js/kit/`), Kit Demo, environment guide | done |
-| 3: environment library | **done: 24 merged** (waves 1–3 + wave 4a Radiohead slow songs); wave 4b (6 more) not started |
+| 3: environment library | **done: 30 merged** (waves 1–3 + wave 4a/4b Radiohead set) |
 | 4: UI pass, MIDI, tap tempo, overrides | done (2026-11-19), real MIDI hardware untested |
 | 5: gig hardening (PWA, kiosk, reconnect tests) | not started |
 
@@ -173,7 +173,7 @@ Start each with `start_session` (`initiation: user_asked`, `use_worktree: true`,
 
 ## Wave 4 — Radiohead set (spec: `docs/superpowers/specs/2026-11-20-radiohead-setlist-environments-design.md`)
 
-Album palettes are `ALBUM_PALETTES` in `js/palette/library.js` (signed off 2026-11-20). **Wave 4a merged 2026-11-20** (indices 24–29, in set order): Quiet House, Moth Lamp, Under the Hull, Still Pool, Underriver, Before Dawn. Smoke-tested all 30 styles at k=0/1 with no GL or console errors; the new six use 10–22 draws and ≤13.5k tris; a crossfade chain through them peaked at 49 draws. When stepping frames at k=0, set `viz.s.autoSwitch = false` first, or the idle auto-switch swaps styles mid-test. Real-fps `?bench` still pending. **Next:** wave 4b (Karma Police, Subterranean Homesick Alien, High and Dry, You and Whose Army?, Daily Mail, Everything In Its Right Place), then the setlist JSON in `setlists/`.
+Album palettes are `ALBUM_PALETTES` in `js/palette/library.js` (signed off 2026-11-20). **Wave 4a merged 2026-11-20** (indices 24–29, in set order): Quiet House, Moth Lamp, Under the Hull, Still Pool, Underriver, Before Dawn. Smoke-tested all 30 styles at k=0/1 with no GL or console errors; the new six use 10–22 draws and ≤13.5k tris; a crossfade chain through them peaked at 49 draws. When stepping frames at k=0, set `viz.s.autoSwitch = false` first, or the idle auto-switch swaps styles mid-test. Real-fps `?bench` still pending. **Wave 4b merged 2026-11-20** after Kit v4 (indices 30–35, in set order): Salt Flat (High and Dry), Searchlight Town (Karma Police), Back Road Lights (Subterranean Homesick Alien), Paper Crowd (You and Whose Army?), Newsprint (Daily Mail), Right Place (Everything In Its Right Place). Smoke-tested all 36 styles at k=0/1 with no GL or console errors (single style peak 88 draws / 17.9k tris); the new six use 8–24 draws and ≤15.6k tris; a crossfade chain through them peaked at 39 draws / 28.5k tris (two styles at once). Real-fps `?bench` still pending. The wave 4a and 4b `claude/env-*` branches and worktrees are still around; delete them when the user says so. **Next:** the 12-song setlist JSON in `setlists/`.
 
 ## Wave 3 — slow-song environments (done: built in six parallel sessions, merged 2026-11-19)
 
