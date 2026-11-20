@@ -1,11 +1,12 @@
 // Camera rigs. Every rig moves slowly when idle, faster with intensity + bass,
-// and gets beat reactions for free: a vertical nudge, a roll kick and an FOV punch.
+// and gets beat reactions for free: a vertical nudge, a roll kick and an FOV punch
+// (all scaled by K.feel.motion, so they nearly vanish at Gentle reactivity).
 //
 //   const cam = new DollyRig(spline, { idleSpeed: 1, activeSpeed: 4 });
 //   update:  cam.update(audio, k, dt)
 //   render:  cam.apply(r)
 import { lerp, damp } from '../gfx/math.js';
-import { Spring, Envelope } from './swell.js';
+import { Spring, Envelope, feel } from './swell.js';
 
 /** Closed Catmull-Rom spline through points [[x,y,z], ...]. */
 export class Spline {
@@ -49,7 +50,7 @@ export class CameraRig {
     if (audio.beat && k > 0.05) {
       this.nudge.kick(this.nudgeAmt * 6 * k);
       this.rollSpring.kick((Math.random() < 0.5 ? -1 : 1) * this.rollKick * 6 * k);
-      this.punch.trigger(k);
+      this.punch.trigger(k * feel.motion);   // a zoom is motion too: near-still at Gentle reactivity
     }
     this.nudge.update(dt); this.rollSpring.update(dt); this.punch.update(dt);
   }

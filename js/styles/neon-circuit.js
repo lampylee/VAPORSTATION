@@ -385,7 +385,7 @@ export class NeonCircuit {
     this.lateral = Math.sin(t * 0.23) * lerp(1.3, 0.7, k) + Math.sin(t * 0.61) * 0.3;
     this.cam.update(a, k, dt);
     this.cam.target[1] -= 1.6; // look slightly down so the city shows past the barriers
-    this.fov = damp(this.fov, lerp(64, 72, k) + d.bass * 12, 0.15, dt);
+    this.fov = damp(this.fov, lerp(64, 72, k) + d.bass * 12 * (0.3 + 0.7 * d.motion), 0.15, dt);
     this.cam.fov = this.fov;
     this.cam.roll = this._rollAt(this.cam.s) * 0.85;
     this.scroll += dt * (0.15 + k * 0.6 + d.bass * 2.6);

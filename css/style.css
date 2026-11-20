@@ -114,6 +114,7 @@ button.danger:hover { border-color: var(--hot); color: var(--hot); }
 .seg button { border: 0; border-right: 1px solid var(--line2); background: none; color: var(--dim); padding: 5px 0; }
 .seg button:last-child { border-right: 0; }
 .seg button.on { background: var(--acc); color: var(--acc-ink); }
+.seg.seg3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .tempo { display: flex; gap: 6px; }
 .tap { flex: 1; height: 34px; display: flex; align-items: center; gap: 8px; padding: 0 10px; text-align: left; }
 .tap .hint-key { margin-left: auto; color: var(--dim); font-size: 11px; }

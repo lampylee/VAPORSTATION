@@ -71,9 +71,9 @@ export class Relic {
   update(a, k, dt) {
     this.a = a; this.k = k;
     const t = (this.time += dt);
-    if (a.beat) { this.kick += 2.5 * k; this.flash = Math.max(this.flash, k); this.nudgeVel += 3 * k; }
+    if (a.beat) { const mo = a.motion ?? 1; this.kick += 2.5 * k * mo; this.flash = Math.max(this.flash, k * (a.accent ?? 1)); this.nudgeVel += 3 * k * mo; }
     this.kick *= Math.exp(-dt / 0.35);
-    this.flash *= Math.exp(-dt / 0.2);
+    this.flash *= Math.exp(-dt / (0.2 * (a.decay ?? 1)));
     const spin = 0.15 + a.bass * k * 1.2 + this.kick;
     this.rotY += spin * dt; this.rotX += spin * 0.55 * dt;
     const w = 6;

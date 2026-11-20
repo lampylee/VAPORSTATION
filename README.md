@@ -62,6 +62,7 @@ The input is opened with echo cancellation, noise suppression and auto gain cont
 | G | big moment: one flash + beat + intensity push |
 | T / Shift+T | tap tempo / clear tempo |
 | L | lock beats to the tapped tempo (toggle) |
+| R | reactivity: Gentle → Medium → Punchy |
 
 ## Palettes (album colours)
 
@@ -92,6 +93,7 @@ A setlist is a list of songs (or albums), each with a **palette** and one or mor
 
 The **Show** card at the top of the panel is for running the show by hand. Everything is also on keys and MIDI. Flash strength, blackout fade, strobe-safe and tempo nudges are under *Fine-tune*.
 
+- **Feel** (R): how hard the environments follow the music. **Gentle** (default) follows the song's energy: slow swells, so a chorus visibly opens up from the verse, with only strong beats as soft accents (about one a second), no camera kicks and no frame wobble. **Punchy** reacts to every kick: fast flashes, camera kicks and vertex wobble, for electronic or bass-heavy sets. **Medium** sits between them. Changes ease over about a second, and a MIDI knob can set anything in between.
 - **Hold** (I): intensity eases to the *Hold at* level (.2 – 1) and stays there, even when the room is quiet (a soft song you still want big, or a talk-over you want calm). Releasing it eases back to the live level.
 - **Freeze** (Z): the picture holds still until you press it again.
 - **Blackout** (B): a dithered fade to black over *Blackout fade*, and back on the second press. Never a hard cut.
@@ -160,7 +162,7 @@ export class MyStyle {
   static meta = { name: 'My style' };
   static palette = fromKeys('mystyle', 'My style', ['#8a8a8a', '#4a6a8a', '#ffcc33', '#101820']);
   init(r) { /* r.createMesh(geo), r.texture(T.checker({ a: R(0, 3), b: R(0, 1) })) */ }
-  update(audio, intensity, dt) { /* audio: level, bass, mid, high, beat, beatPulse */ }
+  update(audio, intensity, dt) { /* audio: level, bass, mid, high, energy, beat, beatPulse, accent, motion */ }
   render(r) { /* r.clear(this.pal.role('fog')); r.setCamera(...); r.setFog(...); r.draw(mesh, matrix, {texture, tint, emissive}) */ }
   dispose(r) { /* free meshes/textures */ }
 }

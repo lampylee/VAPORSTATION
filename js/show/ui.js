@@ -1,6 +1,7 @@
 // Panel sections for show control (pads, hold, tempo), MIDI mapping and the
 // environment browser (live thumbnails).
 import { MIDI_ACTIONS } from './midi.js';
+import { REACTIVITY_STEPS } from './control.js';
 import { icon, card, fold } from '../icons.js';
 
 const el = (tag, props = {}, ...kids) => {
@@ -51,6 +52,15 @@ export class ShowUI {
     this.segs = HOLD_STEPS.map((v) => el('button', { textContent: v === 1 ? '1' : String(v).slice(1), title: `Hold at ${v}`,
       onclick: (e) => { s.holdLevel = v; h.onSetting(); this.update(); e.currentTarget.blur(); } }));
 
+    // reactivity: how hard the environments follow the music (R cycles; a MIDI knob can sit in between)
+    const feelTips = {
+      Gentle: 'Follows the song’s energy: slow swells, only strong beats, soft glows, no camera kicks (best for songs with vocals and dynamics)',
+      Medium: 'Between the two: clearer beats, light camera motion',
+      Punchy: 'Reacts to every kick: fast flashes, camera kicks, frame wobble (electronic / bass-heavy sets)',
+    };
+    this.feelSegs = REACTIVITY_STEPS.map(([v, name]) => el('button', { textContent: name, title: feelTips[name],
+      onclick: (e) => { s.reactivity = v; h.onSetting(); this.update(); e.currentTarget.blur(); } }));
+
     this.tapBtn = el('button', { className: 'tap', title: 'Tap along to the beat (T). Shift+T clears.', onclick: () => { h.onTap(); this.tapBtn.blur(); } },
       this.tapDot = el('i', { className: 'dot' }), this.bpm = el('span', { textContent: 'Tap tempo' }), el('span', { className: 'hint-key', textContent: 'tap T' }));
     this.lockBtn = el('button', { className: 'lock', title: 'Lock the environments’ beats to the tapped tempo (L)', onclick: () => { h.onPad('tempoLock'); this.lockBtn.blur(); } });
@@ -62,6 +72,7 @@ export class ShowUI {
     };
     this.section = card('Show', 'show',
       el('div', { className: 'pads' }, ...Object.values(this.pads)),
+      el('div', { className: 'seg-row', title: 'Reactivity (R)' }, el('span', { textContent: 'Feel' }), el('div', { className: 'seg seg3' }, ...this.feelSegs)),
       el('div', { className: 'seg-row' }, el('span', { textContent: 'Hold at' }), el('div', { className: 'seg' }, ...this.segs)),
       el('div', { className: 'tempo' }, this.tapBtn, this.lockBtn),
       fold('Fine-tune: flash, fade, tempo',
@@ -86,6 +97,9 @@ export class ShowUI {
     let near = 0;
     HOLD_STEPS.forEach((v, i) => { if (Math.abs(v - s.holdLevel) < Math.abs(HOLD_STEPS[near] - s.holdLevel)) near = i; });
     this.segs.forEach((b, i) => b.classList.toggle('on', i === near));
+    let fn = 0;
+    REACTIVITY_STEPS.forEach(([v], i) => { if (Math.abs(v - s.reactivity) < Math.abs(REACTIVITY_STEPS[fn][0] - s.reactivity)) fn = i; });
+    this.feelSegs.forEach((b, i) => b.classList.toggle('on', i === fn));
     const bpm = sh.tempo.bpm;
     const txt = bpm ? `${bpm.toFixed(1)} bpm` : sh.tempo.taps.length ? 'Tap again…' : 'Tap tempo';
     if (this.bpm.textContent !== txt) this.bpm.textContent = txt;

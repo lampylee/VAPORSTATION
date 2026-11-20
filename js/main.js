@@ -153,6 +153,7 @@ function showAction(id, v) {
     case 'tap': show.tap(); break;
     case 'tempoLock': s.tempoLock = !s.tempoLock; break;
     case 'holdLevel': s.holdLevel = Math.round(v * 20) / 20; break;
+    case 'reactivity': s.reactivity = v == null ? (s.reactivity >= 0.75 ? 0 : Math.round(s.reactivity * 2) / 2 + 0.5) : Math.round(v * 20) / 20; break;
     case 'nextSong': stepSong(1); break;
     case 'prevSong': stepSong(-1); break;
     case 'nextStyle': styles.goNext(1); break;
@@ -161,7 +162,7 @@ function showAction(id, v) {
     case 'prevPalette': stepPalette(-1); break;
     default: return;
   }
-  if (id === 'tempoLock' || id === 'holdLevel') { showUI.refresh(); saveSettings(s); }
+  if (id === 'tempoLock' || id === 'holdLevel' || id === 'reactivity') { showUI.refresh(); saveSettings(s); }
   showUI.update();
   ui.refresh();
 }
@@ -353,6 +354,7 @@ addEventListener('keydown', (e) => {
   else if (k === 'g') showAction('flash');
   else if (k === 't') { if (e.shiftKey) show.tempo.clear(); else if (!e.repeat) showAction('tap'); }
   else if (k === 'l') { showAction('tempoLock'); }
+  else if (k === 'r') showAction('reactivity');   // Gentle → Medium → Punchy
   else handled = false;
   if (handled) {
     e.preventDefault();
@@ -391,7 +393,7 @@ function frame(now) {
   const P = renderer.params;
   if (!show.freeze) {
     P.time = (P.time || 0) + dt;   // stops while frozen (vertex wobble holds too)
-    P.jitterBoost = s.audioPushesLook ? audio.beatPulse * k * 1.2 : 0;
+    P.jitterBoost = s.audioPushesLook ? audio.beatPulse * k * show.jitterPush : 0;   // 0 at Gentle reactivity
     P.fogScale = s.audioPushesLook ? 1 + audio.level * k * 0.25 : 1;
   }
   P.fade = show.fade;

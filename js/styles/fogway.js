@@ -51,10 +51,10 @@ export class Fogway {
     this.twist += dt * (0.12 + a.mid * k * 0.7);
     this.hist.copyWithin(1, 0); this.hist[0] = a.bass * k;
     if (a.beat) {
-      this.flash = Math.max(this.flash, k);
-      this.rollVel += (Math.random() < 0.5 ? -1 : 1) * 1.4 * k;
+      this.flash = Math.max(this.flash, k * (a.accent ?? 1));
+      this.rollVel += (Math.random() < 0.5 ? -1 : 1) * 1.4 * k * (a.motion ?? 1);
     }
-    this.flash *= Math.exp(-dt / 0.22);
+    this.flash *= Math.exp(-dt / (0.22 * (a.decay ?? 1)));
     const w = 5; // critically damped spring back to 0 roll
     this.rollVel += (-this.roll * w * w - 2 * w * this.rollVel) * dt;
     this.roll += this.rollVel * dt;
@@ -67,7 +67,7 @@ export class Fogway {
     r.clear(col.fog);
 
     path(this.s, v.eye); path(this.s + 6, v.tgt);
-    r.setCamera(v.eye, v.tgt, { fov: 68 + a.bass * k * 10, near: 0.1, far: 150, roll: this.roll + Math.sin(this.time * 0.2) * 0.1 });
+    r.setCamera(v.eye, v.tgt, { fov: 68 + a.bass * k * 10 * (0.3 + 0.7 * (a.motion ?? 1)), near: 0.1, far: 150, roll: this.roll + Math.sin(this.time * 0.2) * 0.1 });
     r.setFog(col.fog, 2, lerp(26, 52, k));
     const fx = v.tgt[0] - v.eye[0], fy = v.tgt[1] - v.eye[1] - 2, fz = v.tgt[2] - v.eye[2];
     r.setLight([fx + Math.sin(this.time * 0.3) * 4, fy, fz], scaleColor(col.light, P.role('light'), lerp(0.55, 0.95, k)), scaleColor(col.amb, P.role('ambient'), 0.45));

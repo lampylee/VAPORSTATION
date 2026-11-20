@@ -21,6 +21,7 @@ export const MIDI_ACTIONS = [
   ['freeze', 'Freeze (toggle)', 'button'],
   ['hold', 'Hold intensity (toggle)', 'button'],
   ['holdLevel', 'Hold level (knob)', 'value'],
+  ['reactivity', 'Reactivity: gentle → punchy (knob)', 'value'],
   ['tap', 'Tap tempo', 'button'],
   ['tempoLock', 'BPM lock (toggle)', 'button'],
 ];

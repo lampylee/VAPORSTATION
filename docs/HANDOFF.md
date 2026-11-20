@@ -1,4 +1,4 @@
-# Handoff — state as of 2026-11-19
+# Handoff — state as of 2026-11-20
 
 Read this first when picking the project back up. Also read `CLAUDE.md` (rules),
 `ROADMAP.md` (plan) and `docs/ENVIRONMENT-GUIDE.md` (how environments are built).
@@ -57,6 +57,12 @@ Number keys only reach 0–9; indices 10–23 are reachable via **N / Shift+N**,
   3. **The gig laptop itself** (perf, fullscreen, sleep settings).
   4. **Real MIDI hardware** (learn + footswitch + Program Change). Tested only with simulated MIDI bytes via `viz.midi.handle([...])`.
   5. **Thumbnail cost on the gig laptop**: one extra style update+render every 0.4 s while the panel is visible (none in fullscreen / hidden UI).
+
+## Reactivity pass (2026-11-20)
+
+Feedback: with real music the visuals felt bumpy, strobey and aggressive (club-style), not complementary. Causes: ~30 ms band attacks, 0.18 s beat pulses, up to 3–5 beats/s, and every kick firing a camera nudge + roll + FOV punch + colour flash + whole-frame vertex wobble (`jitterBoost`), with styles mapping `bass` straight to FOV/speed.
+Fix, centrally: **Feel** setting (`s.reactivity`, 0 Gentle default / 0.5 Medium / 1 Punchy = the old behaviour; Show card, R key, MIDI knob). `ShowControl` blends three profiles (`PROFILES` in `js/show/control.js`): extra band smoothing pulled toward the new `audio.energy` (analyser: a few seconds of level against a ~minute reference), a beat-strength gate + min gap (Gentle ≈ 1 beat/s), eased beat pulse, and `K.feel` (`js/kit/swell.js`) which scales every `K.Envelope` (smaller, eased in, longer) and `K.Spring` kick; kit camera FOV punch scales by motion; the beat vertex wobble is 0 at Gentle. Hand-rolled beat reactions in Fogway, Monoliths, Relic, Lost Valley (tremor) and Neon Circuit (FOV) now use `audio.accent/motion/decay`.
+Measured on the demo track (same passage): Punchy 2 beats/s, bass movement 2.12/s; Gentle 1 beat/s, 0.24/s. All 23 styles ran at Gentle and Punchy without errors. **Not verified:** how it *feels* with real songs in a visible window (the pane was hidden, so no live look), `?bench` (CPU cost is a few multiplies per frame). Tuning knobs are the `PROFILES` rows.
 
 ## Open items (rough priority)
 

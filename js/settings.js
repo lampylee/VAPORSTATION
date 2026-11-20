@@ -19,6 +19,7 @@ export const DEFAULTS = {
   // beat detection
   beatSensitivity: 1.35,    // bass must exceed rolling average by this factor
   beatCooldown: 0.2,        // s minimum between beats
+  reactivity: 0,            // 0 = Gentle (follows the song's energy), 0.5 = Medium, 1 = Punchy (every kick)
   // PS1 look
   resolution: '320x240',    // '320x240' | '426x240' | 'auto240' | '640x480'
   aspectMode: 'fit',        // 'fit' | 'stretch'

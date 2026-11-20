@@ -4,6 +4,10 @@
 //   beat                     true on the frame a beat/onset is detected
 //   beatPulse                1 on a beat, decays to 0 over ~0.25 s
 //   beatCount                increments per beat
+//   beatStrength             on a beat: how far the kick cleared the trigger (1 = just, 2 = twice)
+//   energy                   0..1, how big the song is *right now*: level over the last few
+//                            seconds against a much slower (~minute) reference, so a chorus
+//                            reads higher than the verse instead of being normalised away
 //   rmsDb                    raw RMS in dBFS (after input gain) for play/silence detection
 //
 // Auto-gain: each value is divided by a slowly-tracked reference (its recent
@@ -36,12 +40,15 @@ export class Analyser {
     this.ref = { ...FIXED_REF };
     this.data = {
       level: 0, bass: 0, mid: 0, high: 0,
-      beat: false, beatPulse: 0, beatCount: 0,
+      beat: false, beatPulse: 0, beatCount: 0, beatStrength: 0, energy: 0,
       rmsDb: -100, rmsDbSmooth: -100,
       raw: { level: 0, bass: 0, mid: 0, high: 0, kick: 0 },
       gain: { level: 1, bass: 1, mid: 1, high: 1 }, // current auto-gain factors (debug)
     };
     this.kickAvg = 0;
+    this.longRef = FIXED_REF.level;  // slow reference for energy
+    this.gatedTime = 0;              // seconds of music heard (the reference adapts fast at first)
+    this.energyRaw = 0;
     this.lastBeat = -1;
     this.time = 0;
   }
@@ -77,6 +84,7 @@ export class Analyser {
       // decay everything gracefully to zero when there is no source
       for (const k of ['level', 'bass', 'mid', 'high']) d[k] = damp(d[k], 0, 0.3, dt);
       d.beatPulse *= Math.exp(-dt / 0.18);
+      d.energy = damp(d.energy, 0, 3, dt);
       d.rmsDb = -100;
       d.rmsDbSmooth = damp(d.rmsDbSmooth, -100, 0.3, dt);
       return d;
@@ -114,12 +122,22 @@ export class Analyser {
       d.gain[k] = 0.5 / this.ref[k];
     }
 
+    // ---- energy: a few seconds of level against a ~minute reference
+    if (gateOpen) {
+      this.gatedTime += dt;
+      this.longRef = damp(this.longRef, Math.max(raw.level, FIXED_REF.level * 0.02), Math.min(45, 3 + this.gatedTime), dt);
+    }
+    this.energyRaw = damp(this.energyRaw, raw.level, 0.8, dt);
+    const eTarget = gateOpen ? clamp((this.energyRaw / this.longRef) * 0.5, 0, 1) : 0;
+    d.energy = damp(d.energy, eTarget, eTarget > d.energy ? 1 : 3, dt);
+
     // ---- beat: low-end energy jump against its rolling average, with cooldown
     const kick = raw.kick;
     if (this.kickAvg === 0) this.kickAvg = kick;
     const loudEnough = kick > this.ref.kick * 0.4 && d.rmsDbSmooth > s.thresholdDb - s.hysteresisDb;
     if (loudEnough && kick > this.kickAvg * s.beatSensitivity && this.time - this.lastBeat > s.beatCooldown) {
       d.beat = true;
+      d.beatStrength = kick / Math.max(1e-9, this.kickAvg * s.beatSensitivity);
       d.beatCount++;
       d.beatPulse = 1;
       this.lastBeat = this.time;

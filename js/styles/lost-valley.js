@@ -476,7 +476,7 @@ export class LostValley {
     r.clear(col.fog);
 
     // camera + footstep tremor
-    const sh = this.shake.v, ox = Math.sin(this.time * 53) * sh * 0.22, oy = -sh * 0.3 + Math.sin(this.time * 61) * sh * 0.1;
+    const sh = this.shake.v * (this.a?.motion ?? 1), ox = Math.sin(this.time * 53) * sh * 0.22, oy = -sh * 0.3 + Math.sin(this.time * 61) * sh * 0.1;
     eye[0] += ox; eye[1] += oy; cam.target[1] += oy * 1.5;
     cam.apply(r);
     eye[0] -= ox; eye[1] -= oy; cam.target[1] -= oy * 1.5;

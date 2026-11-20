@@ -20,20 +20,44 @@ export function drive(audio, k) {
     high: audio.high * k,
     pulse: audio.beatPulse * k,
     beat: audio.beat && k > 0.05,
+    energy: (audio.energy ?? audio.level) * k,
+    accent: audio.accent ?? 1,   // reactivity scales for hand-rolled beat reactions (see feel)
+    motion: audio.motion ?? 1,
+    decay: audio.decay ?? 1,     // multiply hand-rolled flash decay times by this
   };
 }
 
+/**
+ * Global reaction feel, set every frame by show control from the Reactivity
+ * setting (Gentle … Punchy). Envelopes and springs read it, so every
+ * environment calms down or punches up together without per-style code.
+ *   accent  scales Envelope triggers (beat flashes, glows)
+ *   motion  scales Spring kicks (camera nudges, rolls, bounces)
+ *   attack  s: Envelopes ease in instead of jumping (0 = instant)
+ *   decay   multiplies every Envelope's decay time (longer = softer glow)
+ * Hand-rolled beat reactions should multiply by audio.accent / audio.motion.
+ */
+export const feel = { accent: 1, motion: 1, attack: 0, decay: 1 };
+
 /** Beat flash / impulse that decays exponentially. trigger(), then read .v */
 export class Envelope {
-  constructor(decay = 0.2) { this.decay = decay; this.v = 0; }
-  trigger(amount = 1) { this.v = Math.max(this.v, amount); }
-  update(dt) { this.v *= Math.exp(-dt / this.decay); return this.v; }
+  constructor(decay = 0.2) { this.decay = decay; this.v = 0; this.t = 0; }
+  trigger(amount = 1) {
+    this.t = Math.max(this.t, amount * feel.accent);
+    if (feel.attack <= 0) this.v = Math.max(this.v, this.t);
+  }
+  update(dt) {
+    this.t *= Math.exp(-dt / (this.decay * feel.decay));
+    if (this.v < this.t && feel.attack > 0) this.v += (this.t - this.v) * (1 - Math.exp(-dt / feel.attack));
+    else this.v = Math.min(this.v, this.t);
+    return this.v;
+  }
 }
 
 /** Critically damped spring: kick() it, it returns to 0 smoothly. Read .x */
 export class Spring {
   constructor(freq = 6) { this.w = freq; this.x = 0; this.v = 0; }
-  kick(amount) { this.v += amount; }
+  kick(amount) { this.v += amount * feel.motion; }
   update(dt) {
     const w = this.w;
     this.v += (-this.x * w * w - 2 * w * this.v) * dt;

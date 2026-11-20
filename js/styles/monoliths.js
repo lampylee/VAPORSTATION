@@ -49,8 +49,8 @@ export class Monoliths {
     this.speed = damp(this.speed, lerp(1.0, 4.5, k) + a.bass * k * 4, 0.4, dt);
     this.z += this.speed * dt;
     this.hist.copyWithin(1, 0); this.hist[0] = a.bass * k;
-    if (a.beat) { this.flash = Math.max(this.flash, k); this.beatCount++; this.nudgeVel += 2.2 * k; }
-    this.flash *= Math.exp(-dt / 0.3);
+    if (a.beat) { this.flash = Math.max(this.flash, k * (a.accent ?? 1)); this.beatCount++; this.nudgeVel += 2.2 * k * (a.motion ?? 1); }
+    this.flash *= Math.exp(-dt / (0.3 * (a.decay ?? 1)));
     const w = 6;
     this.nudgeVel += (-this.nudge * w * w - 2 * w * this.nudgeVel) * dt;
     this.nudge += this.nudgeVel * dt;

@@ -15,9 +15,38 @@
 //
 // Styles also receive audio.bpm (0 = unknown), audio.beatPhase (0..1 within the
 // beat) and audio.bar (beat index within a 4-beat bar) for phrasing camera moves.
-import { clamp, damp } from '../gfx/math.js';
+//
+// Reactivity (s.reactivity, 0 = Gentle, 0.5 = Medium, 1 = Punchy) reshapes the
+// audio before any style sees it. Gentle follows the song's energy rather than
+// each kick: bands are slowed and pulled toward audio.energy, only strong beats
+// get through (about one a second), beat pulses ease in and fade slowly, and
+// kit envelopes / springs (K.feel) are scaled down. Punchy passes the raw
+// analysis through, which is the original, club-style feel.
+import { clamp, damp, lerp } from '../gfx/math.js';
+import { feel } from '../kit/swell.js';
 
 const MIN_BEAT_GAP = 1 / 3;   // strobe-safe: ≤ 3 beats per second
+
+// Profile parameters at Gentle (0), Medium (0.5) and Punchy (1); blended in between.
+//   att/rel   extra band smoothing (s)       detail  how much of the band's own motion survives vs. energy
+//   gap       min s between beats            min     beat strength needed (1 = any detected beat)
+//   pAtt/pDec beat pulse ease-in / fade (s)   accent/motion/attack/decay  -> K.feel
+//   jitter    beat push on the PS1 vertex snap (whole-frame wobble)
+const PROFILES = [
+  { att: 0.2, rel: 0.6, detail: 0.55, gap: 0.9, min: 1.3, pAtt: 0.09, pDec: 0.75, accent: 0.4, motion: 0.15, attack: 0.09, decay: 2.6, jitter: 0 },
+  { att: 0.12, rel: 0.35, detail: 0.7, gap: 0.5, min: 1.12, pAtt: 0.04, pDec: 0.4, accent: 0.7, motion: 0.5, attack: 0.04, decay: 1.6, jitter: 0.4 },
+  { att: 0, rel: 0, detail: 1, gap: 0, min: 1, pAtt: 0, pDec: 0.18, accent: 1, motion: 1, attack: 0, decay: 1, jitter: 1.2 },
+];
+
+function profileAt(r, out) {
+  const i = r < 0.5 ? 0 : 1, t = clamp(r < 0.5 ? r * 2 : (r - 0.5) * 2);
+  const a = PROFILES[i], b = PROFILES[i + 1];
+  for (const key in a) out[key] = lerp(a[key], b[key], t);
+  return out;
+}
+
+export const REACTIVITY_STEPS = [[0, 'Gentle'], [0.5, 'Medium'], [1, 'Punchy']];
+export const reactivityName = (r) => REACTIVITY_STEPS.reduce((n, s) => (Math.abs(s[0] - r) < Math.abs(n[0] - r) ? s : n))[1];
 
 export class TapTempo {
   constructor() { this.taps = []; this.bpm = 0; this.period = 0; this.phase = 0; this.count = 0; }
@@ -72,7 +101,11 @@ export class ShowControl {
     this.lastBeat = -1;
     this.lastFlash = -10;
     this.pendingFlash = false;
-    this.out = { level: 0, bass: 0, mid: 0, high: 0, beat: false, beatPulse: 0, beatCount: 0, bpm: 0, beatPhase: 0, bar: 0 };
+    this.out = { level: 0, bass: 0, mid: 0, high: 0, energy: 0, beat: false, beatPulse: 0, beatCount: 0, accent: 1, motion: 1, decay: 1, bpm: 0, beatPhase: 0, bar: 0 };
+    this.react = -1;          // eased reactivity (-1 = not started; snaps to the setting on the first frame)
+    this.prof = profileAt(1, {});
+    this.band = { level: 0, bass: 0, mid: 0, high: 0 };   // extra-smoothed bands
+    this.pulseT = 0;          // beat pulse target (decays); out.beatPulse eases toward it
   }
 
   tap() { this.tempo.tap(this.time); }
@@ -85,6 +118,13 @@ export class ShowControl {
   process(a, k, playing, dt, s) {
     this.time += dt;
     const o = this.out, safe = s.strobeSafe;
+
+    // ---- reactivity profile (eased, so moving the setting mid-song never cuts)
+    const rTarget = clamp(s.reactivity ?? 0);
+    this.react = this.react < 0 ? rTarget : damp(this.react, rTarget, 0.8, dt);
+    const P = profileAt(this.react, this.prof);
+    feel.accent = P.accent; feel.motion = P.motion; feel.attack = P.attack; feel.decay = P.decay;
+    o.accent = P.accent; o.motion = P.motion; o.decay = P.decay;
 
     // ---- intensity: hold eases to the level; flash pushes toward full
     // (both the on/off blend and the level are eased, so a toggle or a MIDI knob jump never cuts)
@@ -100,7 +140,9 @@ export class ShowControl {
     if (s.tempoLock && this.tempo.bpm) {
       if (a.beat) this.tempo.align();
       beat = grid && (playing || this.hold || kk > 0.05);
-    } else beat = a.beat;
+    } else beat = a.beat && (a.beatStrength ?? 1) >= P.min;
+    // reactivity: beats closer than the profile's gap are dropped (Gentle ≈ one a second)
+    if (beat && this.time - this.lastBeat < P.gap) beat = false;
     if (this.pendingFlash) {
       this.pendingFlash = false;
       if (!safe || this.time - this.lastFlash > 1) {   // strobe-safe: ≤ 1 big moment / s
@@ -111,11 +153,23 @@ export class ShowControl {
       }
     }
     if (beat && safe && this.time - this.lastBeat < MIN_BEAT_GAP) beat = false;
-    if (beat) { this.lastBeat = this.time; o.beatCount++; o.beatPulse = 1; } else o.beatPulse *= Math.exp(-dt / 0.18);
+    if (beat) { this.lastBeat = this.time; o.beatCount++; this.pulseT = 1; }
+    this.pulseT *= Math.exp(-dt / P.pDec);
+    // the pulse eases in over pAtt (instant at Punchy), then follows the fade
+    if (o.beatPulse < this.pulseT && P.pAtt > 0.001) o.beatPulse += (this.pulseT - o.beatPulse) * (1 - Math.exp(-dt / P.pAtt));
+    else o.beatPulse = this.pulseT;
     o.beat = beat;
 
+    // ---- bands: extra smoothing, then pulled toward the song's energy (Gentle keeps ~55% of the band's own motion)
+    o.energy = a.energy ?? a.level;
+    const B = this.band;
+    for (const key of ['level', 'bass', 'mid', 'high']) {
+      const v = a[key];
+      B[key] = P.att + P.rel < 0.001 ? v : damp(B[key], v, v > B[key] ? P.att : P.rel, dt);
+      o[key] = lerp(o.energy, B[key], P.detail);
+    }
+
     // ---- pass the rest through (frozen copies while freeze is on are handled by the caller)
-    o.level = a.level; o.bass = a.bass; o.mid = a.mid; o.high = a.high;
     o.rmsDb = a.rmsDb; o.rmsDbSmooth = a.rmsDbSmooth; o.raw = a.raw; o.gain = a.gain;
     o.bpm = this.tempo.bpm; o.beatPhase = this.tempo.bpm ? this.tempo.phase : 0; o.bar = this.tempo.count & 3;
     if (this.holdBlend > 0.01 && !playing) {
@@ -136,6 +190,9 @@ export class ShowControl {
   }
 
   /** Composite-pass flash amount (capped when strobe-safe). */
+  /** Beat push on the PS1 vertex snap for the current profile (0 at Gentle: the frame never wobbles on beats). */
+  get jitterPush() { return this.prof.jitter; }
+
   flashLevel(s) { return Math.min(this.flashEnv * s.flashAmount, s.strobeSafe ? 0.6 : 1); }
 
   get label() {
