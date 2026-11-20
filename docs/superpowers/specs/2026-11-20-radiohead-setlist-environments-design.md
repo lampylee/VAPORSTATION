@@ -1,6 +1,6 @@
 # Radiohead setlist environments — design
 
-Date: 2026-11-20 · Status: draft, awaiting approval
+Date: 2026-11-20 · Status: awaiting approval (builder check done)
 
 ## Intent
 
@@ -26,7 +26,8 @@ The band's coworker sent a 12-song Radiohead set. Each song gets its own new Vap
 ## Constraints
 
 - All the usual `CLAUDE.md` and `docs/ENVIRONMENT-GUIDE.md` rules apply.
-- **Prerequisite:** `main` currently has 14 uncommitted modified files. They must be committed (by the user, or with the user's OK) before any build session starts, because worktrees are cut from the last commit.
+- **Prerequisite:** no uncommitted changes on `main` before any build session starts, because worktrees are cut from the last commit and the new environments build on the kit as committed. The Feel (reactivity) work landed as `4afc198` and was reviewed on 2026-11-20. The remaining `js/kit/props.js` `tiles()` change and the Greenhouse Dusk floor fix are reviewed and go in (or get dropped) on the user's say before wave 4a.
+- **Feel (Gentle / Medium / Punchy):** Gentle is the default. Every environment is checked at Gentle **and** Punchy, drives big continuous things from `audio.energy` or smoothed bands (not raw `bass`), and scales hand-rolled beat reactions by `audio.accent` / `audio.motion` / `audio.decay`, per the environment guide.
 - Before starting a wave, check `git branch` for leftover `claude/env-*` branches (see HANDOFF, wave 3 note).
 
 ## Approaches considered
@@ -51,7 +52,7 @@ Keys are `[base, secondary, accent, atmosphere/fog]` for `fromKeys`. These are f
 | `amsp` | A Moon Shaped Pool | `#9a9a98`, `#d8a0a8`, `#e8eef4`, `#16181c` | smeared greys, muted pink, blue-white, black |
 | `tkol` | The King of Limbs era | `#8aa86a`, `#e8d88a`, `#f4f4ea`, `#2a3640` | pale greens, soft yellow, washed white, blue-grey fog (for Daily Mail, a 2011 single from that era; user's choice) |
 
-Done when each palette is checked against two existing environments (one dark, one light) and reads as its album.
+Done when each palette is checked against two existing environments (one dark, one light) and reads as its album. **Gate: the user signs off on all 7 palettes before wave 4a starts.** Show each on a couple of existing environments (screenshots), apply their tweaks, commit, then start the waves.
 
 ## Step 2 — environments
 
@@ -66,7 +67,7 @@ Built with the wave-2 session template in `docs/HANDOFF.md`: one fresh session p
 | Karma Police | Searchlight Town | `searchlight-town` / `SearchlightTown` | `okc` | A flat grid of tiny houses at night seen from above at an angle; one searchlight sweeps across it. **Swell:** more searchlights wake, the sweep tightens. **Beat:** the beam snaps and flares. **Peak (outro distortion):** geometry wobbles and melts (extra vertex jitter / wave displacement scaled by intensity), then settles back. No car or road imagery. |
 | Exit Music (For a Film) | Before Dawn | `before-dawn` / `BeforeDawn` | `okc` | A dark, cold bedroom; the camera drifts back out through the window into a black field. **Idle and most of the song:** almost nothing moves, one faint light. **Swell:** held back until intensity is high, then the whole sky catches fire (accent sky, embers) when the fuzz bass arrives. The design is the intensity curve: keep the bottom 70 % of intensity restrained. |
 | Subterranean Homesick Alien | Back Road Lights | `back-road-lights` / `BackRoadLights` | `okc` | A rural field at night with a fence line and one farmhouse; odd lights drift in the sky. **Swell:** more lights, they move with purpose. **Beat:** one light lowers a pale beam onto the grass. Must read as different from Aurora Field (lights are objects, not sky curtains). |
-| Everything In Its Right Place | Right Place | `right-place` / `RightPlace` | `kida` | Rows of identical floating blocks that shuffle and snap into new slots, over icy peaks under a red-streaked sky. **Idle:** blocks drift, barely rearranging. **Swell:** more blocks join and rearrange more often. **Beat/bar:** a rearrangement step (use `audio.bar` when tap tempo is set, otherwise every 4 beats). |
+| Everything In Its Right Place | Right Place | `right-place` / `RightPlace` | `kida` | Rows of identical floating blocks that shuffle and snap into new slots, over icy peaks under a red-streaked sky. **Idle:** blocks drift, barely rearranging. **Swell:** more blocks join and rearrange more often. **Beat/bar:** a rearrangement step once per bar. `audio.bar` is the beat within a 4-beat bar (0–3) and only means anything once tap tempo is set, so rearrange when it wraps to 0; without tap tempo, every 4th `beatCount`. |
 | Pyramid Song | Underriver | `underriver` / `Underriver` | `amnesiac` | The camera sinks slowly through dark water toward a riverbed full of stars, with drifting pale figures (sprites) and lights. Uneven time signature: motion is continuous swells (`K.Breath`, bass level), **not** beat-locked. Must read as different from Drowned Ruins (no ruins; it's stars and figures). |
 | You and Whose Army? | Paper Crowd | `paper-crowd` / `PaperCrowd` | `amnesiac` | A dim maroon hall full of rows of flat paper cut-out figures, one lit microphone on a stand. **Idle:** the figures lie flat or slump, mic glows faintly. **Swell:** figures rise row by row (staged from front to back) as the band and piano build. **Beat:** a ripple through the rows. |
 | All I Need | Moth Lamp | `moth-lamp` / `MothLamp` | `inrainbows` | A single streetlamp in a black field with a swarm of moth particles circling it. **Idle:** few moths, dim lamp. **Swell:** the swarm thickens and tightens. **Peak (final crescendo):** light floods the scene (lamp glow and ground light near max, fog lifts toward a light shade). |
@@ -77,7 +78,7 @@ Built with the wave-2 session template in `docs/HANDOFF.md`: one fresh session p
 
 ## Step 3 — setlist
 
-After the merge, add the 12 songs in set order (No Surprises → Everything In Its Right Place, as listed above starting with No Surprises, Karma Police, High and Dry, All I Need, Decks Dark, Nude, Pyramid Song, Exit Music, Subterranean Homesick Alien, You and Whose Army?, Daily Mail, Everything In Its Right Place), each with palette `''` and a one-environment pool. Delivered as an exported setlist JSON in `setlists/` so it can be imported at the venue.
+After the merge, add the 12 songs in set order (No Surprises → Everything In Its Right Place, as listed above starting with No Surprises, Karma Police, High and Dry, All I Need, Decks Dark, Nude, Pyramid Song, Exit Music, Subterranean Homesick Alien, You and Whose Army?, Daily Mail, Everything In Its Right Place), each with palette `''` and a one-environment pool. Delivered as a setlist JSON in a new `setlists/` folder, in the format `downloadSetlist()` in `js/setlist/setlist.js` writes (`{format:'vaporstation-setlist', name, songs:[{label, palette, styles:[styleKey]}]}`, where `styleKey` is `meta.key` or the class name), so it can be imported at the venue.
 
 ## Left to the builder
 
