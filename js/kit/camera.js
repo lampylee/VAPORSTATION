@@ -139,3 +139,127 @@ export class PathRig extends CameraRig {
     if (this.rollFn) this.roll = this.rollFn(this.s) * this.rollAmount;
   }
 }
+
+// ---------------------------------------------------------------- Kit v5 rigs
+
+/**
+ * Kit v5: travels an ellipse (centre, rx, rz) at `speed` world units/s while looking
+ * somewhere between the travel direction (lookMix 0) and a focus point (lookMix 1), so a
+ * town, skyline or stage stays in view: a boat off a harbour, a slow fly-round of a castle.
+ * bob = gentle vertical swell (two slow sines). From Fog Harbour's HarbourRig.
+ *   this.cam = new K.OrbitFocusRig({ center: [0, 3.3, 30], rx: 58, rz: 16, focus: [0, 2, -12], lookMix: 0.7 });
+ */
+export class OrbitFocusRig extends CameraRig {
+  constructor({ center = [0, 3, 0], rx = 30, rz = 15, focus = [0, 0, 0], lookMix = 0.7, lookDist = 12, lookDrop = 1, bob = 0.25, rollSway = 0.02, start = 0, ...o } = {}) {
+    super({ nudge: 0.07, rollKick: 0.01, fovPunch: 1.2, idleSpeed: 1, activeSpeed: 2.3, bassBoost: 0.3, ...o });
+    Object.assign(this, { center, rx, rz, focus, lookMix, lookDist, lookDrop, bob, rollSway });
+    this.th = start; this._p = [0, 0, 0];
+  }
+  pos(th, out) { const c = this.center; out[0] = c[0] + Math.sin(th) * this.rx; out[1] = c[1]; out[2] = c[2] - Math.cos(th) * this.rz; return out; }
+  update(audio, k, dt) {
+    super.update(audio, k, dt);
+    const local = Math.hypot(this.rx * Math.cos(this.th), this.rz * Math.sin(this.th));   // keep speed in world units
+    this.th += (this.speed * dt) / Math.max(1, local);
+    const e = this.pos(this.th, this.eye), p = this.pos(this.th + 0.1, this._p);
+    e[1] = this.center[1] + (Math.sin(this.time * 0.37) * 0.65 + Math.sin(this.time * 0.23 + 1) * 0.35) * this.bob;
+    let ax = p[0] - e[0], az = p[2] - e[2]; const al = Math.hypot(ax, az) || 1; ax /= al; az /= al;
+    let fx = this.focus[0] - e[0], fz = this.focus[2] - e[2]; const fl = Math.hypot(fx, fz) || 1; fx /= fl; fz /= fl;
+    const m = this.lookMix;
+    let dx = ax * (1 - m) + fx * m, dz = az * (1 - m) + fz * m; const dl = Math.hypot(dx, dz) || 1; dx /= dl; dz /= dl;
+    this.target[0] = e[0] + dx * this.lookDist; this.target[1] = e[1] - this.lookDrop; this.target[2] = e[2] + dz * this.lookDist;
+    this.roll = Math.sin(this.time * 0.29) * this.rollSway;
+  }
+}
+
+/**
+ * Kit v5: near-still drift for quiet scenes. Glides out from `origin` along `yaw` up to
+ * `reach` units and back again (1 - cos), with a small lateral sway and slow glances;
+ * lookUp tilts the view (positive = looking up at something tall). Beat kicks are tiny by
+ * default. From Under the Hull.
+ *   this.cam = new K.DriftRig({ origin: [0, 1.65, 4], yaw: 0, reach: 22, lookUp: 3.5 });
+ */
+export class DriftRig extends CameraRig {
+  constructor({ origin = [0, 1.7, 0], yaw = 0, reach = 20, sway = 1.1, glance = 0.16, lookUp = 0, lookDist = 20, ...o } = {}) {
+    super({ nudge: 0.05, rollKick: 0.005, fovPunch: 0.6, idleSpeed: 0.02, activeSpeed: 0.06, bassBoost: 0.02, ...o });
+    Object.assign(this, { origin, yaw, reach, sway, glance, lookUp, lookDist });
+    this.phase = 0;
+  }
+  update(audio, k, dt) {
+    super.update(audio, k, dt);
+    this.phase += this.speed * dt;
+    const p = this.phase, o = this.origin, e = this.eye, t = this.target;
+    const fwd = this.reach * 0.5 * (1 - Math.cos(p)), lat = Math.sin(p * 1.7) * this.sway;
+    const sy = Math.sin(this.yaw), cy = Math.cos(this.yaw);
+    e[0] = o[0] + sy * fwd + cy * lat; e[1] = o[1]; e[2] = o[2] - cy * fwd + sy * lat;
+    const yaw = this.yaw + Math.sin(this.time * 0.031) * this.glance + Math.sin(p * 0.9) * this.glance * 0.5;
+    t[0] = e[0] + Math.sin(yaw) * this.lookDist; t[1] = e[1] + this.lookUp; t[2] = e[2] - Math.cos(yaw) * this.lookDist;
+  }
+}
+
+/**
+ * Kit v5: wanders a grid of cells (size `cell`) at walking height, one cell at a time, with
+ * smooth quadratic corners. passable(gx, gz, dir) says whether cell (gx, gz) can be left in
+ * dir (0 +x, 1 +z, 2 -x, 3 -z, as K.GRID_DIRS). Keep at least one exit per cell besides the
+ * way in; at a dead end the rig turns back. Turns are rarer when calm (straightCalm) and
+ * commoner as the song swells (straightActive). Aimless glances and a small step bob.
+ * Build the cells around rig.eye / rig.gridCell. From the Backrooms.
+ *   this.cam = new K.GridWanderRig((gx, gz, d) => this.canExit(gx, gz, d), { cell: 6, eyeHeight: 1.6 });
+ */
+export const GRID_DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]];
+export class GridWanderRig extends CameraRig {
+  constructor(passable, { cell = 6, eyeHeight = 1.6, start = [0, 0], dir = 0, straightCalm = 2.8, straightActive = 0.9, glance = 0.22, bob = 0.022, lookAhead = 3.2, ...o } = {}) {
+    super({ nudge: 0.04, rollKick: 0.004, fovPunch: 0.8, idleSpeed: 0.9, activeSpeed: 2.2, bassBoost: 0.3, ...o });
+    Object.assign(this, { passable, cell, eyeHeight, straightCalm, straightActive, glance, bobAmt: bob, lookAhead });
+    this.pieces = []; this.s = 0; this.walk = 0; this.k = 0;
+    this.look = [GRID_DIRS[dir][0], GRID_DIRS[dir][1]];
+    this._a = [0, 0]; this._b = [0, 0];
+    this._add(start[0], start[1], dir, dir);
+  }
+  _bez(p, t, out) {
+    const u = 1 - t, A = u * u, B = 2 * u * t, C = t * t;
+    out[0] = A * p.a[0] + B * p.c[0] + C * p.b[0]; out[1] = A * p.a[1] + B * p.c[1] + C * p.b[1];
+    return out;
+  }
+  _add(gx, gz, din, dout) {
+    const C = this.cell, cx = (gx + 0.5) * C, cz = (gz + 0.5) * C, a = GRID_DIRS[din], b = GRID_DIRS[dout];
+    const p = { gx, gz, din, dout, a: [cx - a[0] * C / 2, cz - a[1] * C / 2], c: [cx, cz], b: [cx + b[0] * C / 2, cz + b[1] * C / 2] };
+    let len = 0, px = p.a[0], pz = p.a[1]; const o = [0, 0];
+    for (let i = 1; i <= 16; i++) { this._bez(p, i / 16, o); len += Math.hypot(o[0] - px, o[1] - pz); px = o[0]; pz = o[1]; }
+    const last = this.pieces[this.pieces.length - 1];
+    p.s0 = last ? last.s0 + last.len : 0; p.len = Math.max(1e-3, len);
+    this.pieces.push(p);
+  }
+  _extend() {
+    const last = this.pieces[this.pieces.length - 1], d = last.dout;
+    const gx = last.gx + GRID_DIRS[d][0], gz = last.gz + GRID_DIRS[d][1];
+    let opts = [[d, lerp(this.straightCalm, this.straightActive, this.k)], [(d + 1) % 4, 1], [(d + 3) % 4, 1]].filter(([e]) => this.passable(gx, gz, e));
+    if (!opts.length) opts = [[(d + 2) % 4, 1]];                          // dead end: turn back
+    let pick = Math.random() * opts.reduce((s, q) => s + q[1], 0), e = opts[0][0];
+    for (const [oe, w] of opts) { if ((pick -= w) <= 0) { e = oe; break; } }
+    this._add(gx, gz, d, e);
+  }
+  _at(s, out) {
+    let p = this.pieces[this.pieces.length - 1];
+    for (const q of this.pieces) if (s < q.s0 + q.len) { p = q; break; }
+    return this._bez(p, Math.max(0, Math.min(1, (s - p.s0) / p.len)), out);
+  }
+  /** The cell the camera is in now: [gx, gz]. */
+  get gridCell() { return [Math.floor(this.eye[0] / this.cell), Math.floor(this.eye[2] / this.cell)]; }
+  update(audio, k, dt) {
+    super.update(audio, k, dt);
+    this.k = k;
+    this.s += this.speed * dt;
+    const ps = this.pieces;
+    while (ps[ps.length - 1].s0 + ps[ps.length - 1].len < this.s + 14) this._extend();
+    while (ps.length > 3 && ps[1].s0 + ps[1].len < this.s - 2) ps.shift();
+    const e2 = this._at(this.s, this._a), t2 = this._at(this.s + this.lookAhead, this._b);
+    let lx = t2[0] - e2[0], lz = t2[1] - e2[1]; const ll = Math.hypot(lx, lz) || 1; lx /= ll; lz /= ll;
+    this.look[0] = damp(this.look[0], lx, 0.45, dt); this.look[1] = damp(this.look[1], lz, 0.45, dt);
+    const gl = (Math.sin(this.time * 0.21) + Math.sin(this.time * 0.083 + 1.3) * 0.73) * this.glance * lerp(0.8, 1.2, k);
+    const yaw = Math.atan2(this.look[1], this.look[0]) + gl;
+    this.walk += this.speed * dt * 2.1;
+    const e = this.eye, t = this.target, bob = Math.sin(this.walk) * this.bobAmt * feel.motion;
+    e[0] = e2[0]; e[1] = this.eyeHeight + bob; e[2] = e2[1];
+    t[0] = e[0] + Math.cos(yaw) * 4; t[1] = this.eyeHeight - 0.12 + Math.sin(this.time * 0.13) * 0.08; t[2] = e[2] + Math.sin(yaw) * 4;
+  }
+}

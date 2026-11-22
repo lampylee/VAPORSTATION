@@ -193,10 +193,12 @@ export function cactus({ ramp = 1, seed = 1 } = {}) {
 /**
  * Tall light shaft / searchlight beam: bright core, dithered falloff to transparent,
  * brighter at the top. 16x64. Draw additive (billboard: 1, or on a tilted quad).
+ * Kit v5: fromBottom = brightest at the bottom row instead, for beams that rise out of a
+ * source (a well, a pit, a stage light on the floor).
  */
-export function lightShaft({ ramp = 3 } = {}) {
+export function lightShaft({ ramp = 3, fromBottom = false } = {}) {
   return make(16, 64, (x, y) => {
-    const t = y / 63, across = 1 - Math.abs(x - 7.5) / 8;
+    const t = fromBottom ? 1 - y / 63 : y / 63, across = 1 - Math.abs(x - 7.5) / 8;
     const b = across * across * (1 - t * 0.75);
     if (b < 0.05 + bayer(x, y) * 0.22) return CLEAR;
     return dshade(ramp, 1 + b * 2.4, x, y);
@@ -310,5 +312,102 @@ export function twinkle({ index = R(3, 3) } = {}) {
   return make(8, 8, (x, y) => {
     const dx = Math.abs(x - 3.5), dy = Math.abs(y - 3.5);
     return (dx < 0.6 && dy < 3.6) || (dy < 0.6 && dx < 3.6) || (dx < 1.1 && dy < 1.1) ? index : CLEAR;
+  });
+}
+
+// ---------------------------------------------------------------- Kit v5 sprites
+
+const clamp01 = (v) => Math.max(0, Math.min(1, v));
+const segDist = (px, py, ax, ay, bx, by) => {
+  const dx = bx - ax, dy = by - ay, u = clamp01(((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy));
+  return Math.hypot(px - ax - dx * u, py - ay - dy * u);
+};
+
+/**
+ * Kit v5: human-ish silhouette, original and faceless, pivot at the feet (billboard: 1).
+ *   pose 'stand'  upright figure, arms at the sides (crowds, watchers, a figure in the fog). 16x32
+ *   pose 'walk'   same, mid-stride; frame 0 / 1 alternate legs (swap textures on a gait phase).
+ *   pose 'hunch'  stooped, humped back, long arms, two wide-set pale eyes (Fog Harbour). 16x24
+ *   pose 'float'  pale drifting figure, arms out, legs trailing, feet dissolving (Underriver). 24x32
+ * ramp/shade: 'float' is drawn light from `ramp`; the others are dark (ramp shade ~0-1) with
+ * a rim; eyes = palette index for the hunch eyes.
+ * Make two frames and pick per instance for a gait:
+ *   this.walkTex = [0, 1].map((f) => r.texture(K.sprites.figure({ pose: 'walk', frame: f })));
+ */
+export function figure({ pose = 'stand', frame = 0, ramp = 0, eyes = R(3, 2), seed = 3 } = {}) {
+  if (pose === 'float') return floatFigure(ramp === 0 ? 1 : ramp, seed);
+  if (pose === 'hunch') return hunchFigure(frame, ramp, eyes);
+  const walk = pose === 'walk', st = walk ? (frame ? 1 : -1) : 0;
+  return make(16, 32, (x, y) => {
+    const px = x + 0.5, py = y + 0.5;
+    const head = Math.hypot((px - 8) / 2.2, (py - 4.2) / 2.6) < 1;
+    const torso = py > 7 && py < 18 && Math.abs(px - 8) < 2.9 - Math.max(0, py - 15) * 0.25 + (py < 9 ? (py - 9) * 0.6 : 0);
+    const legs = [[6.9, 17.5, 6.9 + st * 2.2, 31], [9.1, 17.5, 9.1 - st * 2.2, 31]];
+    const arms = [[5.2, 8.5, 4.4 - st * 1.4, 17.5], [10.8, 8.5, 11.6 + st * 1.4, 17.5]];
+    let limb = false;
+    for (const [ax, ay, bx, by] of legs) if (segDist(px, py, ax, ay, bx, by) < 1.15) limb = true;
+    for (const [ax, ay, bx, by] of arms) if (segDist(px, py, ax, ay, bx, by) < 0.9) limb = true;
+    if (!(head || torso || limb)) return CLEAR;
+    const rim = px < 6.2 && py < 18 ? 0.55 : 0;                       // a little light on the left edge
+    return dshade(ramp, 0.15 + rim + rnd(x, y, seed) * 0.25, x, y);
+  });
+}
+
+function hunchFigure(frame, ramp, eyes) {
+  const legs = frame ? [[6.2, 16, 6.6, 21.5], [9.2, 16, 10, 23]] : [[6, 16, 4.6, 23], [9.3, 16, 10.8, 23]];
+  const arms = frame ? [[3.4, 10, 2.6, 17.5], [11.8, 10, 13.2, 19.5]] : [[3.4, 10, 2.2, 19.5], [11.8, 10, 12.4, 17.5]];
+  return make(16, 24, (x, y) => {
+    const px = x + 0.5, py = y + 0.5;
+    if (y === 6 && (x === 5 || x === 10)) return eyes;
+    const head = Math.hypot((px - 8) / 2.9, (py - 6.6) / 2.3) < 1;
+    const hump = Math.hypot((px - 8) / 5.4, (py - 10.6) / 3.3) < 1;
+    const torso = py > 10 && py < 16.8 && Math.abs(px - 8) < 4.2 - (py - 10) * 0.28;
+    let limb = false;
+    for (const [ax, ay, bx, by] of arms) if (segDist(px, py, ax, ay, bx, by) < 1.05 || Math.hypot(px - bx, py - by) < 1.35) limb = true;
+    for (const [ax, ay, bx, by] of legs) if (segDist(px, py, ax, ay, bx, by) < 1.15 || (Math.abs(py - by) < 0.9 && Math.abs(px - bx - 0.4) < 1.7)) limb = true;
+    if (!(head || hump || torso || limb)) return CLEAR;
+    const rim = hump && py < 9.5 && px < 7 ? 0.5 : 0;
+    return dshade(ramp, 0.15 + rim + rnd(x, y, 3) * 0.25, x, y);
+  });
+}
+
+function floatFigure(ramp, seed) {
+  const sway = (y) => Math.sin(y * 0.22 + seed) * 0.7 * clamp01((y - 18) / 13);
+  return make(24, 32, (x, y) => {
+    const hd = Math.hypot(x - 11.5, (y - 4) * 1.05);
+    if (hd < 3) return dshade(ramp, 3.4 - hd * 0.3, x, y);
+    const arm = Math.min(segDist(x, y, 9, 9, 3.5, 16.5), segDist(x, y, 14, 9, 19.5, 16.5));
+    const torsoW = y >= 7 && y <= 19 ? (y < 9 ? 1.2 + (y - 7) * 1.1 : 3.3 - (y - 9) * 0.08) : -1;
+    const legs = y > 18 ? Math.min(Math.abs(x - 10.2 - sway(y)), Math.abs(x - 12.8 - sway(y))) : 9;
+    const legW = 1.3 - clamp01((y - 19) / 13) * 0.5;
+    let s = -1;
+    if (Math.abs(x - 11.5) <= torsoW) s = 2.9 - Math.abs(x - 11.5) / 4 - (y - 7) / 30;
+    else if (arm < 0.95) s = 2.4 - (y - 9) / 20;
+    else if (legs < legW) s = 2.3 - (y - 18) / 16;
+    if (s < 0) return CLEAR;
+    if (y > 27 && (y - 27) / 5 > bayer(x, y)) return CLEAR;
+    return dshade(ramp, s, x, y);
+  });
+}
+
+/**
+ * Kit v5: ceiling light panel (fluorescent troffer): frame, two tube lines, bright fill. 16x8.
+ * Draw unlit with tint = brightness. Pair with panelHalo (additive, a little larger) for glow.
+ */
+export function panelLight({ ramp = 2 } = {}) {
+  return make(16, 8, (x, y) => {
+    if (x === 0 || x === 15 || y === 0 || y === 7) return R(ramp, 1);
+    if (x === 5 || x === 10) return R(ramp, 2);
+    return R(ramp, 3);
+  });
+}
+
+/** Kit v5: soft rectangular halo with dithered falloff, 32x24. Draw additive around panels and windows. */
+export function panelHalo({ ramp = 2 } = {}) {
+  return make(32, 24, (x, y) => {
+    const dx = Math.abs(x - 15.5) / 16, dy = Math.abs(y - 11.5) / 12, d = Math.pow(Math.pow(dx, 3) + Math.pow(dy, 3), 1 / 3);
+    const v = 1 - d;
+    if (v <= 0 || v < bayer(x, y) * 0.55) return CLEAR;
+    return dshade(ramp, 0.2 + v * 2.4, x, y);
   });
 }

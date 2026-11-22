@@ -1,4 +1,4 @@
-# Handoff — state as of 2026-11-20
+# Handoff — state as of 2026-11-22
 
 Read this first when picking the project back up. Also read `CLAUDE.md` (rules),
 `ROADMAP.md` (plan) and `docs/ENVIRONMENT-GUIDE.md` (how environments are built).
@@ -13,7 +13,7 @@ All work is committed on `main` (local only: **no git remote yet**, nothing push
 | 0: housekeeping (`.gitignore`, `CLAUDE.md`, `?bench`) | done |
 | 1: CLUT palettes, editor, album-art extraction, import/export, P/O keys, setlist mode | done |
 | 2: world kit (`js/kit/`), Kit Demo, environment guide | done |
-| 3: environment library | **done: 30 merged** (waves 1–3 + wave 4a/4b Radiohead set) |
+| 3: environment library | **done: 33 merged** (waves 1–3, wave 4a/4b Radiohead set, wave 5 horror) |
 | 4: UI pass, MIDI, tap tempo, overrides | done (2026-11-19), real MIDI hardware untested |
 | 5: gig hardening (PWA, kiosk, reconnect tests) | not started |
 
@@ -89,6 +89,14 @@ Ashfall Town now uses `r.updateTexture`; the other wave-1 styles keep their loca
 - Geometry: `K.centredQuad`, `worldFace`, `worldBox`, `terrainDecal`, `skyBand`, `K.props.gableHouse`. Textures: `K.tex.cracks`, `K.tileBlob` (seamless `blobNoise`).
 - `K.Wobble` (CPU vertex wobble), `Particles` `texture` override + `gust()`, `Ripples` `{additive: false}` solid mode + per-ring `amp`. Fix: `School` wings no longer jump when `flap` changes (phase integrates; Kit calm now eases its flap).
 - Not promoted (scene-specific): Right Place's slot shuffler, Paper Crowd's glide-past rig and silhouette buckets, Salt Flat's horizon strip, Newsprint's bending stacks and full `PageStorm` (gust + texture cover most of it). The wave 4b environments keep their local copies (working code), as earlier waves did.
+
+**Kit v5 (2026-11-22, from the wave 5 reports plus older unpromoted suggestions)**, all in `docs/ENVIRONMENT-GUIDE.md` and shown in `js/styles/kit-demo.js` (a well yard beside the house: ground rings blighting outward, a beam rising from the well, beat rings that flare the house windows, figures walking out and home, stretched crates, a sagging net, rocks, soft mist):
+- Pipeline (opt-in, older styles unchanged): `inst.stretch(i, sx, sz)` per-instance X/Z scale in the two spare instance floats (0 = 1).
+- Ground / fx: `K.ringBand` / `K.ringBands` (spread-outward ground zones), `Ripples.at(x, z, width)`. **Fix:** Ripples' Kit v4 solid mode had been pasted into `Streaks.draw` (solid rings never drew, and `Streaks.draw` would have thrown); it is now in `Ripples.draw`.
+- Props: `well`, `rock`, `sagStrip` + `sagPosts`, `houseWindows`. Sprites: `figure` (stand / walk / hunch / float, merging Underriver's ghost and Fog Harbour's hunched figure), `panelLight` + `panelHalo`, `lightShaft({ fromBottom })`. Particles: `'softMist'` (additive).
+- Motion: `K.Walkers`. Camera: `K.OrbitFocusRig` (Fog Harbour), `K.DriftRig` (Under the Hull), `K.GridWanderRig` + `K.GRID_DIRS` (Backrooms).
+- Skipped (covered or scene-specific): Moth Lamp's pool texture (`poolSprite`), Drowned Ruins' sprites (Kit v3), the moth swarm (`School`), plus the wave 4b list above. Backlog item "repeat/loop for terrain and particles along an endless road" is covered by `K.repeat` and the camera-wrapped particle box.
+- Smoke test after Kit v5: all 39 styles at k=0/1, no GL or console errors; Kit Demo 28→37 draws / ~11.4k tris. The wave 5 environments keep their local copies, as earlier waves did.
 
 ### Original backlog (for reference)
 
@@ -170,6 +178,10 @@ Start each with `start_session` (`initiation: user_asked`, `use_worktree: true`,
 | **Graveyard Hill** | `graveyard-hill` / `GraveyardHill` | 8110 | Spooky hillside cemetery (evokes late-90s gothic/horror platformers; recreates nothing). Crooked terrain, rows of `tombstone` props and crosses, `deadTree` sprites, iron fence runs, a ruined chapel silhouette on the crest, big moon and drifting clouds. Camera orbits/glides around the hill. **Idle:** mist, stillness, faint moonlight. **Swell:** will-o'-wisps (glow particles) rise between graves in sequence, bats flock across the moon, mist thickens and glows. **Beat:** wisps flare + lightning-ish moon pulse + nudge; **bass:** tree sway + mist roll; **highs:** wisp sparkle. | weathered stone, dead-grass/olive secondary, ghostly green-or-violet accent, midnight-blue fog | `vapor`, `sunset`, `glacier` |
 | **Arcade After Hours** | `arcade-after-hours` / `ArcadeAfterHours` | 8111 | A 90s mall arcade at closing time (evokes the era, recreates nothing; **no real cabinets, games, brands or logos**). Rows of original cabinet shapes with glowing screens showing abstract animated indexed patterns, patterned carpet, neon ceiling tubes, a prize counter, a light-up dance-floor tile area. Dolly slowly through the aisles. **Idle:** mostly dark, attract-mode screens dimly cycling. **Swell:** cabinets power on row by row, ceiling neon flickers to life, floor tiles start chasing. **Beat:** floor tile pattern steps + screen flash + nudge; **bass:** tile brightness + subtle camera bob; **highs:** screen sparkle/flicker. | dark carpet purple, chrome/teal secondary, neon pink-yellow accent, near-black fog | `ashfall`, `glacier`, `jungle` |
 | **Aurora Field** | `aurora-field` / `AuroraField` | 8112 | Calm, beautiful snowfield at night: the between-songs favourite (original). Gentle snowy terrain, a pine-forest edge, a frozen lake, and big aurora ribbons in the sky (additive animated ribbon meshes rippling like curtains), stars. Slow, wide camera glides. **Idle:** faint aurora, gentle snowfall, very calm (must look great at k=0, since it will often be on between songs). **Swell:** aurora brightens and spreads, more ribbons, colour shifts across the accent ramp. **Beat:** soft aurora pulse (keep it gentle) + tiny nudge; **mids:** ribbon ripple speed; **highs:** star twinkle + snow sparkle. | snow white-blue base, pine green secondary, aurora green-or-magenta accent, deep night-blue fog | `bloodmoon`, `amber`, `vapor` |
+
+## Wave 5 — public-domain horror (spec: `docs/superpowers/specs/2026-11-21-horror-wave-design.md`)
+
+Nine were started in parallel on 2026-11-21; the sessions hit the usage limit, and on 2026-11-22 the user dropped six (Sleeper Rises, Carpathian Approach, Storm Laboratory, Hunter's Moon, Sealed Tomb, Shadow Ship; branches, worktrees and sessions deleted / archived). **Merged 2026-11-22** (indices 36–38): Colour from the Well (38–44 draws / ≤7.7k tris), The Backrooms (14 / ~13k), Fog Harbour (46–52 / ≤13.2k, the planar reflection doubles the world). Each passed k=0/1, crossfade, `dispose()` and three palettes in its session. Real-fps `?bench` still pending. The merge loop broke on Windows (`/tmp` doesn't exist for node) and two merge commits went in with conflict markers in `js/styles/index.js`; fixed forward in the next commit. Use a repo-relative temp path next time.
 
 ## Wave 4 — Radiohead set (spec: `docs/superpowers/specs/2026-11-20-radiohead-setlist-environments-design.md`)
 

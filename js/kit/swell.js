@@ -210,3 +210,37 @@ export class Follow3 {
     return this.p;
   }
 }
+
+/**
+ * Kit v5: walkers that come out as intensity rises and go home as it falls, at a fixed
+ * walking speed, so a jump in intensity never teleports anyone. Walker i heads for distance
+ * stage(k, th, th + spread) * length along its own route (0 = home, out of sight in the fog);
+ * you map w.u (0..1 along the route) to a position. Pairs with K.Stager for what they walk to.
+ *   this.walk = new K.Walkers(22, { from: [0.1, 0.7], length: (i) => 20 + i % 5 * 3 });
+ *   update: for (const w of this.walk.update(k, dt, { speed: 1.5 + k * 0.5 })) {
+ *             if (w.d < 0.05) continue;                       // still at home
+ *             const [x, z] = routeAt(w.i, w.u); const step = Math.sin(w.phase);   // gait
+ *           }
+ * Each walker: { i, th, L, d, u, moved, phase }. phase advances with distance walked
+ * (gaitRate per unit) plus a slow idle rock (idleRate per second).
+ */
+export class Walkers {
+  constructor(n, { from = [0.05, 0.7], spread = 0.08, length = 20, gaitRate = 2.4, idleRate = 0.9, seed = 1 } = {}) {
+    this.gaitRate = gaitRate; this.idleRate = idleRate;
+    this.list = Array.from({ length: n }, (_, i) => {
+      const h = Math.sin((i + 1) * 12.9898 + seed * 78.233) * 43758.5453, r = h - Math.floor(h);
+      const th = lerp(from[0], from[1], n > 1 ? i / (n - 1) : 0) * 0.7 + lerp(from[0], from[1], r) * 0.3;
+      return { i, th, spread, L: typeof length === 'function' ? length(i) : length, d: 0, u: 0, moved: 0, phase: r * 6.28 };
+    });
+  }
+  update(k, dt, { speed = 1.5 } = {}) {
+    for (const w of this.list) {
+      const want = stage(k, w.th, w.th + w.spread) * w.L, prev = w.d;
+      w.d += clamp(want - w.d, -speed * dt, speed * dt);
+      w.moved = Math.abs(w.d - prev);
+      w.u = w.L > 0 ? w.d / w.L : 0;
+      w.phase += w.moved * this.gaitRate + dt * this.idleRate;
+    }
+    return this.list;
+  }
+}

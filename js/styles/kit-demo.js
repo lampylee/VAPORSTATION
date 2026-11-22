@@ -18,6 +18,16 @@
 //           the sweep turns round once per bar                    K.BarClock
 //           a red streak band in the sky at full intensity        K.skyBand + K.tileBlob, uvOffset scroll
 //           beats gust the snow                                   Particles.gust
+//   Kit v5: a well yard beside the house (one corner, ~12 draws):
+//           ground rings that blight outward from the well        K.ringBands + per-ring blend
+//           well, jagged rocks, a net sagging between two poles   K.props.well / rock / sagStrip / sagPosts
+//           a beam rising out of the well at full intensity       K.sprites.lightShaft({ fromBottom })
+//           beat rings from the well; the house windows flare     K.Ripples.at, K.props.houseWindows
+//             as a ring passes them                               + K.sprites.panelLight / panelHalo
+//           figures walk out to the well and home again           K.Walkers + K.sprites.figure({ pose: 'walk' })
+//           stretched crate instances (one box mesh, any size)    inst.stretch(i, sx, sz)
+//           soft additive mist over the yard                      K.Particles 'softMist'
+//           (rigs, not used here: K.OrbitFocusRig, K.DriftRig, K.GridWanderRig)
 //
 // Intensity: idle = dim dusk, slow drift, snow. Playing = lamps on, faster
 // flight, trees sway with bass, fireflies, moon pulses on beats.
@@ -29,6 +39,7 @@ import { R, fromKeys } from '../palette/palette.js';
 import * as K from '../kit/index.js';
 
 const TREE_CELL = 5, TREE_RADIUS = 9; // cells around the camera to populate
+const IDENT = mat4.create();
 
 export class KitDemo {
   static meta = { name: 'Kit demo', hidden: true };
@@ -116,6 +127,56 @@ export class KitDemo {
     this.bandTex = r.texture(K.makeIndexed(64, 32, (x, y) => (K.tileBlob(x, y * 2, 16, 5) * (1 - Math.abs(y - 16) / 16) > 0.32 + K.bayer(x, y) * 0.2 ? R(2, 2) : K.CLEAR)));
     this.height = height;
 
+    // ---- Kit v5: a well yard beside the house
+    const wx = hx + (tx / tl) * 9, wz = hz + (tz / tl) * 9, wy = height(wx, wz);
+    this.wellPos = [wx, wy, wz];
+    this.rings = K.ringBands([0, 3, 6, 10, 15], { height: (x, z) => height(x, z) + 0.06, cx: wx, cz: wz, segs: [12, 20, 24, 28], uv: 0.35 });
+    this.ringMeshes = this.rings.map((g) => r.createMesh(g.geo));
+    this.wellMesh = r.createMesh(K.props.well(1.2, 0.9, 0.9));
+    this.stoneTex = r.texture(K.tex.cracks({ ramp: 3, cells: 6, patches: null }));
+    this.rockMesh = r.createMesh(K.props.rock(4, { spike: 0.6 }));
+    this.rockInst = r.createInstances(6);
+    for (let i = 0; i < 6; i++) {
+      const a = i * 1.7 + 0.4, rad = 4.5 + (i % 3) * 3.2, x = wx + Math.cos(a) * rad, z = wz + Math.sin(a) * rad;
+      this.rockInst.set(i, x, height(x, z) + 0.1, z, 0.5 + (i % 3) * 0.25, a * 2, 0.9, 0, 0.8);
+    }
+    this.rockInst.upload(6);
+    const nx2 = wx + (tz / tl) * 6, nz2 = wz - (tx / tl) * 6;
+    this.netM = mat4.trs(mat4.create(), nx2, height(nx2, nz2), nz2, 0, this.signPos[3] + Math.PI / 2, 0);
+    this.netMesh = r.createMesh(K.props.sagStrip(5, 2, 0.5));
+    this.netPosts = r.createMesh(K.props.sagPosts(5, 2));
+    this.netTex = r.texture(K.sprites.chainLink({ index: R(1, 2), dark: R(1, 1) }));
+    // crates: one box mesh, each instance stretched to its own size
+    this.crateMesh = r.createMesh(K.props.crate(1));
+    this.crateInst = r.createInstances(4);
+    [[1.6, 0.8, 1], [0.7, 1.2, 0.7], [2.4, 0.5, 0.9], [1, 1, 1]].forEach(([sx, sy, sz], i) => {
+      const x = hx + (i - 1.5) * 1.6 + 4, z = hz + 3.4;
+      this.crateInst.set(i, x, height(x, z), z, 1, this.signPos[3] + i * 0.3, 1, 0, sy);
+      this.crateInst.stretch(i, sx, sz);
+    });
+    this.crateInst.upload(4);
+    // the beam: a tall quad standing on the well, brightest at the bottom
+    this.beamMesh = r.createMesh(K.billboardQuad(2.2, 26));
+    this.beamTex = r.texture(K.sprites.lightShaft({ ramp: 2, fromBottom: true }));
+    this.beamInst = r.createInstances(1);
+    // beat rings from the well; the house windows flare as a ring reaches them
+    this.ripples = new K.Ripples(r, { max: 6, color: R(2, 2), life: 4 });
+    const hm = { x: hx, y: height(hx, hz) - 0.3, z: hz, rotY: this.signPos[3] };
+    this.windows = K.props.houseWindows(hm, { w: 6, h: 3, d: 5 }, { rows: [0.5], cols: [-0.3, 0.3] })
+      .concat(K.props.houseWindows(hm, { w: 6, h: 3, d: 5 }, { rows: [0.5], cols: [-0.3, 0.3], face: 'back' }));
+    this.winMesh = r.createMesh(K.centredQuad(0.8, 0.9));
+    this.haloMesh = r.createMesh(K.centredQuad(2.4, 2));
+    this.winTex = r.texture(K.sprites.panelLight({ ramp: 2 }));
+    this.haloTex = r.texture(K.sprites.panelHalo({ ramp: 2 }));
+    this.winInst = r.createInstances(this.windows.length);
+    this.haloInst = r.createInstances(this.windows.length);
+    // figures: walk out from the house door to the well as the band swells, home when it drops
+    this.walkers = new K.Walkers(6, { from: [0.25, 0.8], length: Math.hypot(wx - hx, wz - hz) - 3 });
+    this.figTex = [0, 1].map((f) => r.texture(K.sprites.figure({ pose: 'walk', frame: f })));
+    this.figInst = [r.createInstances(6), r.createInstances(6)];
+    this.door = [hx + (wx - hx) * 0.2, hz + (wz - hz) * 0.2];
+    this.mist = new K.Particles(r, 'softMist', { count: 6, area: [30, 1.2, 30] });
+
     // ---- weather
     this.snow = new K.Particles(r, 'snow');
     this.flies = new K.Particles(r, 'fireflies');
@@ -155,7 +216,35 @@ export class KitDemo {
     if (d.beat) this.snow.gust(0.8 * d.accent);
     this.snow.update(dt, eye, { amount: K.swell(k, 0.7, 0.15), speed: 1 + d.level });
     this.flies.update(dt, [eye[0], this.ground.heightAt(eye[0], eye[2]) + 2, eye[2]], { amount: k, speed: 1 + d.high * 2 });
+    this._yard(d, k, dt);
     this._scatter();
+  }
+
+  /** Kit v5 well yard: spreading rings, beam, beat rings, windows, walkers. */
+  _yard(d, k, dt) {
+    const [wx, wy, wz] = this.wellPos, t = this.time;
+    const spread = K.swell(k, 1, 17);                                   // blight front radius
+    this.rings.forEach((g) => { g.blend = Math.min(1, Math.max(0, (spread - g.mid) / 5)) * 0.85; });
+    this.beam = K.stage(k, 0.65, 1);
+    this.beamInst.set(0, wx, wy + 0.5, wz, 1, 0, this.beam * (0.8 + 0.2 * Math.sin(t * 1.3)), 0, 1);
+    this.beamInst.upload(1);
+    if (d.beat && k > 0.1) this.ripples.spawn(wx, wy + 0.1, wz, 34, 0.4 + 0.6 * d.accent * k);
+    this.ripples.update(dt);
+    this.windows.forEach((w, i) => {
+      const lit = K.stage(k, 0.1 + i * 0.08, 0.3 + i * 0.08) * 0.7 + this.ripples.at(w.x, w.z, 3) * 0.8;
+      this.winInst.set(i, w.x, w.y, w.z, 1, this.signPos[3] + (i >= 2 ? Math.PI : 0), 0.25 + lit, 0, 1);
+      this.haloInst.set(i, w.x, w.y, w.z, 1, 0, lit * 0.6, 0, 1);
+    });
+    this.winInst.upload(this.windows.length); this.haloInst.upload(this.windows.length);
+    const n = [0, 0], [dx, dz] = this.door, ux = wx - dx, uz = wz - dz, ul = Math.hypot(ux, uz);
+    for (const w of this.walkers.update(k, dt, { speed: 1.1 + k * 0.4 })) {
+      if (w.d < 0.05) continue;
+      const lane = (w.i - 2.5) * 0.7, x = dx + (ux / ul) * w.d - (uz / ul) * lane, z = dz + (uz / ul) * w.d + (ux / ul) * lane;
+      const f = Math.sin(w.phase) > 0 ? 0 : 1, fade = Math.min(1, w.d / 2);
+      this.figInst[f].set(n[f]++, x, this.height(x, z) - 0.05, z, 0.9, 0, 0.8 * fade, 0, 2);
+    }
+    this.figInst[0].upload(n[0]); this.figInst[1].upload(n[1]);
+    this.mist.update(dt, [wx, wy + 0.8, wz], { amount: K.swell(k, 1, 0.5) });
   }
 
   /** Deterministic foliage in world cells around the camera (infinite forest), shrinking away at the edge. */
@@ -204,6 +293,22 @@ export class KitDemo {
     r.draw(this.roofMesh, this.houseM, { texture: this.roofTex, tint: col.tint });
     r.draw(this.mastMesh, mat4.identity(this.m), { texture: this.poleTex, tint: col.tint });
 
+    // Kit v5 well yard
+    this.ringMeshes.forEach((m, i) => r.draw(m, IDENT, { texture: this.groundTex, texture2: this.groundTex2, blend: this.rings[i].blend, tint: col.tint }));
+    const [wx, wy, wz] = this.wellPos;
+    r.draw(this.wellMesh, mat4.trs(this.m, wx, wy, wz), { texture: this.stoneTex, tint: col.tint });
+    r.drawInstanced(this.rockMesh, this.rockInst, { texture: this.stoneTex, tint: col.tint });
+    r.drawInstanced(this.crateMesh, this.crateInst, { texture: this.wallTex, tint: col.tint });
+    r.draw(this.netPosts, this.netM, { texture: this.poleTex, tint: col.tint });
+    r.draw(this.netMesh, this.netM, { texture: this.netTex, twoSided: true, tint: col.tint });
+    r.drawInstanced(this.winMesh, this.winInst, { texture: this.winTex, unlit: true, tint: [1, 1, 1] });
+    r.drawInstanced(this.haloMesh, this.haloInst, { texture: this.haloTex, billboard: 2, unlit: true, additive: true, depthWrite: false, tint: [1, 1, 1] });
+    r.drawInstanced(this.quad, this.figInst[0], { texture: this.figTex[0], billboard: 1, tint: col.tint });
+    r.drawInstanced(this.quad, this.figInst[1], { texture: this.figTex[1], billboard: 1, tint: col.tint });
+    this.ripples.draw(r, { brightness: 0.7 });
+    if (this.beam > 0.01) r.drawInstanced(this.beamMesh, this.beamInst, { texture: this.beamTex, billboard: 1, unlit: true, additive: true, depthWrite: false, fog: false, fade: [50, 90], tint: [1, 1, 1] });
+    this.mist.draw(r, { brightness: dim });
+
     // lamps switch on one after another as the band swells in
     const nl = this.lamps.length;
     this.lamps.forEach((l, i) => {
@@ -230,9 +335,12 @@ export class KitDemo {
 
   dispose(r) {
     this.ground.dispose(); this.sky.dispose(r); this.snow.dispose(r); this.flies.dispose(r);
-    this.sign.dispose(r); this.search.dispose(r);
-    [this.quad, this.lampMesh, this.fenceMesh, this.lanternMesh, this.wallMesh, this.roofMesh, this.bandMesh, this.mastMesh].forEach((m) => m.dispose());
-    [this.groundTex, this.groundTex2, this.pineTex, this.bushTex, this.poleTex, this.glowTex, this.fenceTex, this.wallTex, this.roofTex, this.bandTex].forEach((t) => r.deleteTexture(t));
-    [this.trees, this.bushes, this.lampInst, this.glowInst, this.fenceInst, this.lanternInst].forEach((i) => i.dispose());
+    this.sign.dispose(r); this.search.dispose(r); this.ripples.dispose(r); this.mist.dispose(r);
+    [this.quad, this.lampMesh, this.fenceMesh, this.lanternMesh, this.wallMesh, this.roofMesh, this.bandMesh, this.mastMesh,
+      ...this.ringMeshes, this.wellMesh, this.rockMesh, this.netMesh, this.netPosts, this.crateMesh, this.beamMesh, this.winMesh, this.haloMesh].forEach((m) => m.dispose());
+    [this.groundTex, this.groundTex2, this.pineTex, this.bushTex, this.poleTex, this.glowTex, this.fenceTex, this.wallTex, this.roofTex, this.bandTex,
+      this.stoneTex, this.netTex, this.beamTex, this.winTex, this.haloTex, ...this.figTex].forEach((t) => r.deleteTexture(t));
+    [this.trees, this.bushes, this.lampInst, this.glowInst, this.fenceInst, this.lanternInst,
+      this.rockInst, this.crateInst, this.beamInst, this.winInst, this.haloInst, ...this.figInst].forEach((i) => i.dispose());
   }
 }

@@ -1,10 +1,11 @@
 // Modular low-poly props. Each returns geometry (r.createMesh(geo)), with UVs
 // sized so a 64x64 texture tiles at roughly 1 repeat per world unit (or as noted).
 // Pivot is at the base centre unless noted. Combine with merge() for one draw call.
-import { GeoBuilder, box, merge } from '../gfx/geometry.js';
+import { GeoBuilder, box, merge, icosphere, flatNormals } from '../gfx/geometry.js';
 import { CLEAR } from '../gfx/textures.js';
 import { R } from '../palette/palette.js';
-import { rotX, rotY, rotZ, transform, cloneGeo } from './shapes.js';
+import { rotX, rotY, rotZ, transform, cloneGeo, rotPoint } from './shapes.js';
+import { rand2 } from './noise.js';
 
 // rotate / transform a geometry in place (positions + normals)
 export { rotX, rotY, rotZ, transform, cloneGeo };
@@ -185,4 +186,86 @@ export function gableHouse(width = 6, depth = 5, wallH = 3, roofH = 2, { tile = 
     roof.quad(a, b, c, e, [0, slope], [ex * 2 * s, slope], [ex * 2 * s, 0], [0, 0]);
   }
   return { walls: walls.build(), roof: roof.build() };
+}
+
+// ---------------------------------------------------------------- Kit v5 props
+
+/**
+ * Kit v5: open ring wall with a lip (well shafts, fountains, round tower stubs, pipes).
+ * Outer wall, inner wall facing in (running `depth` below the base) and a flat lip.
+ * Pivot at the ground centre. From Colour from the Well.
+ *   const well = r.createMesh(K.props.well(1.35, 1.0, 0.95));
+ */
+export function well(outer = 1.35, inner = 1.0, height = 0.95, { segs = 12, depth = 0.6, uRepeat = 6 } = {}) {
+  const g = new GeoBuilder();
+  for (let i = 0; i < segs; i++) {
+    const a0 = (i / segs) * Math.PI * 2, a1 = ((i + 1) / segs) * Math.PI * 2;
+    const c0 = Math.cos(a0), s0 = Math.sin(a0), c1 = Math.cos(a1), s1 = Math.sin(a1);
+    const u0 = (i / segs) * uRepeat, u1 = ((i + 1) / segs) * uRepeat;
+    const O = (c, s, y) => [c * outer, y, s * outer], I = (c, s, y) => [c * inner, y, s * inner];
+    const vIn = (height + depth) / Math.max(0.01, height);
+    g.quad(O(c0, s0, 0), O(c0, s0, height), O(c1, s1, height), O(c1, s1, 0), [u0, 1], [u0, 0], [u1, 0], [u1, 1]);
+    g.quad(I(c1, s1, -depth), I(c1, s1, height), I(c0, s0, height), I(c0, s0, -depth), [u1, vIn], [u1, 0], [u0, 0], [u0, vIn]);
+    g.quad(O(c0, s0, height), I(c0, s0, height), I(c1, s1, height), O(c1, s1, height), [u0, 0], [u0, 0.3], [u1, 0.3], [u1, 0]);
+  }
+  return g.build();
+}
+
+/**
+ * Kit v5: jagged rock / reef / boulder. An icosphere pushed in and out per vertex by a hash
+ * of its position, so shared corners stay shared (no cracks). spike stretches the top
+ * vertices up into a crag (0 = round boulder). Pivot at the centre; flat-shaded.
+ * From Fog Harbour.
+ *   const rock = K.props.rock(3, { spike: 1, subdiv: 0 });
+ */
+export function rock(seed = 1, { spike = 1, rough = 0.8, subdiv = 0, scale = 1 } = {}) {
+  const g = icosphere(subdiv, 1), P = g.positions;
+  for (let i = 0; i < P.length; i += 3) {
+    const n = rand2(Math.round(P[i] * 997 + P[i + 1] * 311), Math.round(P[i + 2] * 577 + P[i + 1] * 101), seed);
+    const top = spike > 0 && P[i + 1] > 0.5, f = (1 - rough * 0.45) + n * rough;
+    const side = top ? 1 - 0.5 * spike : 1, up = top ? 1 + (0.6 + n) * spike : 1;
+    P[i] *= f * side * scale; P[i + 1] *= f * up * scale; P[i + 2] *= f * side * scale;
+  }
+  return flatNormals(g);
+}
+
+/**
+ * Kit v5: a strip hung between two points that sags in the middle: fishing nets, washing,
+ * bunting, banners, cables (use a thin height). Lies in the XY plane from x = -len/2 to len/2,
+ * pivot at the base centre; top edge at `height` minus the sag, bottom edge sags `bottomSag`
+ * as much. UVs world-scaled by `tile`. Pair with K.props.sagPosts for the poles.
+ * From Fog Harbour.
+ */
+export function sagStrip(len = 5, height = 2, sag = 0.55, { cols = 8, bottom = 0.35, bottomSag = 0.4, tile = 1.6 } = {}) {
+  const g = new GeoBuilder(), hw = len / 2, s = 1 / tile;
+  const top = (u) => height - sag * Math.sin(Math.PI * u), bot = (u) => bottom + sag * bottomSag * (1 - Math.sin(Math.PI * u));
+  for (let i = 0; i < cols; i++) {
+    const u0 = i / cols, u1 = (i + 1) / cols, x0 = -hw + len * u0, x1 = -hw + len * u1;
+    g.quad([x0, bot(u0), 0], [x1, bot(u1), 0], [x1, top(u1), 0], [x0, top(u0), 0],
+      [x0 * s, bot(u0) * s], [x1 * s, bot(u1) * s], [x1 * s, top(u1) * s], [x0 * s, top(u0) * s], [0, 0, 1]);
+  }
+  return g.build();
+}
+/** Kit v5: the two poles for a sagStrip of the same len / height (one geo). */
+export function sagPosts(len = 5, height = 2, { radius = 0.08, extra = 0.25 } = {}) {
+  return merge([-1, 1].map((sx) => ({ geo: shift(prism(5, radius, height + extra), sx * len / 2, 0, 0) })));
+}
+
+/**
+ * Kit v5: world positions for windows on a house instance that leans (instance tilt) and is
+ * stretched by heightScale, so instanced window quads follow the house. Returns
+ * [{ x, y, z, row, col }] for a grid on the house's front (+z) face (face: 'back' = -z).
+ *   house = { x, y, z, rotX, rotY, rotZ, hs }   (what you passed to inst.set / tilt)
+ *   dims  = { w, h, d }                          (the unscaled walls: width, wall height, depth)
+ *   rows / cols = fractions across the face, e.g. rows [0.3, 0.72], cols [-0.27, 0.27]
+ * scale = the instance's uniform scale. From Fog Harbour.
+ */
+export function houseWindows(house, dims, { rows = [0.5], cols = [-0.25, 0.25], face = 'front', out = 0.04, scale = 1 } = {}) {
+  const res = [], sz = face === 'back' ? -1 : 1;
+  rows.forEach((fy, row) => cols.forEach((fx, col) => {
+    const lp = [fx * dims.w * scale, fy * dims.h * (house.hs ?? 1) * scale, sz * (dims.d / 2 * scale + out)];
+    const q = rotPoint(lp, house.rotX || 0, house.rotY || 0, house.rotZ || 0);
+    res.push({ x: house.x + q[0], y: house.y + q[1], z: house.z + q[2], row, col });
+  }));
+  return res;
 }

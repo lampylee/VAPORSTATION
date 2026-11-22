@@ -6,7 +6,7 @@
 //   f.add(parts, K.props.crate(1), { pos: [0, 0, 2], rot: [0, 0.3, 0] });
 //   f.add(parts, K.props.wall(4, 3), { pos: [0, 0, -2] });
 //   const mesh = r.createMesh(merge(parts));
-import { GeoBuilder, box, merge as mergeRaw } from '../gfx/geometry.js';
+import { GeoBuilder, box, merge as mergeRaw, smoothNormals } from '../gfx/geometry.js';
 import { clamp } from '../gfx/math.js';
 
 // ---- vectors ([x, y, z] arrays) ----
@@ -290,4 +290,45 @@ export function skyBand(e0, e1, { radius = 85, segs = 24, uRepeat = 3 } = {}) {
     g.tri(P(i, ea), P(i + 1, eb), P(i, eb), [u0, 1 - va], [u1, 1 - vb], [u0, 1 - vb], n, [A, B, B]);
   }
   return g.build();
+}
+
+// ---------------------------------------------------------------- ring zones (Kit v5)
+
+/**
+ * Kit v5: one ring (annulus) of ground between radius r0 and r1 around (cx, cz), following
+ * height(x, z), with world-space UVs (uv = repeats per unit) and smooth normals.
+ * Split ground into rings with K.ringBands and give each its own texture2 / blend, so a
+ * change (blight, frost, a spreading light) can run outward from a point. r0 = 0 = a disc.
+ * From Colour from the Well.
+ */
+export function ringBand(r0, r1, { height = () => 0, segs = 40, uv = 0.25, cx = 0, cz = 0, step = 3 } = {}) {
+  const g = new GeoBuilder(), steps = Math.max(1, Math.ceil((r1 - r0) / step));
+  const P = (rad, a) => { const x = cx + Math.cos(a) * rad, z = cz + Math.sin(a) * rad; return [x, height(x, z), z]; };
+  const T = (p) => [p[0] * uv, p[2] * uv];
+  for (let j = 0; j < steps; j++) {
+    const ra = r0 + (r1 - r0) * (j / steps), rb = r0 + (r1 - r0) * ((j + 1) / steps);
+    for (let i = 0; i < segs; i++) {
+      const a0 = (i / segs) * Math.PI * 2, a1 = ((i + 1) / segs) * Math.PI * 2;
+      const p0 = P(ra, a0), p1 = P(ra, a1), p2 = P(rb, a1), p3 = P(rb, a0);
+      if (ra < 1e-4) g.tri(p0, p2, p3, T(p0), T(p2), T(p3));   // centre disc: skip the degenerate half
+      else g.quad(p0, p1, p2, p3, T(p0), T(p1), T(p2), T(p3));
+    }
+  }
+  return smoothNormals(g.build());
+}
+
+/**
+ * Kit v5: ground split into rings at the given edges, e.g. [0, 6, 12, 20, 30, 45].
+ * Returns [{ geo, r0, r1, mid }]. In update, give ring i a blend from the spread radius:
+ *   const spread = K.swell(k, 4, 40);
+ *   rings.forEach((g) => g.blend = Math.min(1, Math.max(0, (spread - g.mid) / 6)));
+ * Same options as ringBand (segs can be an array to use fewer segments near the centre).
+ */
+export function ringBands(edges, opts = {}) {
+  const out = [];
+  for (let i = 0; i < edges.length - 1; i++) {
+    const segs = Array.isArray(opts.segs) ? opts.segs[i] : opts.segs;
+    out.push({ geo: ringBand(edges[i], edges[i + 1], { ...opts, segs: segs ?? 40 }), r0: edges[i], r1: edges[i + 1], mid: (edges[i] + edges[i + 1]) / 2 });
+  }
+  return out;
 }

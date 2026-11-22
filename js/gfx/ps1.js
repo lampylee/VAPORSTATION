@@ -22,7 +22,7 @@ layout(location=2) in vec2 aUV;
 layout(location=3) in vec3 aColor;
 layout(location=4) in vec4 aInst0;   // instancing: xyz position, uniform scale
 layout(location=5) in vec4 aInst1;   // instancing: rotY, shade, sway phase, height scale
-layout(location=6) in vec4 aInst2;   // instancing: rotX, rotZ (tilt / swing; rotZ spins billboards), unused, unused
+layout(location=6) in vec4 aInst2;   // instancing: rotX, rotZ (tilt / swing; rotZ spins billboards), stretch X, stretch Z (0 = 1)
 uniform mat4 uModel, uView, uProj;
 uniform vec2 uSnapGrid;      // half internal resolution / snap size in pixels
 uniform float uSnapOn;
@@ -50,6 +50,10 @@ void main() {
   if (uInstanced > 0.5) {
     p.x += sin(uTime * 1.7 + aInst1.z) * uSway * max(p.y, 0.0);
     p.y *= aInst1.w;
+    // Kit v5: per-instance X / Z stretch (0 = unset = 1, so older styles are unchanged)
+    vec2 sxz = vec2(aInst2.z == 0.0 ? 1.0 : aInst2.z, aInst2.w == 0.0 ? 1.0 : aInst2.w);
+    p.x *= sxz.x; p.z *= sxz.y;
+    nrm = normalize(vec3(nrm.x / sxz.x, nrm.y, nrm.z / sxz.y));
     shade = aInst1.y;
     float cx = cos(aInst2.x), sx = sin(aInst2.x), cz = cos(aInst2.y), sz = sin(aInst2.y);
     if (uBillboard > 0.5) {
@@ -268,7 +272,7 @@ class Mesh {
 
 /**
  * Per-instance data for drawInstanced: 12 floats each
- * [x, y, z, scale, rotY, shade, swayPhase, heightScale, rotX, rotZ, -, -].
+ * [x, y, z, scale, rotY, shade, swayPhase, heightScale, rotX, rotZ, stretchX, stretchZ].
  * A negative heightScale flips the mesh vertically (handy for wing flaps).
  */
 const INST_STRIDE = 12;
@@ -289,6 +293,13 @@ class InstanceBuffer {
   }
   /** Change only the tilt of instance i (after set()). */
   tilt(i, rotX = 0, rotZ = 0) { const o = i * INST_STRIDE; this.data[o + 8] = rotX; this.data[o + 9] = rotZ; }
+  /**
+   * Kit v5: stretch instance i along its local X and Z (after set(); Y is heightScale).
+   * Applied before tilt / rotY, so a box instance becomes any w x h x d block.
+   * Billboards use sx as a width multiplier. Values persist until changed: call
+   * stretch(i) (= 1, 1) when you reuse a slot for an unstretched instance.
+   */
+  stretch(i, sx = 1, sz = 1) { const o = i * INST_STRIDE; this.data[o + 10] = sx; this.data[o + 11] = sz; }
   /** Upload the first `count` instances (call after set()). */
   upload(count = this.count) {
     this.count = Math.min(count, this.max);
