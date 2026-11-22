@@ -38,18 +38,8 @@ import { BackRoadLights } from './back-road-lights.js';
 import { PaperCrowd } from './paper-crowd.js';
 import { Newsprint } from './newsprint.js';
 import { RightPlace } from './right-place.js';
-<<<<<<< HEAD
-<<<<<<< HEAD
 import { ColourWell } from './colour-well.js';
-
-export const STYLES = [TestScene, Fogway, Monoliths, Relic, KitDemo, AshfallTown, LostValley, NeonCircuit, NightManor, DrownedRuins, RouteNine, ColdBase, StationDeck, DreamJournal, GraveyardHill, ArcadeAfterHours, AuroraField, KitCalm, LanternRiver, RainWindow, CloudSea, PetalSteps, MoonlitShallows, GreenhouseDusk, QuietHouse, MothLamp, UnderTheHull, StillPool, Underriver, BeforeDawn, SaltFlat, SearchlightTown, BackRoadLights, PaperCrowd, Newsprint, RightPlace, ColourWell];
-=======
 import { Backrooms } from './backrooms.js';
-
-export const STYLES = [TestScene, Fogway, Monoliths, Relic, KitDemo, AshfallTown, LostValley, NeonCircuit, NightManor, DrownedRuins, RouteNine, ColdBase, StationDeck, DreamJournal, GraveyardHill, ArcadeAfterHours, AuroraField, KitCalm, LanternRiver, RainWindow, CloudSea, PetalSteps, MoonlitShallows, GreenhouseDusk, QuietHouse, MothLamp, UnderTheHull, StillPool, Underriver, BeforeDawn, SaltFlat, SearchlightTown, BackRoadLights, PaperCrowd, Newsprint, RightPlace, Backrooms];
->>>>>>> refs/heads/claude/env-backrooms-8d3136
-=======
 import { FogHarbour } from './fog-harbour.js';
 
-export const STYLES = [TestScene, Fogway, Monoliths, Relic, KitDemo, AshfallTown, LostValley, NeonCircuit, NightManor, DrownedRuins, RouteNine, ColdBase, StationDeck, DreamJournal, GraveyardHill, ArcadeAfterHours, AuroraField, KitCalm, LanternRiver, RainWindow, CloudSea, PetalSteps, MoonlitShallows, GreenhouseDusk, QuietHouse, MothLamp, UnderTheHull, StillPool, Underriver, BeforeDawn, SaltFlat, SearchlightTown, BackRoadLights, PaperCrowd, Newsprint, RightPlace, FogHarbour];
->>>>>>> refs/heads/claude/env-fog-harbour-f781d4
+export const STYLES = [TestScene, Fogway, Monoliths, Relic, KitDemo, AshfallTown, LostValley, NeonCircuit, NightManor, DrownedRuins, RouteNine, ColdBase, StationDeck, DreamJournal, GraveyardHill, ArcadeAfterHours, AuroraField, KitCalm, LanternRiver, RainWindow, CloudSea, PetalSteps, MoonlitShallows, GreenhouseDusk, QuietHouse, MothLamp, UnderTheHull, StillPool, Underriver, BeforeDawn, SaltFlat, SearchlightTown, BackRoadLights, PaperCrowd, Newsprint, RightPlace, ColourWell, Backrooms, FogHarbour];
