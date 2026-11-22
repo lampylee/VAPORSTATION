@@ -24,6 +24,11 @@ It must be `localhost` (not a `file://` path), or Chrome won't allow audio input
 4. Watch the meter under the player while the band soundchecks. The pink mark is the **threshold**. Silence (stage noise) should sit clearly left of it and music clearly right of it. Move the threshold or the **Input gain** until that's true.
 5. Press **F** for fullscreen. The UI and cursor hide automatically. **H** brings the UI back.
 
+**Pre-show check:** at the venue, with the interface plugged in and the band playing, press **Pre-show check** at the
+bottom of Settings (or open `?selftest`). It runs every environment briefly on this laptop (about 2 minutes) and
+reports the graphics card, frame rates, input level, MIDI, offline copy and power. Environments that are too slow on this
+laptop are taken out of the rotation.
+
 **Kiosk launcher (Windows):** once the steps above work, double-click `kiosk.bat` instead. It starts the server and opens
 Chrome (or Edge) fullscreen in its own profile, with audio running without a click, the input permission accepted
 automatically (that profile only), no panel and no cursor. **H** shows the panel, **Alt+F4** quits. Open

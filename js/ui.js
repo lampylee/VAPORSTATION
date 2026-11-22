@@ -101,6 +101,7 @@ export class UI {
     this.drawer.append(el('section', { className: 'foot' },
       el('div', { className: 'btns' },
         el('button', { textContent: 'Fullscreen (F)', onclick: () => h.onFullscreen() }),
+        el('button', { textContent: 'Pre-show check', title: 'Runs every environment briefly on this machine and checks audio, MIDI, offline copy and power (about 2 minutes)', onclick: () => h.onSelfTest?.() }),
         el('button', { textContent: 'Reset settings', onclick: () => h.onReset() })),
       el('pre', { className: 'keys', textContent: 'F fullscreen   H hide UI   D debug\n1-9 style      N / Shift+N next/prev\n0 test scene   A auto-switch  C CRT\nP / Shift+P palette   O style palettes\nS setlist mode\nPgDn → ]  next song (footswitch)\nPgUp ← [  previous song\nI hold   Z freeze   B blackout\nG big moment   T tap   Shift+T clear\nL lock beats to tempo   R feel\nDrop an image, palette, setlist or\naudio file anywhere.' })));
 

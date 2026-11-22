@@ -17,6 +17,7 @@ import { Midi } from './show/midi.js';
 import { ShowUI, MidiUI, EnvBrowser } from './show/ui.js';
 import { Governor } from './safety/governor.js';
 import { Watchdog } from './safety/watchdog.js';
+import { SelfTest } from './safety/selftest.js';
 
 const s = loadSettings();
 const canvas = document.getElementById('view');
@@ -51,6 +52,7 @@ const ui = new UI(s, STYLES.map((C) => C.meta.name), {
   onDemo: () => playFile('demo/demo.wav', 'demo track'),
   onRefresh: () => refreshDevices(),
   onFullscreen: () => toggleFullscreen(),
+  onSelfTest: () => startSelfTest(),
   onReset() { resetSettings(s); ui.refresh(); applyLook(); engine.setGainDb(s.inputGainDb); engine.setChannel(s.channel); selectPalette(''); setlist.cancelCue(); syncPool(); setlistUI.refresh(); showUI.refresh(); },
 });
 engine.attachPlayer(ui.player);
@@ -420,8 +422,21 @@ const frameError = (where, e) => {
 
 // ---------------- main loop ----------------
 let last = performance.now(), fps = 60, dbgTimer = 0;
-const bench = new URLSearchParams(location.search).has('bench') ? new Bench(styles, renderer) : null;
+let bench = params.has('bench') ? new Bench(styles, renderer) : null;
 if (bench) { s.debug = true; applyLook(); setUiVisible(false); governor.enabled = false; }
+
+// Pre-show check (?selftest or the button): short bench of every style + venue checks, then a report.
+let selftest = null;
+function startSelfTest() {
+  if (selftest && !selftest.finished) return;
+  const back = styles.cur;
+  selftest = new SelfTest({ renderer, styles, engine, midi, governor, keyOf: styleKey, s });
+  selftest.onClose = () => { if (!kiosk) setUiVisible(true); };
+  selftest.back = back;
+  bench = selftest.bench;
+  setUiVisible(false);
+}
+if (params.has('selftest') && !bench) startSelfTest();
 let lastIn = null;   // last good analysis result, reused if a frame's analysis throws
 function frame(now) {
   requestAnimationFrame(frame);
@@ -476,7 +491,15 @@ function frame(now) {
   } catch (e) { frameError('render', e); }
   markEnvs();
   if (uiVisible) showUI.update();
-  if (bench && !bench.done) { bench.record(dt, performance.now() - cpuStart); overlay.hidden = false; overlay.textContent = bench.label; }
+  if (bench && !bench.done) {
+    bench.record(dt, performance.now() - cpuStart);
+    selftest?.tick(dt);
+    overlay.hidden = false; overlay.textContent = selftest ? selftest.label : bench.label;
+  } else if (selftest && !selftest.finished) {
+    overlay.hidden = true; bench = null;
+    styles.cur = selftest.back; styles.next = -1;   // under the report dialog
+    selftest.finish().catch((e) => console.error('[selftest]', e));
+  }
   else if (bench && bench.done && overlay.textContent !== bench.label) overlay.textContent = bench.label;
 
   if (uiVisible) ui.updateMeter(audio.rmsDbSmooth, s.thresholdDb, state.playing);

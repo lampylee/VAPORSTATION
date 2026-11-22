@@ -41,7 +41,7 @@ Off in `?bench`. `viz.governor` exposes `tier`, `heavy`, `reset()`. Debug overla
   exact digital zero for 8 s (a dead stream; a real line has a noise floor) is reopened.
   Status line shows what happened.
 
-## 3. Later (not in this pass)
+## 3. Offline, kiosk, pre-show check (all landed 2026-11-22; see HANDOFF)
 
 - Offline PWA (service worker, cache every module and the demo) + a kiosk launcher
   (Chrome `--kiosk --autoplay-policy=no-user-gesture-required`, audio permission pre-granted).

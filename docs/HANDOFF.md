@@ -58,8 +58,8 @@ Number keys reach 0–9; the rest via N / Shift+N, the dropdown, auto-switch, a 
 
 ## Open items (priority)
 
-1. **Gig-safety layer (Phase 5)**, in progress: governor, watchdog, offline PWA and kiosk launcher done (see the last
-   section); next the pre-show self-test. Design: `docs/superpowers/specs/2026-11-22-gig-safety-design.md`.
+1. **Gig-safety layer (Phase 5)**: built (governor, watchdog, offline PWA, kiosk launcher, pre-show check; see the last
+   section). Left: try it on the gig laptop. Design: `docs/superpowers/specs/2026-11-22-gig-safety-design.md`.
 2. **Add a GitHub remote and push** (the user has to create the repo; everything lives on one disk until then).
 3. Run the "not verified" checks above on the gig laptop.
 4. Song-section awareness (verse / chorus / drop from energy over several bars) so camera moves and reveals land on section
@@ -139,7 +139,7 @@ Number keys reach 0–9; the rest via N / Shift+N, the dropdown, auto-switch, a 
 6. Afterwards: promote reported kit suggestions (a Kit vN pass, shown in `kit-demo.js`), then delete the branches, worktrees and
    archive the sessions once the user agrees.
 
-## Gig-safety layer (Phase 5) — in progress
+## Gig-safety layer (Phase 5) — built, needs gig-laptop checks
 
 Design: `docs/superpowers/specs/2026-11-22-gig-safety-design.md`.
 
@@ -173,4 +173,16 @@ errors), governor tiers + the saturation cap with synthetic frame times, every s
 - Tested in the pane: 90 files cached; server stopped → `?kiosk` reload loads fully from cache, no GL errors; input retry
   backoff 0.5 → 1 → 2 → 4 s.
 
-**Next:** pre-show self-test page (GPU, fps per style on this machine feeding the heavy list, input level, MIDI).
+**Landed (2026-11-22, part 3): pre-show check**
+- `js/safety/selftest.js`, started by `?selftest` or the **Pre-show check** button (Settings foot). Runs `Bench` with
+  short phases (1 s idle + 2.5 s active per style, ~2.5 min) while sampling the live input peak, then shows a report
+  dialog (OK / WARN / FAIL / INFO): GPU (fails on software rendering), display + refresh, frame rate (styles under 45 fps
+  **replace** the governor's heavy list, unless more than a quarter fail = "machine slow overall", list left alone),
+  audio start without a click, input peak (clipping / silence), MIDI devices, offline cache, wake lock, battery.
+  Copy report / Run again / Close (Close drops `?selftest` from the URL). `window.selfTestReport` holds the result.
+- Pauses auto-switch and the governor while it runs and restores both. `Bench` now takes `{ idle, active, quiet }`.
+- Tested in the pane: full run on the dev laptop (GTX 1660 Ti, 120 Hz: all 39 at 120 fps, report renders, Close works);
+  `finish()` with fake results marks the right style heavy and ignores the hidden test scene.
+
+**Phase 5 remaining:** run the not-verified checks on the gig laptop (kiosk.bat for real, Scarlett unplug / replug, a
+pre-show check there), and add the GitHub remote.

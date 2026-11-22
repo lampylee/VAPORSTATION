@@ -90,7 +90,7 @@ Plus v1's Fogway, Monoliths and Relic. More can be added any time from the same 
 - [x] Service worker (PWA) so the app loads with no network at all, even without `serve.js` (after a first visit).
 - [x] Chrome kiosk launch script (`kiosk.bat`: own profile, `--kiosk`, autoplay, auto-accepted input permission) + `?kiosk` mode + screen wake lock.
 - [x] Performance governor, style crash guard, WebGL context-loss recovery, audio resume / input reopen watchdog.
-- [ ] Pre-show self-test page.
+- [x] Pre-show check (`?selftest` / button): per-style fps on this machine feeds the heavy list; GPU, audio, MIDI, offline, power checks.
 - [ ] Auto-reconnect test with the Scarlett unplug/replug; low-battery / sleep prevention checklist.
 - [ ] Profile on the actual gig laptop.
 
