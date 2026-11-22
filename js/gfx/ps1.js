@@ -37,6 +37,9 @@ uniform vec2 uFade;          // distance fade: near, far (far <= near = off)
 uniform vec2 uMirror;        // x: 1 = reflect the world in the plane y = uMirror.y, 2 = only clip below it
 uniform vec4 uWave;          // world-space wave on y: amp, spatial freq, speed, 0 (amp 0 = off); same field for every draw that uses it
 uniform float uTwoSided;     // 1 = flip the normal toward the camera (paper cards, leaves, banners lit on both faces)
+uniform vec4 uPL[4];         // point lights (Kit v6): xyz position, w radius
+uniform vec3 uPLc[4];        // point light colours
+uniform int uPLn;            // how many are on (beginScene resets to 0)
 out vec3 vUVw;               // uv * w, w  -> undoes perspective correction
 out vec2 vUVp;               // perspective-correct uv (for blending amount)
 out vec3 vColor;
@@ -95,6 +98,15 @@ void main() {
   if (uTwoSided > 0.5 && dot(mat3(uView) * n, view.xyz) > 0.0) n = -n;
   float d =max(dot(n, -uLightDir), 0.0);
   vec3 lit = uAmbient + uLightColor * d;
+  // per-vertex point lights (torches, fires), Gouraud like PS1 vertex lighting; 30 % wraps round so backs still glow
+  for (int i = 0; i < 4; i++) {
+    if (i >= uPLn) break;
+    vec3 lp = uPL[i].xyz;
+    if (uMirror.x > 0.5 && uMirror.x < 1.5) lp.y = 2.0 * uMirror.y - lp.y;
+    vec3 L = lp - world.xyz;
+    float dl = length(L), f = clamp(1.0 - dl / uPL[i].w, 0.0, 1.0);
+    lit += uPLc[i] * (f * f) * (0.3 + 0.7 * max(dot(n, L / max(dl, 1e-4)), 0.0));
+  }
   vColor = aColor * shade * mix(lit, vec3(1.0), uUnlit);
   vec2 uv = aUV * uUVScale + uUVOffset;
   vUVp = uv;
@@ -535,6 +547,7 @@ export class PS1Renderer {
     this.mirrorY = null;
     this.setPalette(null);
     this.setLight([0.3, -0.8, -0.5], [0.9, 0.9, 0.9], [0.25, 0.25, 0.3]);
+    this.setPointLights(null);
     this.setFog([0, 0, 0], 10, 60);
   }
 
@@ -597,6 +610,23 @@ export class PS1Renderer {
     gl.uniform3f(u.uLightDir, dir[0] / l, dir[1] / l, dir[2] / l);
     gl.uniform3fv(u.uLightColor, color);
     gl.uniform3fv(u.uAmbient, ambient);
+  }
+
+  /**
+   * Kit v6: up to 4 point lights for the rest of this scene, lit per vertex (subdivide big floors so the
+   * pool is smooth). list = [{ pos: [x, y, z], color: [r, g, b] (may exceed 1), radius }], or null / [] = off.
+   * beginScene() turns them off, so they never leak into another style. Unlit draws ignore them.
+   */
+  setPointLights(list) {
+    const gl = this.gl, u = this.world.u, n = Math.min(4, list?.length || 0);
+    const P = this._plPos || (this._plPos = new Float32Array(16)), C = this._plCol || (this._plCol = new Float32Array(12));
+    for (let i = 0; i < n; i++) {
+      const l = list[i];
+      P[i * 4] = l.pos[0]; P[i * 4 + 1] = l.pos[1]; P[i * 4 + 2] = l.pos[2]; P[i * 4 + 3] = Math.max(0.01, l.radius);
+      C[i * 3] = l.color[0]; C[i * 3 + 1] = l.color[1]; C[i * 3 + 2] = l.color[2];
+    }
+    if (n) { gl.uniform4fv(u['uPL[0]'], P); gl.uniform3fv(u['uPLc[0]'], C); }
+    gl.uniform1i(u.uPLn, n);
   }
 
   /**

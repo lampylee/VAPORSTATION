@@ -411,3 +411,74 @@ export function panelHalo({ ramp = 2 } = {}) {
     return dshade(ramp, 0.2 + v * 2.4, x, y);
   });
 }
+
+// ---- Kit v6 (Ember Vigil): dark fantasy sprites ----
+
+/**
+ * Tattered heraldic banner, 16x48: dark cloth, trim stripes down the edges, an original
+ * sigil (a falling sun), moth holes and a ragged bottom. hanging: true stores it upside down
+ * so it can hang from its top with a negative instance heightScale (sway then moves the hem).
+ */
+export function tatteredBanner({ ramp = 1, trim = R(2, 1), sigil = R(2, 2), seed = 4, hanging = true } = {}) {
+  const tear = Array.from({ length: 16 }, (_, x) => 34 + Math.floor(rnd(x, 0, seed) * 13 + Math.sin(x * 0.9 + seed) * 2));
+  return make(16, 48, (x, yy) => {
+    const y = hanging ? 47 - yy : yy;            // y = 0 top (rod), 47 bottom (hem)
+    if (y < 2) return y === 0 ? CLEAR : R(0, 0); // rod
+    if (y > tear[x]) return CLEAR;               // ragged hem
+    if (rnd(x >> 1, y >> 1, seed + 3) > 0.94 && y > 8) return CLEAR;   // moth holes
+    if (x === 1 || x === 14) return trim;
+    const cx = x - 7.5, cy = y - 15;
+    const r = Math.hypot(cx, cy);
+    if (r < 3.2) return sigil;                                                    // the sun
+    if (cy > 2 && cy < 13 && Math.abs(cx) < 0.6 + (cy - 2) * 0.08 && (Math.floor(cy) % 3) !== 0) return sigil;   // falling ray
+    if (r > 4.2 && r < 5.2 && cy < 1.5) return trim;                              // halo arc
+    return dshade(ramp, 1.45 + (1 - y / 48) * 0.7 + (rnd(x, y, seed) - 0.5) * 0.45 + Math.sin(x * 1.2) * 0.25 - (y > tear[x] - 4 ? 0.5 : 0), x, y);
+  });
+}
+
+/**
+ * Colossus: a horned, crowned giant's head and shoulders in silhouette, 64x96, with a dithered
+ * moon-rim. Eyes are left as a darker band: put two additive glows on them (eye anchors at
+ * u ≈ 0.42 / 0.58, v ≈ 0.36 from the top).
+ */
+export function colossus({ ramp = 3, seed = 21 } = {}) {
+  const W = 64, H = 96;
+  const inside = (x, y) => {
+    const cx = x - 31.5;
+    if (y > 58) return Math.abs(cx) < 18 + (y - 58) * 0.45 + Math.sin(y * 0.7) * 0.6;          // shoulders, cloak
+    if (y > 48) return Math.abs(cx) < 7 + (y - 48) * 1.1;                                       // neck into shoulders
+    const hy = (y - 36) / 13, head = Math.abs(cx) / 9.5;
+    if (y >= 23 && head * head + hy * hy < 1) return true;                                       // skull
+    if (y >= 14 && y < 26 && Math.abs(cx) < 10 && (Math.floor((cx + 10) / 3.3) % 2 === 0 ? y > 14 + Math.abs(Math.sin(cx * 0.9)) * 3 : y > 21)) return true;   // crown spikes
+    // horns: arcs sweeping out and up from the temples
+    for (const s of [-1, 1]) {
+      const hx = s * cx - 8, t = hx / 18;
+      if (t > 0 && t < 1) { const hcy = 30 - Math.sin(t * Math.PI * 0.85) * 22, w = 3.2 * (1 - t) + 0.6; if (Math.abs(y - hcy) < w) return true; }
+    }
+    return false;
+  };
+  return make(W, H, (x, y) => {
+    if (!inside(x, y)) return CLEAR;
+    const cx = x - 31.5;
+    if (y > 33 && y < 37 && Math.abs(Math.abs(cx) - 4.5) < 2.2) return R(ramp, 0);              // eye sockets
+    const rim = !inside(x - 1, y) || !inside(x + 1, y) || !inside(x, y - 1);
+    if (rim) return dshade(ramp, 1.4 + rnd(x, y, seed) * 0.6, x, y);
+    return dshade(ramp, 0.25 + (rnd(x >> 2, y >> 2, seed) > 0.8 ? 0.4 : 0), x, y);
+  });
+}
+
+/** Eclipse corona: a dithered ring with uneven rays, 32x32. Draw additive behind a dark disc. */
+export function corona({ ramp = 2, seed = 5 } = {}) {
+  return make(32, 32, (x, y) => {
+    const dx = x - 15.5, dy = y - 15.5, d = Math.hypot(dx, dy) / 15.5, a = Math.atan2(dy, dx);
+    const ray = 0.55 + 0.45 * Math.abs(Math.sin(a * 5 + seed) * Math.sin(a * 3.3 - seed));
+    const v = d < 0.5 ? 0 : (1 - (d - 0.5) / (0.5 * ray + 0.05));
+    if (v <= 0 || v < bayer(x, y) * 0.7) return CLEAR;
+    return dshade(ramp, 0.8 + v * 2.4, x, y);
+  });
+}
+
+/** Solid disc, 32x32 (an eclipse's moon, a portal, a pupil). */
+export function disc({ index = R(3, 0) } = {}) {
+  return make(32, 32, (x, y) => (Math.hypot(x - 15.5, y - 15.5) <= 15.5 ? index : CLEAR));
+}

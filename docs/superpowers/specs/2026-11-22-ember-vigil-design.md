@@ -109,3 +109,8 @@ pipeline change (must be 0%). Screenshots of idle, mid and peak for the user.
 
 Exact proportions, colours within the palette, camera path tuning, texture details, how many piers / candles, whether the
 stretch reflection fits.
+
+## Build notes (2026-11-22)
+
+Built as designed. The stretch goal (a flooded strip before the apse with a planar reflection) was not built; the budget
+would allow it (39 draws / 15k tris at full). Measured: 120 fps (display cap) on the dev laptop, worst frame 8.9 ms.

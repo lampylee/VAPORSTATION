@@ -24,7 +24,7 @@ Plan: `ROADMAP.md`. **Current status, open items and next steps: `docs/HANDOFF.m
 - `js/gfx/ps1.js` — low-res FBOs, vertex snap, affine UVs, per-vertex fog/light, CLUT palette lookup, dissolve + dither composite, nearest upscale, CRT.
 - `js/gfx/textures.js` — procedural **indexed** textures (palette slot per pixel).
 - `js/palette/` — palette model (4 ramps × 4 shades + roles), live crossfading palettes, library, user store, editor UI.
-- `js/kit/` — world kit: sky, terrain, particles, sprites, props, camera rigs, swell helpers, GLB loader.
+- `js/kit/` — world kit: sky, terrain, particles, sprites, props, camera rigs, swell helpers, GLB loader, fantasy lights (fire, candles, lightning). The pipeline has up to 4 per-vertex point lights (`r.setPointLights`).
 - `js/show/` — show control between audio and styles (hold, freeze, blackout, big-moment flash, strobe-safe beat limiter, tap tempo → `audio.bpm/beatPhase/bar`), Web MIDI with learn, panel UI incl. environment browser thumbnails.
 - `js/setlist/` — setlists (song → palette + environment pool), cue-until-silence stepping, panel + editor.
 - `js/safety/` — gig safety: performance governor (steps detail down, marks heavy styles) and watchdog (WebGL context loss/restore, audio resume + input reopen). The style manager skips any style that throws.

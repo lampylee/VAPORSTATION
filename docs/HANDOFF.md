@@ -37,10 +37,13 @@ Draws / tris measured at idle → full intensity (320×240, stepped with synthet
 | 10 | Route 9 16–17 / 7.1–7.5k | 23 | Greenhouse at Dusk 28–30 / 7–7.3k | 36 | Colour from the Well 38–44 / 6.4–7.4k |
 | 11 | Cold Base 23–24 / 11.9–14k | 24 | Quiet House 19 / 3.9k | 37 | The Backrooms 14 / 11.3–12.2k |
 | 12 | Station Deck 14–16 / 6.5–6.8k | 25 | Moth Lamp 13 / 5–5.4k | 38 | Fog Harbour 46–52 / 12.4–13.1k |
+|  |  |  |  | 39 | Ember Vigil 35–42 / 14.1–15.1k |
 
 Groups: 1–16 waves 1–2 (general), 17–23 wave 3 (slow songs, built from Kit calm), 24–35 wave 4 Radiohead set (album
 palettes in `ALBUM_PALETTES`, `js/palette/library.js`; spec `docs/superpowers/specs/2026-11-20-radiohead-setlist-environments-design.md`),
 36–38 wave 5 horror (spec `docs/superpowers/specs/2026-11-21-horror-wave-design.md`; six more concepts from that spec were dropped by the user).
+39 Ember Vigil, a single showpiece built in one session (dark fantasy: knight at a fire in a ruined cathedral, keep + eclipse +
+colossus through the rose window; spec `docs/superpowers/specs/2026-11-22-ember-vigil-design.md`). It is the Kit v6 reference.
 Number keys reach 0–9; the rest via N / Shift+N, the dropdown, auto-switch, a setlist song or the environment browser.
 
 ## Verified vs. not verified
@@ -81,6 +84,9 @@ Number keys reach 0–9; the rest via N / Shift+N, the dropdown, auto-switch, a 
   v2 path frames, scatter, segments, neon text, pendulum, instance tilt, dither crossfade, draw `fade`;
   v3 `K.tex` surfaces, caustics / streaks / pulses / ripples, fish & bird schools, `Breath`, screen-door `opacity`, planar reflections;
   v4 `twoSided`, GPU `wave`, `setJitterBoost`, searchlights, `BarClock` / `Stager` / `Follow3`, gabled house, `Wobble`;
+  v6 (2026-11-22, Ember Vigil) **pipeline point lights** (`r.setPointLights`, 4 per scene, per vertex), `gothicPier`, `keep`,
+  `knight`, `wallWithHole`, `roseWindow`, `Fire` / `Candles` / `Lightning` (`js/kit/fantasy.js`), `tex.flagstones/ashlar/
+  stainedGlass/plateArmor/wornCloth`, `sprites.tatteredBanner/colossus/corona/disc`;
   v5 (2026-11-22) instance `stretch`, `ringBands`, `Ripples.at`, well / rock / sag strip / house windows, figure + panel sprites,
   `softMist`, `Walkers`, `OrbitFocusRig` / `DriftRig` / `GridWanderRig`; also fixed Ripples' solid mode (it had been pasted into `Streaks.draw`).
   Environments keep the local copies they were built with; only Colour from the Well and Fog Harbour were moved onto Kit v5

@@ -4,7 +4,7 @@
 import { GeoBuilder, box, merge, icosphere, flatNormals } from '../gfx/geometry.js';
 import { CLEAR } from '../gfx/textures.js';
 import { R } from '../palette/palette.js';
-import { rotX, rotY, rotZ, transform, cloneGeo, rotPoint } from './shapes.js';
+import { rotX, rotY, rotZ, transform, cloneGeo, rotPoint, xf, orientedBox, vadd, vsub, vscale, vnorm, vcross } from './shapes.js';
 import { rand2 } from './noise.js';
 
 // rotate / transform a geometry in place (positions + normals)
@@ -268,4 +268,174 @@ export function houseWindows(house, dims, { rows = [0.5], cols = [-0.25, 0.25], 
     res.push({ x: house.x + q[0], y: house.y + q[1], z: house.z + q[2], row, col });
   }));
   return res;
+}
+
+// ---------------------------------------------------------------- Kit v6 (Ember Vigil): dark fantasy props
+
+/**
+ * Clustered gothic pier: plinth, octagonal core ringed by `shafts` slender columns, a flared
+ * capital and a square abacus. Pivot at the base; UVs sized for a 64 px texture over ~2 units
+ * (K.tex.ashlar). broken: 0 = whole, else the fraction of the height left standing, topped
+ * with a jagged break instead of a capital.
+ */
+export function gothicPier(height = 9, radius = 0.55, { shafts = 4, broken = 0, seed = 1 } = {}) {
+  const parts = [], r = radius, H = broken > 0 ? height * broken : height;
+  const ring = (geo, y, rot = 0) => parts.push({ geo, xf: xf({ pos: [0, y, 0], rot: [0, rot, 0] }) });
+  const circ = (rr) => (Math.PI * 2 * rr) / 2;
+  ring(prism(8, r * 1.5, 0.4, { uvRepeat: [circ(r * 1.5), 0.2] }), 0, Math.PI / 8);
+  ring(prism(8, r * 1.28, 0.22, { uvRepeat: [circ(r * 1.28), 0.11], taper: 0.88 }), 0.4, Math.PI / 8);
+  ring(prism(8, r, H - 0.62, { uvRepeat: [circ(r), (H - 0.62) / 2] }), 0.62, Math.PI / 8);
+  for (let i = 0; i < shafts; i++) {
+    const a = (i / shafts) * Math.PI * 2 + Math.PI / 4, sh = H - 0.62 - (broken > 0 ? rand2(i, 5, seed) * 0.9 : 0);
+    parts.push({ geo: prism(6, r * 0.3, sh, { uvRepeat: [circ(r * 0.3), sh / 2] }), xf: xf({ pos: [Math.cos(a) * r * 0.98, 0.62, Math.sin(a) * r * 0.98] }) });
+  }
+  if (broken > 0) {
+    parts.push({ geo: rock(seed + 11, { spike: 0.9, rough: 1 }), xf: xf({ pos: [0, H - 0.1, 0], scale: [r * 1.15, r * 0.9, r * 1.15] }) });
+  } else {
+    ring(prism(8, r * 1.02, 0.55, { uvRepeat: [circ(r), 0.3], taper: 1.55 }), H, Math.PI / 8);
+    ring(prism(4, r * 1.6 * Math.SQRT2 / 1.41, 0.26, { uvRepeat: [circ(r * 1.6), 0.13] }), H + 0.55, Math.PI / 4);
+  }
+  return merge(parts);
+}
+
+/**
+ * Castle silhouette for distant vistas: a square donjon with merlons and a pyramid roof, round
+ * towers with cone spires (or battlements), curtain walls between them. Pivot at ground centre,
+ * facing +z. Returns { geo, windows: [{ x, y, z, floor }] } with window spots on the +z faces
+ * (put additive glows there and light them floor by floor). Roughly 1k triangles.
+ */
+export function keep({ seed = 7, scale = 1 } = {}) {
+  const parts = [], windows = [], J = (i, k, a) => (rand2(i, k, seed) - 0.5) * a;
+  const add = (geo, pos, rot = [0, 0, 0], sc = 1) => parts.push({ geo, xf: xf({ pos: pos.map((v) => v * scale), rot, scale: typeof sc === 'number' ? sc * scale : sc.map((v) => v * scale) }) });
+  const merlons = (cx, cz, half, y, round = 0) => {
+    if (round) {
+      const n = Math.max(6, Math.round(round * 3.2));
+      for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2; add(box(0.55, 0.7, 0.4), [cx + Math.cos(a) * round, y + 0.35, cz + Math.sin(a) * round], [0, -a, 0]); }
+      return;
+    }
+    for (let s = -half + 0.5; s <= half - 0.4; s += 1.3) {
+      add(box(0.6, 0.75, 0.45), [cx + s, y + 0.37, cz + half]); add(box(0.6, 0.75, 0.45), [cx + s, y + 0.37, cz - half]);
+      add(box(0.45, 0.75, 0.6), [cx + half, y + 0.37, cz + s]); add(box(0.45, 0.75, 0.6), [cx - half, y + 0.37, cz + s]);
+    }
+  };
+  // donjon
+  const DH = 24, DW = 7;
+  add(prism(4, DW / Math.SQRT2, DH, { uvRepeat: [4, 6] }), [0, 0, 0], [0, Math.PI / 4, 0]);
+  add(prism(4, DW / Math.SQRT2 + 0.35, 1.0, { uvRepeat: [4, 0.3] }), [0, DH - 1, 0], [0, Math.PI / 4, 0]);
+  merlons(0, 0, DW / 2 + 0.2, DH);
+  add(prism(4, DW / Math.SQRT2 * 0.8, 7, { taper: 0, uvRepeat: [4, 2] }), [0, DH + 0.6, 0], [0, Math.PI / 4, 0]);
+  for (let f = 0; f < 4; f++) for (const cx of [-1.6, 1.6]) windows.push({ x: cx * scale, y: (7 + f * 4.2) * scale, z: (DW / 2 + 0.06) * scale, floor: f });
+  // towers: [x, z, radius, height, spire height (0 = battlements)]
+  const T = [[-9, 2, 2.4, 30, 9], [8.5, 3, 2.2, 21, 7], [-4.5, -6, 1.8, 35, 11], [11.5, -5, 2.7, 16, 0], [-14, -3, 2.0, 19, 6.5], [4, 6.5, 1.6, 27, 8]];
+  T.forEach(([x, z, rr, h, sp], i) => {
+    x += J(i, 1, 1.2); z += J(i, 2, 1.2); h += J(i, 3, 3);
+    add(prism(8, rr, h, { uvRepeat: [3, h / 4] }), [x, 0, z]);
+    add(prism(8, rr + 0.3, 0.8, { uvRepeat: [3, 0.2] }), [x, h - 0.8, z]);
+    if (sp > 0) add(prism(8, rr + 0.45, sp, { taper: 0, uvRepeat: [3, sp / 4] }), [x, h, z]);
+    else merlons(x, z, 0, h, rr + 0.1);
+    for (let y = 5, f = 0; y < h - 2.5; y += 4.5, f++) windows.push({ x: (x + J(i, 10 + f, rr * 0.8)) * scale, y: y * scale, z: (z + rr * 0.96) * scale, floor: f });
+  });
+  // curtain walls between neighbouring towers (by x order)
+  const byX = T.map(([x, z], i) => [x + J(i, 1, 1.2), z + J(i, 2, 1.2)]).sort((a, b) => a[0] - b[0]);
+  for (let i = 0; i < byX.length - 1; i++) {
+    const [x0, z0] = byX[i], [x1, z1] = byX[i + 1], len = Math.hypot(x1 - x0, z1 - z0), a = Math.atan2(z1 - z0, x1 - x0);
+    add(box(len, 9, 1.6, { uvRepeat: [len / 4, 2] }), [(x0 + x1) / 2, 4.5, (z0 + z1) / 2], [0, -a, 0]);
+  }
+  return { geo: merge(parts), windows };
+}
+
+/**
+ * Armoured knight kneeling on one knee, both hands on the pommel of a greatsword planted
+ * point-down in front of him, helm bowed. Faces +z, pivot on the ground under the hips.
+ * Returns { body, cape, hands: [x, y, z] }: draw the body with K.tex.plateArmor (vertex colours
+ * darken leather and brighten the blade); the cape is a separate sheet (twoSided, K.tex.wornCloth)
+ * that hangs from the shoulders and pools behind; sway it with K.Wobble, weighting by uv v.
+ * About 700 triangles.
+ */
+export function knight({ seed = 3 } = {}) {
+  const parts = [], LEATHER = [0.5, 0.45, 0.45], DARK = [0.12, 0.1, 0.1], BLADE = [1.35, 1.35, 1.45];
+  const add = (geo, pos, rot = [0, 0, 0], scale = 1, color = null) => parts.push({ geo, xf: xf({ pos, rot, scale }), color });
+  const limbs = new GeoBuilder();
+  const limb = (a, b, w, d = w) => {
+    const ax = vscale(vsub(b, a), 0.5), c = vadd(a, ax), up = Math.abs(ax[1]) > Math.abs(ax[2]) ? [0, 0, 1] : [0, 1, 0];
+    const s1 = vscale(vnorm(vcross(ax, up)), w / 2), s2 = vscale(vnorm(vcross(ax, s1)), d / 2);
+    orientedBox(limbs, c, s1, ax, s2);
+  };
+  // legs: left (−x) foot forward, right (+x) knee down
+  limb([0.13, 0.08, 0.02], [0.13, 0.08, -0.48], 0.14, 0.13);       // right shin on the floor
+  add(box(0.11, 0.08, 0.2), [0.13, 0.1, -0.58], [-1.0, 0, 0], 1, LEATHER);
+  limb([0.13, 0.1, 0.02], [0.12, 0.56, 0.04], 0.17);                // right thigh, upright
+  add(icosphere(0, 0.09), [0.13, 0.11, 0.06]);                       // knee cop
+  limb([-0.13, 0.55, 0.03], [-0.14, 0.5, 0.46], 0.17);              // left thigh, forward
+  add(icosphere(0, 0.095), [-0.14, 0.52, 0.49]);
+  limb([-0.14, 0.5, 0.47], [-0.14, 0.05, 0.47], 0.14);              // left shin, upright
+  add(box(0.12, 0.09, 0.27), [-0.14, 0.045, 0.53], [0, 0, 0], 1, LEATHER);
+  // hips and skirt of plates
+  add(prism(8, 0.28, 0.25, { taper: 0.8, uvRepeat: [2, 0.5] }), [0, 0.45, 0.02]);
+  add(prism(8, 0.25, 0.06, { uvRepeat: [2, 0.1] }), [0, 0.68, 0.02], [0, 0, 0], 1, LEATHER);   // belt
+  // torso frame, leaning forward
+  const lean = 0.2, cl = Math.cos(lean), sl = Math.sin(lean);
+  const T = (p) => [p[0], 0.7 + p[1] * cl - p[2] * sl, 0.02 + p[1] * sl + p[2] * cl];
+  parts.push({ geo: prism(6, 0.26, 0.5, { taper: 1.22, uvRepeat: [2, 1] }), xf: (p) => T([p[0], p[1], p[2] * 0.72]) });
+  parts.push({ geo: box(0.035, 0.4, 0.05), xf: (p) => T([p[0], p[1] + 0.26, p[2] + 0.2]) });       // breastplate ridge
+  parts.push({ geo: prism(8, 0.14, 0.11), xf: (p) => T([p[0], p[1] + 0.5, p[2]]) });                // gorget
+  // pauldrons: layered lames over each shoulder
+  for (const s of [-1, 1]) {
+    parts.push({ geo: icosphere(1, 1), xf: (p) => T([s * 0.31 + p[0] * 0.17, 0.46 + p[1] * 0.12, p[2] * 0.17]) });
+    parts.push({ geo: icosphere(0, 1), xf: (p) => T([s * 0.34 + p[0] * 0.14, 0.36 + p[1] * 0.08, p[2] * 0.15]) });
+  }
+  // helm, bowed toward the sword
+  const bow = 0.5, cb = Math.cos(bow + lean), sb = Math.sin(bow + lean), neck = T([0, 0.56, 0.02]);
+  const Hd = (p) => [neck[0] + p[0], neck[1] + p[1] * cb - p[2] * sb, neck[2] + p[1] * sb + p[2] * cb];
+  parts.push({ geo: prism(8, 0.142, 0.3, { uvRepeat: [2, 1] }), xf: (p) => Hd([p[0], p[1] + 0.02, p[2] + 0.02]) });   // great helm
+  parts.push({ geo: prism(8, 0.142, 0.05, { taper: 0.55 }), xf: (p) => Hd([p[0], p[1] + 0.32, p[2] + 0.02]) });         // domed top
+  parts.push({ geo: box(0.03, 0.06, 0.3), xf: (p) => Hd([p[0], p[1] + 0.37, p[2] + 0.02]) });     // crest ridge
+  parts.push({ geo: box(0.24, 0.028, 0.03), xf: (p) => Hd([p[0], p[1] + 0.2, p[2] + 0.15]), color: DARK });   // visor slit
+  parts.push({ geo: box(0.025, 0.12, 0.03), xf: (p) => Hd([p[0], p[1] + 0.12, p[2] + 0.15]), color: DARK });  // breaths
+  parts.push({ geo: box(0.19, 0.09, 0.08), xf: (p) => Hd([p[0], p[1] + 0.07, p[2] + 0.15]) });     // bevor
+  // arms reaching down to the pommel
+  const hands = [0, 0.97, 0.45];
+  for (const s of [-1, 1]) {
+    const sh = T([s * 0.3, 0.45, 0]), el = [s * 0.26, 0.86, 0.24], hd = [s * 0.055, hands[1], hands[2] - 0.01];
+    limb(sh, el, 0.12); limb(el, hd, 0.1);
+    add(icosphere(0, 0.065), el);
+    add(box(0.09, 0.1, 0.11), hd, [0, 0, 0], 1, LEATHER);   // gauntlet
+  }
+  // greatsword, point in the floor
+  const sz = 0.5;
+  const blade = new GeoBuilder();
+  const bw = 0.034, bt = 0.008, b0 = 0.08, b1 = 0.84;
+  const BP = (x, y, z) => [x, y, sz + z];
+  for (const zf of [1, -1]) {
+    blade.quad(BP(-bw, b0, bt * zf), BP(bw, b0, bt * zf), BP(bw, b1, bt * zf), BP(-bw, b1, bt * zf), [0, 1], [0.3, 1], [0.3, 0], [0, 0], [0, 0, zf]);
+    blade.tri(BP(-bw, b0, bt * zf), BP(0, 0, 0), BP(bw, b0, bt * zf), [0, 1], [0.15, 1], [0.3, 1], [0, -0.2, zf]);
+  }
+  parts.push({ geo: blade.build(), xf: (p) => p, color: BLADE });
+  add(box(0.34, 0.045, 0.05), [0, 0.86, sz], [0, 0, 0], 1, BLADE);
+  add(prism(6, 0.022, 0.18), [0, 0.88, sz], [0, 0, 0], 1, LEATHER);
+  add(icosphere(0, 0.045), [0, 1.08, sz], [0, 0, 0], 1, BLADE);
+  parts.push({ geo: limbs.build(), xf: (p) => p });
+  const body = merge(parts);
+  // cape: a sheet from the shoulders, down the back, pooling on the floor behind; ragged hem
+  const cape = new GeoBuilder(), COLS = 6, ROWS = 9, prof = [];
+  for (let j = 0; j <= ROWS; j++) {
+    const t = j / ROWS;
+    let y, z;
+    if (t < 0.72) { const u = t / 0.72; y = 1.16 - u * 1.12; z = -0.1 - Math.sin(u * Math.PI * 0.55) * 0.32 - u * 0.12; }
+    else { const u = (t - 0.72) / 0.28; y = 0.04 - u * 0.02; z = -0.54 - u * 0.5; }
+    prof.push([y, z]);
+  }
+  const V = (i, j) => {
+    const t = j / ROWS, half = 0.3 + t * 0.2, x = -half + (i / COLS) * half * 2;
+    const [y, z] = prof[j], wob = j === ROWS ? (rand2(i, j, seed) - 0.5) * 0.18 : 0;
+    const curve = -Math.abs(x) * 0.25 * (1 - t);
+    return T2([x, y, z + curve + wob], t);
+  };
+  const T2 = (p, t) => (t < 0.05 ? [p[0], p[1], p[2]] : p);
+  for (let j = 0; j < ROWS; j++) for (let i = 0; i < COLS; i++) {
+    if (j === ROWS - 1 && rand2(i, 77, seed) > 0.72) continue;   // torn away at the hem
+    const a = V(i, j), b = V(i + 1, j), c = V(i + 1, j + 1), d = V(i, j + 1);
+    cape.quad(a, b, c, d, [i / COLS, j / ROWS], [(i + 1) / COLS, j / ROWS], [(i + 1) / COLS, (j + 1) / ROWS], [i / COLS, (j + 1) / ROWS]);
+  }
+  return { body, cape: cape.build(), hands };
 }
