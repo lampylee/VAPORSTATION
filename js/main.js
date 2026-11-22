@@ -15,6 +15,8 @@ import { SetlistUI } from './setlist/ui.js';
 import { ShowControl } from './show/control.js';
 import { Midi } from './show/midi.js';
 import { ShowUI, MidiUI, EnvBrowser } from './show/ui.js';
+import { Governor } from './safety/governor.js';
+import { Watchdog } from './safety/watchdog.js';
 
 const s = loadSettings();
 const canvas = document.getElementById('view');
@@ -212,7 +214,7 @@ const THUMB_AUDIO = { level: 0, bass: 0, mid: 0, high: 0, beat: false, beatPulse
 const thumbs = { pending: STYLES.map((_, i) => i), last: STYLES.map(() => -1), timer: 0, rr: 0, captureCur: false };
 function thumbFrame(dt, now) {
   thumbs.captureCur = false;
-  if (!uiVisible || bench || show.freeze) return;
+  if (!uiVisible || bench || show.freeze || renderer.lost) return;
   thumbs.timer -= dt;
   let i = -1;
   if (thumbs.pending.length) i = thumbs.pending.shift();
@@ -224,15 +226,18 @@ function thumbFrame(dt, now) {
     else thumbs.pending.push(i);
     return;
   }
+  if (styles.broken.has(i)) return;
   const st = styles.styles[i];
   const steps = thumbs.last[i] < 0 ? 20 : Math.min(10, Math.max(1, Math.round((now - thumbs.last[i]) / 50)));
   thumbs.last[i] = now;
-  for (let n = 0; n < steps; n++) st.update(THUMB_AUDIO, 0, 0.05);
   const P = renderer.params, saved = [P.flash, P.fade, P.jitterBoost, P.fogScale];
-  P.flash = 0; P.fade = 0; P.jitterBoost = 0; P.fogScale = 1;
-  renderer.beginScene('A'); renderer.setPalette(st.pal); st.render(renderer);
-  renderer.composite(0); renderer.present();
-  renderer.snapshot(envBrowser.ctx(i));
+  try {
+    for (let n = 0; n < steps; n++) st.update(THUMB_AUDIO, 0, 0.05);
+    P.flash = 0; P.fade = 0; P.jitterBoost = 0; P.fogScale = 1;
+    renderer.beginScene('A'); renderer.setPalette(st.pal); st.render(renderer);
+    renderer.composite(0); renderer.present();
+    renderer.snapshot(envBrowser.ctx(i));
+  } catch (e) { styles._fail(i, e, 'thumbnail'); }
   [P.flash, P.fade, P.jitterBoost, P.fogScale] = saved;
 }
 
@@ -363,29 +368,56 @@ addEventListener('keydown', (e) => {
   }
 });
 
+// ---------------- gig safety ----------------
+const governor = new Governor(renderer, styles, styleKey);
+const watchdog = new Watchdog({
+  canvas, renderer, styles, engine, governor,
+  wantLive: () => liveWanted,
+  reopenLive: () => startLive(),
+});
+try {
+  const why = sessionStorage.getItem('vaporstation.recovered');
+  if (why) { sessionStorage.removeItem('vaporstation.recovered'); console.warn(`[watchdog] recovered by reload (${why})`); }
+} catch (e) { /* ignore */ }
+let frameErrAt = 0;
+const frameError = (where, e) => {
+  const now = performance.now();
+  if (now - frameErrAt > 5000) { frameErrAt = now; console.error(`[safety] frame error in ${where}`, e); }
+};
+
 // ---------------- main loop ----------------
 let last = performance.now(), fps = 60, dbgTimer = 0;
 const bench = new URLSearchParams(location.search).has('bench') ? new Bench(styles, renderer) : null;
-if (bench) { s.debug = true; applyLook(); setUiVisible(false); }
+if (bench) { s.debug = true; applyLook(); setUiVisible(false); governor.enabled = false; }
+let lastIn = null;   // last good analysis result, reused if a frame's analysis throws
 function frame(now) {
   requestAnimationFrame(frame);
-  const dt = Math.min(0.1, Math.max(0.0001, (now - last) / 1000));
+  const rawMs = now - last;
+  const dt = Math.min(0.1, Math.max(0.0001, rawMs / 1000));
   last = now;
   fps += (1 / dt - fps) * Math.min(1, dt * 2);
   const cpuStart = performance.now();
 
   let audio, k, playing;
-  if (bench && !bench.done) {
-    audio = bench.tick(dt); k = bench.intensity; playing = k > 0;
-  } else {
-    audio = analyser.update(dt, s, engine.mode !== 'none' && engine.running);
-    state.update(audio.rmsDbSmooth, dt, s);
-    k = state.intensity; playing = state.playing;
-    const cued = setlist.cued;
-    setlist.update(playing);
-    if (setlist.cued !== cued) setlistUI.tick();
-    ({ audio, k, playing } = show.process(audio, k, playing, dt, s));
+  try {
+    if (bench && !bench.done) {
+      audio = bench.tick(dt); k = bench.intensity; playing = k > 0;
+    } else {
+      audio = analyser.update(dt, s, engine.mode !== 'none' && engine.running);
+      state.update(audio.rmsDbSmooth, dt, s);
+      k = state.intensity; playing = state.playing;
+      const cued = setlist.cued;
+      setlist.update(playing);
+      if (setlist.cued !== cued) setlistUI.tick();
+      ({ audio, k, playing } = show.process(audio, k, playing, dt, s));
+    }
+    lastIn = { audio, k, playing };
+  } catch (e) {
+    frameError('audio/show', e);
+    if (!lastIn) return;
+    ({ audio, k, playing } = lastIn);
   }
+  try { watchdog.update(dt); governor.update(rawMs, dt); } catch (e) { frameError('safety', e); }
 
   thumbFrame(dt, now);
 
@@ -401,10 +433,14 @@ function frame(now) {
   P.flashColor = styles.styles[styles.target].pal.role('flash');
 
   renderer.resetStats();
-  if (!show.freeze) styles.update(audio, k, playing, dt, s);
-  styles.render();
-  renderer.present();
-  if (thumbs.captureCur && !P.fade && P.flash < 0.01) renderer.snapshot(envBrowser.ctx(styles.cur));
+  try {
+    if (!show.freeze) styles.update(audio, k, playing, dt, s);
+    if (!renderer.lost) {
+      styles.render();
+      renderer.present();
+      if (thumbs.captureCur && !P.fade && P.flash < 0.01) renderer.snapshot(envBrowser.ctx(styles.cur));
+    }
+  } catch (e) { frameError('render', e); }
   markEnvs();
   if (uiVisible) showUI.update();
   if (bench && !bench.done) { bench.record(dt, performance.now() - cpuStart); overlay.hidden = false; overlay.textContent = bench.label; }
@@ -417,7 +453,7 @@ function frame(now) {
       audio, fps, intensity: k, playing, state: bench && !bench.done ? bench.label : state.label, thresholdDb: s.thresholdDb,
       res: `${renderer.width}x${renderer.height}`, draws: renderer.stats.draws, tris: renderer.stats.tris,
       style: styles.name(styles.cur), transition: styles.transitioning ? styles.name(styles.next) : '',
-      autoSwitch: s.autoSwitch, idle: styles.idleTime, setlist: setlist.label, show: show.label,
+      autoSwitch: s.autoSwitch, idle: styles.idleTime, setlist: setlist.label, show: show.label, safety: `${governor.label} · ${watchdog.label}`,
       source: engine.mode === 'live' ? `live: ${engine.deviceLabel || 'default'}` : engine.mode === 'file' ? 'file playback' : 'no input',
     });
   }
@@ -425,4 +461,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for poking at things from the console
-window.viz = { s, engine, analyser, state, styles, renderer, store, selectPalette, paletteUI, setlists, setlist, setlistUI, show, showUI, midi, midiUI, envBrowser, showAction };
+window.viz = { s, engine, analyser, state, styles, renderer, store, selectPalette, paletteUI, setlists, setlist, setlistUI, show, showUI, midi, midiUI, envBrowser, showAction, governor, watchdog };

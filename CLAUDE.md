@@ -26,6 +26,7 @@ Plan: `ROADMAP.md`. **Current status, open items and next steps: `docs/HANDOFF.m
 - `js/kit/` — world kit: sky, terrain, particles, sprites, props, camera rigs, swell helpers, GLB loader.
 - `js/show/` — show control between audio and styles (hold, freeze, blackout, big-moment flash, strobe-safe beat limiter, tap tempo → `audio.bpm/beatPhase/bar`), Web MIDI with learn, panel UI incl. environment browser thumbnails.
 - `js/setlist/` — setlists (song → palette + environment pool), cue-until-silence stepping, panel + editor.
+- `js/safety/` — gig safety: performance governor (steps detail down, marks heavy styles) and watchdog (WebGL context loss/restore, audio resume + input reopen). The style manager skips any style that throws.
 - `js/styles/` — one file per environment + `index.js` registry + `manager.js` (crossfades, idle auto-switch, palettes).
 
 ## Palettes (CLUT)

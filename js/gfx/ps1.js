@@ -325,13 +325,9 @@ export class PS1Renderer {
     });
     if (!gl) throw new Error('WebGL2 is not available in this browser.');
     this.gl = gl;
-    this.world = program(gl, WORLD_VS, WORLD_FS);
-    this.comp = program(gl, FULLSCREEN_VS, COMPOSITE_FS);
-    this.present_ = program(gl, FULLSCREEN_VS, PRESENT_FS);
-    this.emptyVao = gl.createVertexArray();
-    this.whiteTex = this.createTexture({ data: new Uint8Array([255, 255, 255, 255]), width: 1, height: 1 });
-    this.defaultClut = this.createClutTexture(); // grey ramp, used if a scene sets no palette
-    this.updateClut(this.defaultClut, Float32Array.from({ length: 48 }, (_, i) => Math.floor(i / 3) / 15));
+    this._initGL();
+    this.lost = false;   // WebGL context lost (driver reset): draws are no-ops until restore()
+    this.quality = 1;    // governor: 0..1 detail scale (kit particles read it)
 
     // Global look parameters (set from settings / audio every frame).
     this.params = {
@@ -342,6 +338,7 @@ export class PS1Renderer {
       flash: 0,         // show control: 0..1 flash toward flashColor (composite pass)
       flashColor: [1, 1, 1],
       fade: 0,          // show control: 0..1 fade to black (blackout)
+      maxDpr: 0,        // governor: cap on devicePixelRatio for the backbuffer (0 = none)
     };
     this.width = 0; this.height = 0;
     this.targets = {};
@@ -349,6 +346,26 @@ export class PS1Renderer {
     this.proj = mat4.create();
     this.fogColor = [0, 0, 0];
     this.stats = { draws: 0, tris: 0 };
+    this.resize();
+  }
+
+  /** Programs + built-in textures. Run at start and again after a lost context is restored. */
+  _initGL() {
+    const gl = this.gl;
+    this.world = program(gl, WORLD_VS, WORLD_FS);
+    this.comp = program(gl, FULLSCREEN_VS, COMPOSITE_FS);
+    this.present_ = program(gl, FULLSCREEN_VS, PRESENT_FS);
+    this.emptyVao = gl.createVertexArray();
+    this.whiteTex = this.createTexture({ data: new Uint8Array([255, 255, 255, 255]), width: 1, height: 1 });
+    this.defaultClut = this.createClutTexture(); // grey ramp, used if a scene sets no palette
+    this.updateClut(this.defaultClut, Float32Array.from({ length: 48 }, (_, i) => Math.floor(i / 3) / 15));
+  }
+
+  /** Rebuild what the renderer owns after webglcontextrestored (the style manager rebuilds styles). */
+  restore() {
+    this.targets = {}; this.width = 0; this.height = 0;
+    this._initGL();
+    this.lost = false;
     this.resize();
   }
 
@@ -477,7 +494,7 @@ export class PS1Renderer {
 
   /** Call on window resize and whenever resolution settings change. */
   resize() {
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = Math.min(window.devicePixelRatio || 1, this.params.maxDpr || Infinity);
     const cw = Math.max(1, Math.round(this.canvas.clientWidth * dpr));
     const ch = Math.max(1, Math.round(this.canvas.clientHeight * dpr));
     if (this.canvas.width !== cw || this.canvas.height !== ch) { this.canvas.width = cw; this.canvas.height = ch; }

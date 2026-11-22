@@ -45,6 +45,7 @@ export class Particles {
   constructor(r, preset = 'snow', overrides = {}) {
     const p = { ...(typeof preset === 'string' ? PARTICLE_PRESETS[preset] : preset), ...overrides };
     this.p = p;
+    this.r = r;   // r.quality (governor) scales how many are shown
     this.mesh = r.createMesh(quad());
     const name = p.sprite || 'dot', sprite = SPRITES[name];
     this.tex = r.texture(p.texture ? (typeof p.texture === 'function' ? p.texture() : p.texture) : RAMP_SPRITES.has(name) ? sprite({ ramp: p.color >> 2 }) : sprite({ index: p.color }));
@@ -84,7 +85,7 @@ export class Particles {
     this.g *= Math.exp(-dt / (this.gDecay || 0.9));
     const g = this.g, gs = speed * (1 + g), gw = g * 2.5;
     wind = [wind[0] + this.gDir[0] * gw, wind[1] + this.gDir[1] * gw];
-    this.visible = Math.round(n * Math.max(0, Math.min(1, amount)));
+    this.visible = Math.round(n * Math.max(0, Math.min(1, amount)) * (this.r?.quality ?? 1));
     const cy = center[1] + (p.yOffset || 0);
     for (let i = 0; i < n; i++) {
       const o = i * 3, ph = this.phase[i];
