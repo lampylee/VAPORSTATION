@@ -37,7 +37,7 @@ Draws / tris measured at idle → full intensity (320×240, stepped with synthet
 | 10 | Route 9 16–17 / 7.1–7.5k | 23 | Greenhouse at Dusk 28–30 / 7–7.3k | 36 | Colour from the Well 38–44 / 6.4–7.4k |
 | 11 | Cold Base 23–24 / 11.9–14k | 24 | Quiet House 19 / 3.9k | 37 | The Backrooms 14 / 11.3–12.2k |
 | 12 | Station Deck 14–16 / 6.5–6.8k | 25 | Moth Lamp 13 / 5–5.4k | 38 | Fog Harbour 46–52 / 12.4–13.1k |
-|  |  |  |  | 39 | Ember Vigil 35–42 / 14.1–15.1k |
+|  |  |  |  | 39 | Ember Vigil 48–50 / 17.3–18.3k |
 
 Groups: 1–16 waves 1–2 (general), 17–23 wave 3 (slow songs, built from Kit calm), 24–35 wave 4 Radiohead set (album
 palettes in `ALBUM_PALETTES`, `js/palette/library.js`; spec `docs/superpowers/specs/2026-11-20-radiohead-setlist-environments-design.md`),

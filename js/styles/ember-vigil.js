@@ -17,6 +17,9 @@ const WIN = [0, 12, -36];              // rose window centre
 const WIN_R = 5.2;
 const PIER_X = 4.4, PIER_Z = [8, 2, -4, -10, -16, -22, -28];
 const PIER_H = 9, ARCH_Y = PIER_H + 0.81;
+// the flooded strip before the apse: a sunken pool (water at POOL_W) with a planar reflection
+const POOL = { x0: -8.2 + (16.4 * 7) / 24, x1: -8.2 + (16.4 * 17) / 24, z0: -4.5, z1: -12 }, POOL_W = -0.14, POOL_D = -0.5;
+const inPool = (x, z, m = 0) => x > POOL.x0 - m && x < POOL.x1 + m && z < POOL.z0 + m && z > POOL.z1 - m;
 const KEEP_X = -11, KEEP_Z = -176, CRAG_TOP = 26;
 const MOON = [26, 80, -330], MOON_R = 14;
 const COLOSSUS_Z = -262, COLOSSUS_H = 112;
@@ -94,9 +97,30 @@ export class EmberVigil {
       const T = 2.2;
       for (let j = 0; j < zs.length - 1; j++) for (let i = 0; i < xs.length - 1; i++) {
         const x0 = xs[i], x1 = xs[i + 1], z0 = zs[j], z1 = zs[j + 1];
+        if (inPool((x0 + x1) / 2, (z0 + z1) / 2)) continue;
         g.quad([x0, 0, z0], [x1, 0, z0], [x1, 0, z1], [x0, 0, z1], [x0 / T, z0 / T], [x1 / T, z0 / T], [x1 / T, z1 / T], [x0 / T, z1 / T], [0, 1, 0]);
       }
       this.floor = r.createMesh(g.build());
+      // basin walls (inner faces, from the curb top down below the water) + a low curb round the rim
+      const b = new GeoBuilder(), { x0, x1, z0, z1 } = POOL, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, hw = (x1 - x0) / 2, hd = (z0 - z1) / 2, top = 0.16, h2 = (top - POOL_D) / 2, yc = (top + POOL_D) / 2;
+      K.worldFace(b, [cx, yc, z0], [-hw, 0, 0], [0, h2, 0], 1.2, 2);
+      K.worldFace(b, [cx, yc, z1], [hw, 0, 0], [0, h2, 0], 1.2, 2);
+      K.worldFace(b, [x0, yc, cz], [0, 0, hd], [0, h2, 0], 1.2, 2);
+      K.worldFace(b, [x1, yc, cz], [0, 0, -hd], [0, h2, 0], 1.2, 2);
+      this.basin = r.createMesh(merge([
+        { geo: b.build(), xf: (p) => p },
+        { geo: K.worldBox(hw * 2 + 0.7, top, 0.35, 1), xf: K.xf({ pos: [cx, top / 2, z0 + 0.175] }) },
+        { geo: K.worldBox(hw * 2 + 0.7, top, 0.35, 1), xf: K.xf({ pos: [cx, top / 2, z1 - 0.175] }) },
+        { geo: K.worldBox(0.35, top, hd * 2, 1), xf: K.xf({ pos: [x0 - 0.175, top / 2, cz] }) },
+        { geo: K.worldBox(0.35, top, hd * 2, 1), xf: K.xf({ pos: [x1 + 0.175, top / 2, cz] }) },
+      ]));
+      // the water: subdivided so the affine warp stays mild
+      const wg = new GeoBuilder();
+      K.worldFace(wg, [cx, POOL_W, cz], [hw, 0, 0], [0, 0, -hd], 3, 6);
+      this.water = r.createMesh(wg.build());
+      this.waterTex = r.texture(K.tex.water({ ramp: 3 }));
+      this.ripples = new K.Ripples(r, { max: 14, color: R(3, 3), life: 3, lift: 0.01 });
+      this.dripT = 1;
     }
     // ---------- dais, altar, steps at the apse
     this.dais = r.createMesh(merge([
@@ -189,7 +213,7 @@ export class EmberVigil {
       const side = i % 2 ? 1 : -1, z = 10 - (i / 30) * 40 + K.rand2(i, 1, 3) * 2;
       const x = side * (3 + K.rand2(i, 2, 3) * 4.6), s = 0.18 + K.rand2(i, 3, 3) * 0.55;
       if (Math.hypot(x - F[0], z - F[2]) < 2.6) continue;
-      this.rubble.set(n++, x, s * 0.35, z, s, K.rand2(i, 4, 3) * 6, 0.75 + K.rand2(i, 5, 3) * 0.3, 0, 0.7);
+      this.rubble.set(n++, x, inPool(x, z, 0.2) ? POOL_W - 0.1 + s * 0.2 : s * 0.35, z, s, K.rand2(i, 4, 3) * 6, 0.75 + K.rand2(i, 5, 3) * 0.3, 0, 0.7);
     }
     // the fire's ring of broken masonry
     for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2 + 0.3; this.rubble.set(n++, F[0] + Math.cos(a) * 0.62, 0.08, F[2] + Math.sin(a) * 0.62, 0.2 + K.rand2(i, 9, 2) * 0.08, a * 3, 0.85, 0, 0.8); }
@@ -198,7 +222,10 @@ export class EmberVigil {
     this.blocks = r.createInstances(12);
     const BL = [[-2.4, 1.6, 1.4, 0.55, 0.9, 0.2], [2.6, -2.5, 1.9, 0.7, 1.0, -0.4], [-3.0, -7.5, 1.2, 0.5, 2.0, 0.6], [3.2, -13.5, 2.4, 0.8, 1.1, 0.1],
       [-1.6, -19, 1.0, 0.45, 1.6, 1.1], [2.8, -24.5, 1.3, 0.6, 1.2, -0.2], [-6.5, 6, 1.5, 0.8, 1.2, 0.3], [6.4, -4, 1.1, 1.2, 1.4, 0.8], [-6.2, -27, 2.0, 0.7, 1.0, 0.0]];
-    BL.forEach(([x, z, w, h, d, ry], i) => { this.blocks.set(i, x, h / 2 - 0.5 * h + h / 2, z, 1, ry, 0.9, 0, h); this.blocks.stretch(i, w, d); });
+    BL.forEach(([x, z, w, h, d, ry], i) => {
+      const sunk = inPool(x, z) ? -POOL_D : 0;   // reaches down to the basin floor, top stays put
+      this.blocks.set(i, x, (h + sunk) / 2 - sunk, z, 1, ry, 0.9, 0, h + sunk); this.blocks.stretch(i, w, d);
+    });
     this.blocks.upload(BL.length); this.blockN = BL.length;
     this.blockTops = BL.map(([x, z, w, h, d, ry]) => ({ x, z, h, w, d, ry }));
     this.bannerInst = r.createInstances(5);
@@ -305,6 +332,13 @@ export class EmberVigil {
       this.bolt.strike([x0, 150, KEEP_Z - 70], [x0 * 0.3 + (Math.random() - 0.5) * 30, CRAG_TOP + 4, KEEP_Z - 25]);
     }
     this.bolt.update(dt);
+    // water drips from the broken vault into the pool; the beat sends a ring across it
+    if ((this.dripT -= dt) <= 0) {
+      this.dripT = lerp(2.6, 0.9, k) * (0.5 + Math.random());
+      this.ripples.spawn(lerp(POOL.x0 + 0.6, POOL.x1 - 0.6, Math.random()), POOL_W, lerp(POOL.z1 + 0.6, POOL.z0 - 0.6, Math.random()), 1.2 + Math.random(), 0.6);
+    }
+    if (audio.beat && k > 0.3) this.ripples.spawn((POOL.x0 + POOL.x1) / 2 + (Math.random() - 0.5) * 3, POOL_W, (POOL.z0 + POOL.z1) / 2 + (Math.random() - 0.5) * 4, 3.5 * k, k * (audio.accent ?? 1));
+    this.ripples.update(dt);
     // the colossus rises behind the crag, eyes kindling as it clears it
     const cy = lerp(-COLOSSUS_H * 0.25, COLOSSUS_H * 0.62, this.rise) + Math.sin(this.t * 0.2) * 0.8 * this.rise;
     this.colossusY = cy;
@@ -392,7 +426,50 @@ export class EmberVigil {
     lights.push({ pos: [0, 9, -33], color: mixc(col(R(3, 3), winL), col(R(2, 2), winL), K.stage(ecl, 0.3, 1) * 0.6), radius: 22 });
     r.setPointLights(lights);
 
+    const gl = lerp(0.22, 0.34, k) * (0.6 + 0.4 * moonLevel) + fl * 0.6 + this.bellEnv.v * 0.12;
+    const lg = lerp(0.3, 0.5, k) * moonLevel + fl * 0.6;
+    const sb = (lerp(0.1, 0.15, k) * moonLevel + fl * 0.2) * (0.9 + 0.1 * Math.sin(t * 0.5));
+    const ctx = { fog, near, far, k, gl, lg, sb };
+    // reflection: only worth it when the pool can be on screen (the camera looks down the nave)
+    const reflect = this.cam.target[2] < this.cam.eye[2] - 2;
+    if (reflect) {
+      r.setMirror(POOL_W);
+      this._world(r, ctx, true);
+      r.setMirror(null);
+      r.clearDepth();
+      r.setClipBelow(POOL_W);
+    }
+    this._world(r, ctx, false);
+    if (reflect) r.setClipBelow(null);
+    // the water over the reflection: screen-door, so the mirror image shows through in a dither
+    r.draw(this.water, IDENT, { texture: this.waterTex, opacity: reflect ? 0.3 : 1, uvOffset: [t * 0.01, t * 0.006], tint: [0.8, 0.8, 0.85] });
+    this.ripples.draw(r, { brightness: lerp(0.35, 0.6, k) + fl * 0.4 });
+    // air last
+    this.motes.draw(r, { brightness: lerp(0.35, 0.6, k) });
+    this.ash.draw(r, { brightness: lerp(0.5, 0.8, k) + fl * 0.5 });
+  }
+
+  /**
+   * The interior. refl = the mirrored pass into the pool. Seen from the camera's height the pool only mirrors what is
+   * low at the far end (altar, candles, pier bases, the foot of the apse wall), so that is all it draws.
+   */
+  _world(r, c, refl) {
+    const { fog, near, far, k, gl, lg, sb } = c;
+    if (refl) {
+      const D = [0.78, 0.78, 0.85];
+      r.draw(this.dais, IDENT, { texture: this.floorTex, tint: D });
+      r.drawInstanced(this.pierFull, this.pierInst, { texture: this.pierTex, tint: D });
+      r.drawInstanced(this.blockMesh, this.blocks, { texture: this.wallTex, tint: D });
+      r.setFog(fog, near, far * 1.5);
+      mat4.trs(_m, 0, 0, WIN[2], 0, 0, 0);
+      r.draw(this.apse, _m, { texture: this.wallTex, tint: D });
+      r.setFog(fog, near, far);
+      this.candles.draw(r, { brightness: 1 });
+      return;
+    }
     r.draw(this.floor, IDENT, { texture: this.floorTex });
+    r.draw(this.basin, IDENT, { texture: this.pierTex });
+    r.drawInstanced(this.rockMesh, this.rubble, { texture: this.pierTex });
     r.draw(this.dais, IDENT, { texture: this.floorTex });
     r.draw(this.walls, IDENT, { texture: this.wallTex });
     r.drawInstanced(this.pierFull, this.pierInst, { texture: this.pierTex });
@@ -400,7 +477,6 @@ export class EmberVigil {
     r.drawInstanced(this.archMesh, this.archInst, { texture: this.pierTex });
     r.drawInstanced(this.ribMesh, this.ribInst, { texture: this.pierTex });
     r.draw(this.vault, IDENT, { texture: this.wallTex });
-    r.drawInstanced(this.rockMesh, this.rubble, { texture: this.pierTex });
     r.drawInstanced(this.blockMesh, this.blocks, { texture: this.wallTex });
     r.drawInstanced(this.quad, this.bannerInst, { texture: this.bannerTex, twoSided: true, sway: 0.03 + k * 0.05, tint: [1.7, 1.7, 1.7] });
     // the apse: fog reaches less far into the end wall so the window keeps its shape
@@ -409,27 +485,18 @@ export class EmberVigil {
     r.draw(this.apse, _m, { texture: this.wallTex });
     mat4.trs(_m, WIN[0], WIN[1], WIN[2] - 0.25, 0, 0, 0);
     r.draw(this.tracery, _m, { texture: this.pierTex });
-    const gl = lerp(0.22, 0.34, k) * (0.6 + 0.4 * moonLevel) + fl * 0.6 + this.bellEnv.v * 0.12;
     r.draw(this.glass, _m, { texture: this.glassTex, additive: true, unlit: true, tint: [gl, gl, gl] });
     r.setFog(fog, near, far);
-    // lancets + moonbeams
-    const lg = lerp(0.3, 0.5, k) * moonLevel + fl * 0.6;
     r.drawInstanced(this.lancetMesh, this.lancetInst, { texture: this.lancetTex, additive: true, unlit: true, tint: [lg, lg, lg] });
-    const sb = (lerp(0.1, 0.15, k) * moonLevel + fl * 0.2) * (0.9 + 0.1 * Math.sin(t * 0.5));
     r.drawInstanced(this.quad, this.shaftInst, { texture: this.shaftTex, additive: true, unlit: true, depthWrite: false, tint: [sb, sb, sb] });
-
-    // knight + fire + candles
     r.draw(this.knight, this.knightM, { texture: this.armorTex });
     r.draw(this.cape.mesh, this.knightM, { texture: this.capeTex, twoSided: true });
     this.candles.draw(r, { brightness: 1 });
     this.fire.draw(r, { brightness: lerp(0.85, 1.05, k) });
-    // air last
-    this.motes.draw(r, { brightness: lerp(0.35, 0.6, k) });
-    this.ash.draw(r, { brightness: lerp(0.5, 0.8, k) + fl * 0.5 });
   }
 
   dispose(r) {
-    this.sky.dispose(r); this.fire.dispose(r); this.candles.dispose(r); this.bolt.dispose(); this.cape.dispose();
+    this.sky.dispose(r); this.ripples.dispose(r); this.basin.dispose(); this.water.dispose(); r.deleteTexture(this.waterTex); this.fire.dispose(r); this.candles.dispose(r); this.bolt.dispose(); this.cape.dispose();
     this.crows.dispose?.(r); this.ash.dispose(r); this.motes.dispose(r);
     [this.quad, this.cquad, this.floor, this.dais, this.pierFull, this.pierBroken, this.archMesh, this.ribMesh, this.vault, this.walls,
       this.lancetMesh, this.apse, this.tracery, this.glass, this.rockMesh, this.blockMesh, this.knight, this.crag, this.keepMesh].forEach((m) => m.dispose());

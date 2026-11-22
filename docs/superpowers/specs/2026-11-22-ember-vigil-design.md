@@ -112,5 +112,8 @@ stretch reflection fits.
 
 ## Build notes (2026-11-22)
 
-Built as designed. The stretch goal (a flooded strip before the apse with a planar reflection) was not built; the budget
-would allow it (39 draws / 15k tris at full). Measured: 120 fps (display cap) on the dev laptop, worst frame 8.9 ms.
+Built as designed, plus the stretch goal: a sunken pool in the nave (z -4.5 to -12, just past the knight, not before the
+apse: from the camera height a pool that far away only mirrors a sliver and reads as a dark band) with a planar reflection,
+a curb, dithered water, drip ripples and a ring on the beat; a fallen block with candles stands in it. The mirrored pass
+draws only what the pool can show (dais, piers, blocks, apse foot, candles): 48-50 draws, 17.3-18.3k tris worst case.
+Measured 0.43 ms per frame (CPU + GPU) on the dev laptop.
