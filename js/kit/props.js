@@ -222,7 +222,7 @@ export function rock(seed = 1, { spike = 1, rough = 0.8, subdiv = 0, scale = 1 }
   const g = icosphere(subdiv, 1), P = g.positions;
   for (let i = 0; i < P.length; i += 3) {
     const n = rand2(Math.round(P[i] * 997 + P[i + 1] * 311), Math.round(P[i + 2] * 577 + P[i + 1] * 101), seed);
-    const top = spike > 0 && P[i + 1] > 0.5, f = (1 - rough * 0.45) + n * rough;
+    const top = spike > 0 && P[i + 1] > 0.5, f = (1 - rough * 0.5625) + n * rough;   // rough 0.8 = 0.55 .. 1.35
     const side = top ? 1 - 0.5 * spike : 1, up = top ? 1 + (0.6 + n) * spike : 1;
     P[i] *= f * side * scale; P[i + 1] *= f * up * scale; P[i + 2] *= f * side * scale;
   }

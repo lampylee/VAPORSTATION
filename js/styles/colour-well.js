@@ -22,7 +22,7 @@
 //        the tree glow pulses as the ring passes each band.
 import { mat4, lerp, clamp, damp } from '../gfx/math.js';
 import { scaleColor } from '../gfx/color.js';
-import { GeoBuilder, merge, box, smoothNormals } from '../gfx/geometry.js';
+import { merge, box } from '../gfx/geometry.js';
 import { R, fromKeys } from '../palette/palette.js';
 import * as K from '../kit/index.js';
 
@@ -38,37 +38,6 @@ const height = (x, z) => {
   const d = Math.hypot(x, z), t = clamp((d - 48) / 30);
   return t * t * (3 - 2 * t) * (K.fbm(x * 0.03, z * 0.03, { octaves: 3, seed: 5 }) * 9 + 1.5) - 0.02;
 };
-
-/** One flat-ish annulus of ground, world-space UVs. */
-function annulus(r0, r1, segs = 40, uv = 0.25) {
-  const g = new GeoBuilder(), steps = Math.max(1, Math.ceil((r1 - r0) / 3));
-  const P = (rad, a) => { const x = Math.cos(a) * rad, z = Math.sin(a) * rad; return [x, height(x, z), z]; };
-  const T = (p) => [p[0] * uv, p[2] * uv];
-  for (let j = 0; j < steps; j++) {
-    const ra = lerp(r0, r1, j / steps), rb = lerp(r0, r1, (j + 1) / steps);
-    for (let i = 0; i < segs; i++) {
-      const a0 = (i / segs) * Math.PI * 2, a1 = ((i + 1) / segs) * Math.PI * 2;
-      const p0 = P(ra, a0), p1 = P(ra, a1), p2 = P(rb, a1), p3 = P(rb, a0);
-      g.quad(p0, p1, p2, p3, T(p0), T(p1), T(p2), T(p3));
-    }
-  }
-  return smoothNormals(g.build());
-}
-
-/** Stone well shaft: outer wall, top lip, inner wall facing in. Pivot at ground centre. */
-function wellGeo(ro = 1.35, ri = 1.0, h = 0.95, segs = 12) {
-  const g = new GeoBuilder();
-  for (let i = 0; i < segs; i++) {
-    const a0 = (i / segs) * Math.PI * 2, a1 = ((i + 1) / segs) * Math.PI * 2;
-    const c0 = Math.cos(a0), s0 = Math.sin(a0), c1 = Math.cos(a1), s1 = Math.sin(a1);
-    const u0 = i / segs * 6, u1 = (i + 1) / segs * 6;
-    const O = (c, s, y) => [c * ro, y, s * ro], I = (c, s, y) => [c * ri, y, s * ri];
-    g.quad(O(c0, s0, 0), O(c0, s0, h), O(c1, s1, h), O(c1, s1, 0), [u0, 1], [u0, 0], [u1, 0], [u1, 1]);           // outside
-    g.quad(I(c1, s1, -0.6), I(c1, s1, h), I(c0, s0, h), I(c0, s0, -0.6), [u1, 1.4], [u1, 0], [u0, 0], [u0, 1.4]);    // inside
-    g.quad(O(c0, s0, h), I(c0, s0, h), I(c1, s1, h), O(c1, s1, h), [u0, 0], [u0, 0.3], [u1, 0.3], [u1, 0]);          // lip
-  }
-  return g.build();
-}
 
 const at = (geo, x, y, z, rx = 0, ry = 0, rz = 0) => ({ geo, xf: K.xf({ pos: [x, y, z], rot: [rx, ry, rz] }) });
 const boxAt = (sx, sy, sz, x, y, z, rx = 0, ry = 0, rz = 0) => at(box(sx, sy, sz, { uvRepeat: [Math.max(1, sx / 1.5), Math.max(1, sy / 1.5)] }), x, y, z, rx, ry, rz);
@@ -117,11 +86,11 @@ export class ColourWell {
 
     // ---- ground rings around the well
     this.rings = [];
-    for (let i = 0; i < RINGS.length - 1; i++) this.rings.push({ mesh: r.createMesh(annulus(RINGS[i], RINGS[i + 1])), r0: RINGS[i], r1: RINGS[i + 1], blend: 0, glow: [0, 0, 0] });
+    for (const g of K.ringBands(RINGS, { height, segs: 40, uv: 0.25, step: 3 })) this.rings.push({ mesh: r.createMesh(g.geo), r0: g.r0, r1: g.r1, blend: 0, glow: [0, 0, 0] });
 
     // ---- the well: stone shaft, roofed wooden frame with a windlass, darkness inside
     this.wellMesh = r.createMesh(merge([
-      { geo: wellGeo() },
+      { geo: K.props.well(1.35, 1.0, 0.95, { segs: 12, depth: 0.6, uRepeat: 6 }) },
       // a farmhouse chimney and a tumbled fieldstone wall share the stone texture
       boxAt(0.8, 2.6, 0.8, -9.2, 5.6, -12.3, 0, 0.25, 0),
       ...this._stoneWall(),
@@ -194,8 +163,7 @@ export class ColourWell {
     this.glowInst = r.createInstances(2);
     this.shaftInst = r.createInstances(2);
     this.rimM = mat4.create(); this.frontM = mat4.create();
-    this.ripples = new K.Ripples(r, { max: 8, color: R(2, 2), life: RIPPLE_LIFE });
-    this.waves = [];                                          // the same rings, for the tree glow
+    this.ripples = new K.Ripples(r, { max: 8, color: R(2, 2), life: RIPPLE_LIFE });   // also drives the tree glow (ripples.at)
 
     // ---- sky and particles
     this.sky = new K.Sky(r, { stars: 170, clouds: 5 });
@@ -264,12 +232,10 @@ export class ColourWell {
       const amp = clamp(0.5 + 0.5 * k) * Math.min(1, d.accent);
       const size = lerp(18, 70, k);
       this.ripples.spawn(0, 0.14, 0, size, amp);
-      this.waves.push({ t: 0, size, amp });
       this.rimPulse.trigger(k);
     }
     this.rimPulse.update(dt);
     this.ripples.update(dt);
-    this.waves = this.waves.filter((w) => (w.t += dt) < RIPPLE_LIFE);
 
     // per-band blight, glow and windless sway
     const F = this.front;
@@ -277,11 +243,11 @@ export class ColourWell {
       const mid = (b.lo + Math.min(b.hi, 60)) / 2;
       b.blend = K.stage(F, b.lo - 2, Math.min(b.hi, 60) + 4) * 0.92;
       const touched = K.stage(F, b.lo, mid + 3);
-      b.glow = touched * (0.25 + 0.35 * k + 0.25 * this.breath.v * k) + this._waveAt(mid) * 0.9;
+      b.glow = touched * (0.25 + 0.35 * k + 0.25 * this.breath.v * k) + this.ripples.at(mid, 0, 5) * 0.9;
       b.sway = 0.004 + touched * (0.012 + d.mid * 0.07) * a.motion;
       b.trees.forEach((t, i) => {
         // trees nearest the front (and the passing beat ring) glow hardest
-        const g = b.glow * (0.6 + 0.4 * K.stage(F - t.d, -3, 8)) + this._waveAt(t.d) * 0.7;
+        const g = b.glow * (0.6 + 0.4 * K.stage(F - t.d, -3, 8)) + this.ripples.at(t.x, t.z, 5) * 0.7;
         b.glowInst.set(i, t.x, height(t.x, t.z) - 0.15, t.z, t.s * 0.75, 0, g, t.ph, 1 / 0.75);
       });
       b.glowInst.upload(b.trees.length);
@@ -293,16 +259,6 @@ export class ColourWell {
     this.motes.p.flickerRate = 1.4 + d.high * 6;
     this.motes.update(dt, this.center, { amount: 0.05 + 0.9 * K.stage(k, 0.08, 0.8), speed: 0.6 + d.level * 0.8 });
     this.sparks.update(dt, this.center, { amount: 0.04 + 0.9 * this.shaft, speed: 0.5 + this.shaft * 0.8 + d.high * 0.4 });
-  }
-
-  /** Level of the beat rings at radius `rad` (matches K.Ripples' ease-out growth). */
-  _waveAt(rad) {
-    let v = 0;
-    for (const w of this.waves) {
-      const t = w.t / RIPPLE_LIFE, e = 1 - (1 - t) * (1 - t), rr = w.size * (0.15 + 0.85 * e) * 0.5;
-      v += w.amp * (1 - t) * (1 - t) * Math.max(0, 1 - Math.abs(rad - rr) / 5);
-    }
-    return v;
   }
 
   render(r) {

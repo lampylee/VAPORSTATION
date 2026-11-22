@@ -96,81 +96,8 @@ function skinTex() {
   });
 }
 
-/**
- * Hunched figure (original): head sunk low between a humped back, wide-set pale eyes,
- * long arms, bowed legs and big flat feet. Two gait frames. 16x24, front/back view.
- */
-function figureTex(frame) {
-  const seg = (px, py, ax, ay, bx, by) => {
-    const vx = bx - ax, vy = by - ay, t = clamp(((px - ax) * vx + (py - ay) * vy) / (vx * vx + vy * vy));
-    return Math.hypot(px - ax - vx * t, py - ay - vy * t);
-  };
-  const legs = frame ? [[6.2, 16, 6.6, 21.5], [9.2, 16, 10, 23]] : [[6, 16, 4.6, 23], [9.3, 16, 10.8, 23]];
-  const arms = frame ? [[3.4, 10, 2.6, 17.5], [11.8, 10, 13.2, 19.5]] : [[3.4, 10, 2.2, 19.5], [11.8, 10, 12.4, 17.5]];
-  return K.makeIndexed(16, 24, (x, y) => {
-    const px = x + 0.5, py = y + 0.5;
-    if ((y === 6) && (x === 5 || x === 10)) return R(3, 2);                       // eyes, wide apart
-    const head = Math.hypot((px - 8) / 2.9, (py - 6.6) / 2.3) < 1;
-    const hump = Math.hypot((px - 8) / 5.4, (py - 10.6) / 3.3) < 1;
-    const torso = py > 10 && py < 16.8 && Math.abs(px - 8) < 4.2 - (py - 10) * 0.28;
-    let limb = false;
-    for (const [ax, ay, bx, by] of arms) if (seg(px, py, ax, ay, bx, by) < 1.05 || Math.hypot(px - bx, py - by) < 1.35) limb = true;
-    for (const [ax, ay, bx, by] of legs) if (seg(px, py, ax, ay, bx, by) < 1.15 || (Math.abs(py - by) < 0.9 && Math.abs(px - bx - 0.4) < 1.7)) limb = true;
-    if (!(head || hump || torso || limb)) return K.CLEAR;
-    const rim = hump && py < 9.5 && px < 7 ? 0.5 : 0;                              // a little moonlight on the hump
-    return K.dshade(0, 0.15 + rim + K.rnd(x, y, 3) * 0.25, x, y);
-  });
-}
-
-// ---- geometry ---------------------------------------------------------------
-
-/** A net hung between two poles, sagging in the middle (poles are a separate mesh). Pivot at base centre. */
-function netGeo(len = 5, h = 2, sag = 0.55, cols = 8) {
-  const g = new GeoBuilder(), hw = len / 2;
-  for (let i = 0; i < cols; i++) {
-    const u0 = i / cols, u1 = (i + 1) / cols;
-    const top = (u) => h - sag * Math.sin(Math.PI * u), bot = (u) => 0.35 + sag * 0.4 * (1 - Math.sin(Math.PI * u));
-    const x0 = -hw + len * u0, x1 = -hw + len * u1;
-    g.quad([x0, bot(u0), 0], [x1, bot(u1), 0], [x1, top(u1), 0], [x0, top(u0), 0],
-      [x0 * 0.6, bot(u0) * 0.6], [x1 * 0.6, bot(u1) * 0.6], [x1 * 0.6, top(u1) * 0.6], [x0 * 0.6, top(u0) * 0.6], [0, 0, 1]);
-  }
-  return g.build();
-}
-function netPostsGeo(len = 5, h = 2) {
-  return merge([-1, 1].map((s) => ({ geo: K.props.shift(K.props.prism(5, 0.08, h + 0.25), s * len / 2, 0, 0) })));
-}
-
-/** Jagged rock: an icosphere pushed in and out per vertex (deterministic, so shared corners stay shared). */
-function rockGeo(seed) {
-  const g = icosphere(0, 1), P = g.positions;
-  for (let i = 0; i < P.length; i += 3) {
-    const n = K.rand2(Math.round(P[i] * 997 + P[i + 1] * 311), Math.round(P[i + 2] * 577 + P[i + 1] * 101), seed);
-    const top = P[i + 1] > 0.5, f = 0.55 + n * 0.8;                  // craggy, with a spike on top
-    P[i] *= f * (top ? 0.5 : 1); P[i + 1] *= f * (top ? 1.6 + n : 1); P[i + 2] *= f * (top ? 0.5 : 1);
-  }
-  return g;
-}
-
-/** Camera: a slow boat drift on an ellipse off the shore, always looking back at the town. */
-class HarbourRig extends K.CameraRig {
-  constructor() {
-    super({ fov: 58, near: 0.1, far: 170, fovPunch: 1.2, nudge: 0.07, rollKick: 0.01, idleSpeed: 1.0, activeSpeed: 2.3, bassBoost: 0.3 });
-    this.th = -0.35; this._p = [0, 0, 0];
-  }
-  pos(th, out) { out[0] = Math.sin(th) * 58; out[1] = 3.3; out[2] = 30 - 16 * Math.cos(th); return out; }
-  update(a, k, dt) {
-    super.update(a, k, dt);
-    const local = Math.hypot(58 * Math.cos(this.th), 16 * Math.sin(this.th));
-    this.th += (this.speed * dt) / Math.max(12, local);
-    const e = this.pos(this.th, this.eye), p = this.pos(this.th + 0.1, this._p);
-    e[1] = 3.3 + Math.sin(this.time * 0.37) * 0.22 + Math.sin(this.time * 0.23 + 1) * 0.12;   // swell under the boat
-    let ax = p[0] - e[0], az = p[2] - e[2]; const al = Math.hypot(ax, az) || 1; ax /= al; az /= al;
-    let fx = e[0] * 0.8 - e[0], fz = -12 - e[2]; const fl = Math.hypot(fx, fz) || 1; fx /= fl; fz /= fl;
-    let dx = ax * 0.45 + fx, dz = az * 0.45 + fz; const dl = Math.hypot(dx, dz) || 1; dx /= dl; dz /= dl;
-    this.target[0] = e[0] + dx * 12; this.target[1] = e[1] - 1.1; this.target[2] = e[2] + dz * 12;
-    this.roll = Math.sin(this.time * 0.29) * 0.022;
-  }
-}
+// Figures (K.sprites.figure hunch), nets (K.props.sagStrip / sagPosts), reef rocks (K.props.rock)
+// and the boat camera (K.OrbitFocusRig) come from the kit (Kit v5, promoted from this file).
 
 // ---- the style ----------------------------------------------------------------
 
@@ -222,13 +149,14 @@ export class FogHarbour {
     this.winMesh = r.createMesh(new GeoBuilder().face([0, 0, 0], [0.32, 0, 0], [0, 0.42, 0]).build());
     this.winTex = r.texture(windowTex());
     this.windows = [];
+    const COLS = [-0.27, 0.27];
     this.houses.forEach((h, hi) => {
-      const V = this.houseMeshes[h.v], rowsY = V.h > 4 ? [0.3, 0.72] : [0.48];
-      for (const fy of rowsY) for (const fx of [-0.27, 0.27]) {
+      const V = this.houseMeshes[h.v], rows = V.h > 4 ? [0.3, 0.72] : [0.48];
+      const house = { x: h.x, y: h.y, z: h.z, rotX: h.rx, rotY: h.rotY, rotZ: h.rz, hs: h.hs };
+      for (const w of K.props.houseWindows(house, { w: V.w, h: V.h, d: V.d }, { rows, cols: COLS })) {
+        const fy = rows[w.row], fx = COLS[w.col];
         if (K.rand2(hi, Math.round(fy * 10 + fx * 10), 12) < 0.2) continue;        // boarded up
-        const lp = [fx * V.w, fy * V.h * h.hs, V.d / 2 + 0.04];
-        const q = K.rotPoint(lp, h.rx, h.rotY, h.rz);
-        this.windows.push({ h: hi, x: h.x + q[0], y: h.y + q[1], z: h.z + q[2], f: K.rand2(hi, fy * 7 + fx, 13) });
+        this.windows.push({ h: hi, x: w.x, y: w.y, z: w.z, f: K.rand2(hi, fy * 7 + fx, 13) });
       }
     });
     this.winInst = r.createInstances(this.windows.length);
@@ -255,8 +183,8 @@ export class FogHarbour {
     this.boardTex = r.texture(K.tex.boards({ ramp: 0, seed: 4 }));
 
     // ---- nets on racks
-    this.netMesh = r.createMesh(netGeo());
-    this.netPosts = r.createMesh(netPostsGeo());
+    this.netMesh = r.createMesh(K.props.sagStrip(5, 2, 0.55, { cols: 8, bottom: 0.35, bottomSag: 0.4, tile: 1 / 0.6 }));
+    this.netPosts = r.createMesh(K.props.sagPosts(5, 2));
     this.netTex = r.texture(netTex());
     this.nets = r.createInstances(5); this.netPostInst = r.createInstances(5);
     const netAt = [[9, -1.6, 0.1], [16, -2.2, -0.08], [27, -1.4, 0.15], [-20, 5.2, 0], [-38, -1.8, -0.1]];
@@ -300,7 +228,7 @@ export class FogHarbour {
     for (let i = 0; i < 22; i++) {
       const x = -32 + i * 2.6 + (K.rand2(i, 1, 2) - 0.5) * 2.5, z = 29 + (K.rand2(i, 2, 2) - 0.5) * 6;
       const s = 0.7 + K.rand2(i, 3, 2) * 1.1, sy = 0.6 + K.rand2(i, 4, 2) * 1.4 * (i % 3 === 1 ? 1.6 : 1);
-      rocks.push({ geo: rockGeo(i + 1), xf: K.xf({ pos: [x, -0.6, z], rot: [0, K.rand2(i, 5, 2) * TAU, 0], scale: [s * 1.3, sy, s] }) });
+      rocks.push({ geo: K.props.rock(i + 1, { spike: 1, rough: 0.8 }), xf: K.xf({ pos: [x, -0.6, z], rot: [0, K.rand2(i, 5, 2) * TAU, 0], scale: [s * 1.3, sy, s] }) });
     }
     this.reefMesh = r.createMesh(merge(rocks));
     this.rockTex = r.texture(K.tex.cliffRock({ seed: 9 }));
@@ -318,16 +246,18 @@ export class FogHarbour {
     this.nextIdleRipple = 3;
 
     // ---- figures
-    this.figTex = [r.texture(figureTex(0)), r.texture(figureTex(1))];
+    this.figTex = [0, 1].map((frame) => r.texture(K.sprites.figure({ pose: 'hunch', frame, ramp: 0, eyes: R(3, 2) })));
     this.figInst = [r.createInstances(N_FIG), r.createInstances(N_FIG)];
     this.figs = [];
     for (let i = 0; i < N_FIG; i++) {
       let c = Math.floor(K.rand2(i, 1, 21) * 11) - 6;                 // lanes x = c*10 + 5, spread along the shore
       const lane = c * COL + 5, gx = lane + (K.rand2(i, 2, 21) - 0.5) * 6, gz = -0.6 - K.rand2(i, 3, 21) * 1.4;
       const sx = lane + (K.rand2(i, 4, 21) - 0.5) * 1.2;
-      const L = Math.hypot(gx - sx, gz - FIG_START);
-      this.figs.push({ sx, lane, gx, gz, L, d: 0, ph: K.rand2(i, 5, 21) * TAU, th: 0.18 + (i / (N_FIG - 1)) * 0.55 + (K.rand2(i, 6, 21) - 0.5) * 0.06, s: 0.95 + K.rand2(i, 7, 21) * 0.25 });
+      this.figs.push({ sx, lane, gx, gz, L: Math.hypot(gx - sx, gz - FIG_START), s: 0.95 + K.rand2(i, 7, 21) * 0.25 });
     }
+    // walk out of the fog as the swell rises, home again as it falls, never teleporting
+    this.walk = new K.Walkers(N_FIG, { spread: 0.08, length: (i) => this.figs[i].L, gaitRate: 2.4, idleRate: 0.9 });
+    this.walk.list.forEach((w, i) => { w.th = 0.18 + (i / (N_FIG - 1)) * 0.55 + (K.rand2(i, 6, 21) - 0.5) * 0.06; w.phase = K.rand2(i, 5, 21) * TAU; });
 
     // ---- low mist banks on the water and in the lanes
     this.mistTex = r.texture(K.sprites.mistBank({ ramp: 3, seed: 5 }));
@@ -341,7 +271,14 @@ export class FogHarbour {
 
     this.heave = 0; this.time = 0; this.k = 0;
     this.a = { level: 0, bass: 0, mid: 0, high: 0, beat: false, beatPulse: 0, beatCount: 0 };
-    this.m = mat4.create(); this.cam = new HarbourRig();
+    this.m = mat4.create();
+    // a slow boat drift on an ellipse off the shore, always looking back at the town
+    // (the focus slides along the shore with the boat, so the view looks across the town, not at one point)
+    this.cam = new K.OrbitFocusRig({
+      center: [0, 3.3, 30], rx: 58, rz: 16, start: -0.35, focus: (e) => [e[0] * 0.8, 0, -12], lookMix: 1 / 1.45,
+      lookDist: 12, lookDrop: 1.1, bob: 0.34, rollSway: 0.022,
+      fov: 58, near: 0.1, far: 170, fovPunch: 1.2, nudge: 0.07, rollKick: 0.01, idleSpeed: 1.0, activeSpeed: 2.3, bassBoost: 0.3,
+    });
     this.col = { fog: [0, 0, 0], glowFog: [0, 0, 0], tint: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], one: [1, 1, 1], water: [0, 0, 0], mist: [0, 0, 0], dark: [0, 0, 0], rock: [0, 0, 0], skin: [0, 0, 0] };
     this._wave = [0, 0.16, 0.55];
   }
@@ -427,16 +364,12 @@ export class FogHarbour {
     this.ripples.update(dt);
 
     // ---- figures shuffle down the lanes and gather at the water's edge
-    const n = [0, 0], speed = 1.5 + k * 0.5;
-    for (const F of this.figs) {
-      const want = K.stage(k, F.th, F.th + 0.08) * F.L, prev = F.d;
-      F.d += clamp(want - F.d, -speed * dt, speed * dt);
-      const moved = Math.abs(F.d - prev);
-      F.ph += moved * 2.4 + dt * 0.9;                                  // a slow rocking shuffle even when standing
-      if (F.d < 0.05) continue;                                        // still back in the fog, out of sight
-      const u = F.d / F.L, z = lerp(FIG_START, F.gz, u);
+    const n = [0, 0];
+    for (const w of this.walk.update(k, dt, { speed: 1.5 + k * 0.5 })) {   // phase: a slow rocking shuffle even when standing
+      if (w.d < 0.05) continue;                                        // still back in the fog, out of sight
+      const F = this.figs[w.i], u = w.u, z = lerp(FIG_START, F.gz, u);
       const x = lerp(F.sx, F.lane, clamp(u * 3)) + (F.gx - F.lane) * K.stage(u, 0.75, 1);
-      const sn = Math.sin(F.ph), y = height(x, z) - 0.05 + Math.abs(sn) * 0.07;
+      const sn = Math.sin(w.phase), y = height(x, z) - 0.05 + Math.abs(sn) * 0.07;
       const f = sn > 0 ? 0 : 1;
       this.figInst[f].set(n[f]++, x, y, z, 1.3 * F.s, 0, 0.8, 0, 1.5, 0, sn * 0.12 + 0.04);
     }

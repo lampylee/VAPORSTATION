@@ -146,7 +146,8 @@ export class PathRig extends CameraRig {
  * Kit v5: travels an ellipse (centre, rx, rz) at `speed` world units/s while looking
  * somewhere between the travel direction (lookMix 0) and a focus point (lookMix 1), so a
  * town, skyline or stage stays in view: a boat off a harbour, a slow fly-round of a castle.
- * bob = gentle vertical swell (two slow sines). From Fog Harbour's HarbourRig.
+ * bob = gentle vertical swell (two slow sines). focus may be a function (eye) => [x, y, z]
+ * for a focus that slides with the camera (look along a long shore). From Fog Harbour's HarbourRig.
  *   this.cam = new K.OrbitFocusRig({ center: [0, 3.3, 30], rx: 58, rz: 16, focus: [0, 2, -12], lookMix: 0.7 });
  */
 export class OrbitFocusRig extends CameraRig {
@@ -163,7 +164,8 @@ export class OrbitFocusRig extends CameraRig {
     const e = this.pos(this.th, this.eye), p = this.pos(this.th + 0.1, this._p);
     e[1] = this.center[1] + (Math.sin(this.time * 0.37) * 0.65 + Math.sin(this.time * 0.23 + 1) * 0.35) * this.bob;
     let ax = p[0] - e[0], az = p[2] - e[2]; const al = Math.hypot(ax, az) || 1; ax /= al; az /= al;
-    let fx = this.focus[0] - e[0], fz = this.focus[2] - e[2]; const fl = Math.hypot(fx, fz) || 1; fx /= fl; fz /= fl;
+    const F = typeof this.focus === 'function' ? this.focus(e) : this.focus;
+    let fx = F[0] - e[0], fz = F[2] - e[2]; const fl = Math.hypot(fx, fz) || 1; fx /= fl; fz /= fl;
     const m = this.lookMix;
     let dx = ax * (1 - m) + fx * m, dz = az * (1 - m) + fz * m; const dl = Math.hypot(dx, dz) || 1; dx /= dl; dz /= dl;
     this.target[0] = e[0] + dx * this.lookDist; this.target[1] = e[1] - this.lookDrop; this.target[2] = e[2] + dz * this.lookDist;

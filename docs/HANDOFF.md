@@ -96,7 +96,8 @@ Ashfall Town now uses `r.updateTexture`; the other wave-1 styles keep their loca
 - Props: `well`, `rock`, `sagStrip` + `sagPosts`, `houseWindows`. Sprites: `figure` (stand / walk / hunch / float, merging Underriver's ghost and Fog Harbour's hunched figure), `panelLight` + `panelHalo`, `lightShaft({ fromBottom })`. Particles: `'softMist'` (additive).
 - Motion: `K.Walkers`. Camera: `K.OrbitFocusRig` (Fog Harbour), `K.DriftRig` (Under the Hull), `K.GridWanderRig` + `K.GRID_DIRS` (Backrooms).
 - Skipped (covered or scene-specific): Moth Lamp's pool texture (`poolSprite`), Drowned Ruins' sprites (Kit v3), the moth swarm (`School`), plus the wave 4b list above. Backlog item "repeat/loop for terrain and particles along an endless road" is covered by `K.repeat` and the camera-wrapped particle box.
-- Smoke test after Kit v5: all 39 styles at k=0/1, no GL or console errors; Kit Demo 28→37 draws / ~11.4k tris. The wave 5 environments keep their local copies, as earlier waves did.
+- Smoke test after Kit v5: all 39 styles at k=0/1, no GL or console errors; Kit Demo 28→37 draws / ~11.4k tris.
+- Migrated (2026-11-22, at the user's request): **Colour from the Well** now uses `K.ringBands`, `K.props.well` and `Ripples.at`; **Fog Harbour** uses `K.sprites.figure` (hunch), `K.props.sagStrip`/`sagPosts`/`rock`/`houseWindows`, `K.Walkers` and `K.OrbitFocusRig` (focus may now be a function; `rock`'s roughness range was matched to the original). Pixel-diffed against the old code with the same seeded audio: Colour from the Well <0.01% of pixels changed, Fog Harbour 0.15–0.3% (camera bob rounding); visually identical. Colour from the Well keeps its own shaft texture (its falloff differs from `lightShaft`). Every other environment keeps its local copies.
 
 ### Original backlog (for reference)
 
