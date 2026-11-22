@@ -221,3 +221,6 @@ input[type=color] { width: 100%; height: 26px; padding: 0; border: 1px solid var
 .sl-chips { grid-column: 2 / 5; display: flex; flex-wrap: wrap; gap: 4px; }
 .chip { padding: 1px 6px; font-size: 11px; }
 .chip:hover { border-color: var(--hot); color: var(--hot); }
+
+/* kiosk (?kiosk): no cursor over the show */
+body.kiosk.ui-hidden, body.kiosk.ui-hidden * { cursor: none; }   /* H shows the panel and the cursor */

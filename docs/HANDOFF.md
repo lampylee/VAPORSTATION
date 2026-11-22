@@ -58,8 +58,8 @@ Number keys reach 0–9; the rest via N / Shift+N, the dropdown, auto-switch, a 
 
 ## Open items (priority)
 
-1. **Gig-safety layer (Phase 5)**, in progress: governor + watchdog done (see the last section); next offline PWA +
-   kiosk launcher and a pre-show self-test. Design: `docs/superpowers/specs/2026-11-22-gig-safety-design.md`.
+1. **Gig-safety layer (Phase 5)**, in progress: governor, watchdog, offline PWA and kiosk launcher done (see the last
+   section); next the pre-show self-test. Design: `docs/superpowers/specs/2026-11-22-gig-safety-design.md`.
 2. **Add a GitHub remote and push** (the user has to create the repo; everything lives on one disk until then).
 3. Run the "not verified" checks above on the gig laptop.
 4. Song-section awareness (verse / chorus / drop from energy over several bars) so camera moves and reveals land on section
@@ -160,4 +160,17 @@ Tested in the pane: injected throws in render and update, `WEBGL_lose_context` l
 errors), governor tiers + the saturation cap with synthetic frame times, every style at k=0 / k=1 through the guarded path.
 **Not tested:** a real driver reset (TDR), a real interface unplug / dead stream (needs real Chrome + hardware).
 
-**Next:** offline PWA + kiosk launcher, then the pre-show self-test (see the design doc).
+**Landed (2026-11-22, part 2): offline + kiosk**
+- `sw.js` service worker: network first (edits show at once while developing; 2.5 s timeout), cache fallback. The page
+  posts every resource it loaded (`warm`), so all modules, styles and `demo/demo.wav` are cached on first visit with no
+  file list to maintain. Range requests (the audio player) bypass it unless offline. `?nosw` skips registration; bump
+  `CACHE` in `sw.js` to drop old caches. `manifest.webmanifest` + `icon.svg` (installable, starts at `?kiosk`).
+- `?kiosk`: panel hidden, cursor hidden while it is, live input opened (default device if none saved). Screen wake lock in
+  kiosk and fullscreen. Startup counts as "live wanted", so the watchdog keeps retrying an interface plugged in later.
+- `kiosk.bat`: starts `node serve.js` minimised (or relies on the cache if node is missing), finds Chrome / Edge, launches
+  `--kiosk` with its own profile (`%LOCALAPPDATA%\Vaporstation\chrome`), autoplay allowed, input permission auto-accepted,
+  background throttling off. Dry-run checked (the command it builds); not launched for real.
+- Tested in the pane: 90 files cached; server stopped → `?kiosk` reload loads fully from cache, no GL errors; input retry
+  backoff 0.5 → 1 → 2 → 4 s.
+
+**Next:** pre-show self-test page (GPU, fps per style on this machine feeding the heavy list, input level, MIDI).

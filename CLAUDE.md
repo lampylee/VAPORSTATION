@@ -15,6 +15,7 @@ Plan: `ROADMAP.md`. **Current status, open items and next steps: `docs/HANDOFF.m
 - `node serve.js` → http://localhost:8080 (creates `demo/demo.wav` on first run).
 - **Play demo track** button: synthetic gig with silence, a 1.2 s mid-song stop, a quiet passage, and a gap between songs. Press **D** for the debug overlay (state, intensity, beats, fps).
 - `test.html`: bare pipeline test scene.
+- `?kiosk` (what `kiosk.bat` opens): no panel / cursor, live input on. `sw.js` caches the app for offline use (network first, so edits still show; `?nosw` skips it).
 - `http://localhost:8080/?bench`: cycles every style idle → active with synthetic audio, logs fps / CPU ms / draws / tris via `console.table` and `window.benchResults`.
 - The Claude browser pane blocks microphone access; test live input in real Chrome.
 

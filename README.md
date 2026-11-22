@@ -24,6 +24,17 @@ It must be `localhost` (not a `file://` path), or Chrome won't allow audio input
 4. Watch the meter under the player while the band soundchecks. The pink mark is the **threshold**. Silence (stage noise) should sit clearly left of it and music clearly right of it. Move the threshold or the **Input gain** until that's true.
 5. Press **F** for fullscreen. The UI and cursor hide automatically. **H** brings the UI back.
 
+**Kiosk launcher (Windows):** once the steps above work, double-click `kiosk.bat` instead. It starts the server and opens
+Chrome (or Edge) fullscreen in its own profile, with audio running without a click, the input permission accepted
+automatically (that profile only), no panel and no cursor. **H** shows the panel, **Alt+F4** quits. Open
+`http://localhost:8080/?kiosk` in any browser for the same mode without the launcher.
+
+**Offline / safety:** after the first visit a service worker caches the whole app (including the demo track), so a
+reload still works if the server window is closed, or with no network at all. The screen is kept awake in fullscreen
+and kiosk. If the GPU driver resets, the picture fades to fog and comes back by itself. If an environment crashes, it
+is skipped. If the laptop can't keep up, detail is lowered quietly and heavy environments leave the rotation (press
+**D** to see the `safety:` line). Live input is reopened automatically if the interface is unplugged and plugged back in.
+
 The input is opened with echo cancellation, noise suppression and auto gain control all **off**.
 
 ## Test without a band

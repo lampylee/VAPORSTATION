@@ -316,7 +316,8 @@ addEventListener('pointerdown', kickAudio);
 addEventListener('keydown', kickAudio);
 
 // On load: if live input was used before, reopen the remembered device.
-refreshDevices().then(() => { if (s.deviceLabel || s.deviceId) startLive(); });
+// liveWanted up front: if the interface is plugged in later, the watchdog keeps retrying
+refreshDevices().then(() => { if (s.deviceLabel || s.deviceId) { liveWanted = true; startLive(); } });
 
 // ---------------- UI visibility / keys ----------------
 let uiVisible = true;
@@ -379,6 +380,38 @@ try {
   const why = sessionStorage.getItem('vaporstation.recovered');
   if (why) { sessionStorage.removeItem('vaporstation.recovered'); console.warn(`[watchdog] recovered by reload (${why})`); }
 } catch (e) { /* ignore */ }
+// Offline: a service worker caches everything this page loaded, so a reload still works with
+// the server gone (node window closed, GitHub Pages copy opened offline).
+const params = new URLSearchParams(location.search);
+if ('serviceWorker' in navigator && location.protocol.startsWith('http') && !params.has('bench') && !params.has('nosw')) {
+  navigator.serviceWorker.register('sw.js').then(async () => {
+    const reg = await navigator.serviceWorker.ready;
+    const urls = [location.pathname, 'manifest.webmanifest', 'icon.svg', 'demo/demo.wav',
+      ...performance.getEntriesByType('resource').map((e) => e.name)];
+    reg.active?.postMessage({ type: 'warm', urls: [...new Set(urls)] });
+  }).catch((e) => console.warn('[offline] service worker not registered', e));
+}
+
+// Kiosk (?kiosk, used by kiosk.bat and the installed app): no panel, no cursor, live input on.
+const kiosk = params.has('kiosk');
+if (kiosk) {
+  setUiVisible(false);
+  document.body.classList.add('kiosk');
+  if (!(s.deviceLabel || s.deviceId)) { liveWanted = true; refreshDevices().then(startLive); }   // otherwise the saved device opens below
+}
+
+// Keep the screen awake while fullscreen / kiosk (re-requested when the page comes back).
+let wakeLock = null;
+async function keepAwake() {
+  const want = kiosk || !!document.fullscreenElement;
+  if (!want || document.hidden || !navigator.wakeLock) { if (!want && wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; } return; }
+  if (wakeLock && !wakeLock.released) return;
+  try { wakeLock = await navigator.wakeLock.request('screen'); } catch (e) { /* not allowed right now */ }
+}
+document.addEventListener('visibilitychange', keepAwake);
+document.addEventListener('fullscreenchange', keepAwake);
+keepAwake();
+
 let frameErrAt = 0;
 const frameError = (where, e) => {
   const now = performance.now();
