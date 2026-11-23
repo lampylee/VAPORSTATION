@@ -20,6 +20,7 @@ export class StyleManager {
     this.idleTime = 0;
     this.nextAutoAt = Infinity;
     this.onChange = null;
+    this._up = -1;          // committed next auto-switch target (see `upcoming`)
     this.pool = null;       // setlist: indices N / auto-switch rotate through (null = whole rotation)
   }
 
@@ -63,6 +64,7 @@ export class StyleManager {
   /** Crossfade to style i. Requests during a crossfade are queued (last one wins). */
   goTo(i) {
     if (i < 0 || i >= this.count) return;
+    this._up = -1;
     if (this.next >= 0) { this.queued = i === this.next ? -1 : i; return; }
     if (i === this.cur) return;
     this.next = i; this.t = 0;
@@ -78,15 +80,31 @@ export class StyleManager {
     return light.length ? light : ok;
   }
 
-  /** Next style in the rotation (skips hidden styles like the test scene). */
-  goNext(dir = 1) {
+  /** Rotation neighbour of the current target (skips hidden styles like the test scene). */
+  _neighbour(dir) {
     const rot = this.rotation;
-    if (!rot.length) return;
+    if (!rot.length) return -1;
     const t = this.target, pos = rot.indexOf(t);
-    if (pos >= 0) { this.goTo(rot[(pos + dir + rot.length) % rot.length]); return; }
+    if (pos >= 0) return rot[(pos + dir + rot.length) % rot.length];
     // the current style left the rotation (broken / heavy / not in this song's pool): its neighbour in order
     const after = dir > 0 ? rot.find((j) => j > t) : [...rot].reverse().find((j) => j < t);
-    this.goTo(after ?? (dir > 0 ? rot[0] : rot[rot.length - 1]));
+    return after ?? (dir > 0 ? rot[0] : rot[rot.length - 1]);
+  }
+
+  /**
+   * The style the next goNext(1) / idle auto-switch goes to. Committed, not guessed: kept until the
+   * target changes or it leaves the rotation (broken / avoided / pool change), then re-picked.
+   */
+  get upcoming() {
+    const rot = this.rotation;
+    if (!rot.length) return this.target;
+    if (!rot.includes(this._up) || (this._up === this.target && rot.length > 1)) this._up = this._neighbour(1);
+    return this._up;
+  }
+
+  goNext(dir = 1) {
+    const i = dir > 0 ? this.upcoming : this._neighbour(dir);
+    if (i >= 0) this.goTo(i);
   }
 
   update(audio, intensity, playing, dt, s) {
@@ -95,7 +113,7 @@ export class StyleManager {
     if (idle) this.idleTime += dt; else { this.idleTime = 0; this.nextAutoAt = s.idleSwitchDelay; }
     if (this.nextAutoAt === Infinity) this.nextAutoAt = s.idleSwitchDelay;
     if (s.autoSwitch && idle && this.idleTime >= this.nextAutoAt && !this.transitioning && this.rotation.length > 1) {
-      this.goNext();
+      this.goTo(this.upcoming);
       this.nextAutoAt = this.idleTime + s.idleSwitchInterval;
     }
 
