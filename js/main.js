@@ -19,19 +19,28 @@ import { ShowUI, MidiUI, EnvBrowser } from './show/ui.js';
 import { Governor } from './safety/governor.js';
 import { Watchdog } from './safety/watchdog.js';
 import { SelfTest } from './safety/selftest.js';
+import { Sink } from './show/output.js';
 
 const s = loadSettings();
 const canvas = document.getElementById('view');
 const overlay = document.getElementById('overlay');
 
-let renderer;
+let renderer, sink;
 try {
-  renderer = new PS1Renderer(canvas);
+  renderer = new PS1Renderer();   // draws off-screen; frames go to the sink
+  sink = new Sink(canvas);        // the laptop #view (single mode)
 } catch (e) {
   overlay.textContent = 'Could not start WebGL2: ' + e.message;
   overlay.hidden = false;
   throw e;
 }
+/** Size the renderer's backbuffer to the current sink. */
+function fitOutput() {
+  const z = sink.size;
+  renderer.setOutputSize(z.w, z.h, z.dpr);
+  renderer.resize();
+}
+fitOutput();
 
 const engine = new AudioEngine();
 const analyser = new Analyser();
@@ -337,9 +346,9 @@ function toggleFullscreen() {
 }
 document.addEventListener('fullscreenchange', () => {
   setUiVisible(!document.fullscreenElement);   // hidden by default in fullscreen
-  renderer.resize();
+  fitOutput();
 });
-addEventListener('resize', () => renderer.resize());
+addEventListener('resize', () => fitOutput());
 
 addEventListener('keydown', (e) => {
   if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -378,7 +387,7 @@ addEventListener('keydown', (e) => {
 // ---------------- gig safety ----------------
 const governor = new Governor(renderer, styles, styleKey);
 const watchdog = new Watchdog({
-  canvas, renderer, styles, engine, governor,
+  canvas: renderer.canvas, renderer, styles, engine, governor,
   wantLive: () => liveWanted,
   reopenLive: () => startLive(),
 });
@@ -493,6 +502,7 @@ function frame(now) {
       styles.render();
       renderer.present();
       if (thumbs.captureCur && !P.fade && P.flash < 0.01) renderer.snapshot(envBrowser.ctx(styles.cur));
+      sink.show(renderer.takeFrame());
     }
   } catch (e) { frameError('render', e); }
   markEnvs();
@@ -523,4 +533,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for poking at things from the console
-window.viz = { s, engine, analyser, state, conductor, styles, renderer, store, selectPalette, paletteUI, setlists, setlist, setlistUI, show, showUI, midi, midiUI, envBrowser, showAction, governor, watchdog };
+window.viz = { s, engine, analyser, state, conductor, styles, renderer, sink, store, selectPalette, paletteUI, setlists, setlist, setlistUI, show, showUI, midi, midiUI, envBrowser, showAction, governor, watchdog };

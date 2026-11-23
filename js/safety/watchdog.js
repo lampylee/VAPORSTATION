@@ -12,7 +12,7 @@ const DEAD_SILENCE = 8;          // seconds of exact zeros before reopening the 
 
 export class Watchdog {
   /**
-   * opts: { canvas, renderer, styles, engine, governor, wantLive: () => bool, reopenLive: () => Promise,
+   * opts: { canvas (renderer.canvas, the OffscreenCanvas: context events fire there), renderer, styles, engine, governor, wantLive: () => bool, reopenLive: () => Promise,
    *         status: (text, isError) => void }
    */
   constructor(opts) {
