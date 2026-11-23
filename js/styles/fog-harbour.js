@@ -179,6 +179,11 @@ export class FogHarbour {
     for (const z of [7.5, 9.3]) for (const x of [-7.3, -4.7]) parts.push({ geo: K.props.shift(K.props.prism(5, 0.16, 4.6), x, -2.8, z) });
     // a few broken piles out in the water
     for (let i = 0; i < 6; i++) parts.push({ geo: K.props.shift(K.props.prism(5, 0.15, 3 + K.rand2(i, 1, 4) * 1.5, { taper: 0.7 }), -1 + i * 2.2, -2.8, 8 + K.rand2(i, 2, 4) * 3) });
+    // deck tops again, subdivided, a hair above the boxes: the lanterns light them as pools (Kit v7 point lights)
+    const top = new GeoBuilder();
+    top.face([-14, DECK_Y + 0.135, 2.5], [11, 0, 0], [0, 0, -3.5], [0, 0, 8, 2.5], 14);
+    top.face([-6, DECK_Y + 0.135, 7.5], [1.5, 0, 0], [0, 0, -2], [0, 0, 1, 1.5], 4);
+    parts.push({ geo: top.build() });
     this.wharfMesh = r.createMesh(merge(parts));
     this.boardTex = r.texture(K.tex.boards({ ramp: 0, seed: 4 }));
 
@@ -212,6 +217,7 @@ export class FogHarbour {
       return { x, y, z, rot, hx: x + hook[0], hy: y + hook[1], hz: z + hook[2], on: 0, ph: i * 1.9, idle: i === 0 ? 0.85 : i === 1 ? 0.3 : 0, from: 0.12 + i * 0.1 };
     });
     this.lampInst.upload(this.lamps.length);
+    this.lights = new K.LightSet({ reach: 10 });
     this.beatSwing = [new K.Pendulum(1.45, 0.32, 0.45), new K.Pendulum(1.3, 0.36, 0.4)];
     this.breeze = [new K.Pendulum(1.6, 0.4, 0.25), new K.Pendulum(1.5, 0.45, 0.25)];
 
@@ -279,12 +285,12 @@ export class FogHarbour {
       lookDist: 12, lookDrop: 1.1, bob: 0.34, rollSway: 0.022,
       fov: 58, near: 0.1, far: 170, fovPunch: 1.2, nudge: 0.07, rollKick: 0.01, idleSpeed: 1.0, activeSpeed: 2.3, bassBoost: 0.3,
     });
-    this.col = { fog: [0, 0, 0], glowFog: [0, 0, 0], tint: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], one: [1, 1, 1], water: [0, 0, 0], mist: [0, 0, 0], dark: [0, 0, 0], rock: [0, 0, 0], skin: [0, 0, 0] };
+    this.col = { fog: [0, 0, 0], glowFog: [0, 0, 0], tint: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], one: [1, 1, 1], water: [0, 0, 0], mist: [0, 0, 0], dark: [0, 0, 0], rock: [0, 0, 0], skin: [0, 0, 0], lamp: [0, 0, 0], focus: [0, 0, 0] };
     this._wave = [0, 0.16, 0.55];
   }
 
   update(a, k, dt) {
-    this.a = a; this.k = k; this.time += dt;
+    this.a = a; this.k = k; this.time += dt; this.dt = dt;
     const d = K.drive(a, k), t = this.time;
     this.cam.update(a, k, dt);
     const eye = this.cam.eye;
@@ -421,6 +427,15 @@ export class FogHarbour {
     col.skin[0] = col.skin[1] = col.skin[2] = dim * 0.85;
     col.dark[0] = col.dark[1] = col.dark[2] = 0.45;
     col.water[0] = col.water[1] = col.water[2] = 0.5;
+
+    // the lanterns light the wharf, posts and house fronts (and so their reflection); the best 4 near the view
+    const L = this.lights, eye = this.cam.eye, tg = this.cam.target;
+    scaleColor(col.lamp, P.role('glow'), 2.4 + d.pulse * 0.4);
+    L.begin();
+    this.lamps.forEach((lp, i) => { if (lp.gx !== undefined) L.add(i, lp.gx, lp.gy - 0.1, lp.gz, col.lamp, 7.5, lp.level); });
+    const fx = tg[0] - eye[0], fz = tg[2] - eye[2], fn = Math.hypot(fx, fz) || 1;
+    col.focus[0] = eye[0] + (fx / fn) * 10; col.focus[1] = 2; col.focus[2] = eye[2] + (fz / fn) * 10;
+    L.apply(r, col.focus, this.dt || 1 / 60);
 
     // 1) reflection
     r.setMirror(WATER);

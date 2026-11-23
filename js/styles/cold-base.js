@@ -10,6 +10,9 @@
 //        searchlights wake one by one, alarm beacons spin up, windows light, fog closes in.
 // Beat: searchlights snap toward the camera, beacon flash, camera nudge.
 // Bass: wind gusts. Highs: beacon / window / lens flicker.
+// Light (Kit v7): each beacon beam is a red point light swinging round with it, each searchlight
+// pool a cold one; K.LightSet keeps the best 4 in view. Hut walls and hangar arches are subdivided
+// so the sweep reads as moving light, not flashing corners.
 import { mat4, lerp, damp, clamp, smoothstep } from '../gfx/math.js';
 import { scaleColor, mixColor } from '../gfx/color.js';
 import { GeoBuilder, box, merge } from '../gfx/geometry.js';
@@ -93,13 +96,16 @@ const solidTex = (idx) => K.makeIndexed(4, 4, () => idx);
 
 // ---------- geometry ----------
 /** Quonset hangar: half-ellipse arch along z with end walls. Pivot at base centre. */
-function quonset(w, len, h, segs = 8) {
-  const g = new GeoBuilder(), pts = [], z0 = -len / 2, z1 = len / 2;
+function quonset(w, len, h, segs = 8, nz = 8) {
+  const g = new GeoBuilder(), pts = [];
   for (let i = 0; i <= segs; i++) { const a = (Math.PI * i) / segs; pts.push([Math.cos(a) * w / 2, Math.sin(a) * h]); }
   let u = 0;
   for (let i = 0; i < segs; i++) {
     const [x0, y0] = pts[i], [x1, y1] = pts[i + 1], du = Math.hypot(x1 - x0, y1 - y0) / 2;
-    K.quadFacing(g, [x0, y0, z0], [x1, y1, z0], [x1, y1, z1], [x0, y0, z1], [u, 0], [u + du, 0], [u + du, len / 2], [u, len / 2], [(x0 + x1) / 2, (y0 + y1) / 2, 0]);
+    for (let j = 0; j < nz; j++) {
+      const z0 = -len / 2 + (len * j) / nz, z1 = z0 + len / nz, v0 = (len / 2) * (j / nz), v1 = (len / 2) * ((j + 1) / nz);
+      K.quadFacing(g, [x0, y0, z0], [x1, y1, z0], [x1, y1, z1], [x0, y0, z1], [u, v0], [u + du, v0], [u + du, v1], [u, v1], [(x0 + x1) / 2, (y0 + y1) / 2, 0]);
+    }
     u += du;
   }
   return g.build();
@@ -116,7 +122,7 @@ function quonsetEnds(w, len, h, segs = 8) {
   }
   return g.build();
 }
-const boxAt = (sx, sy, sz, uv) => K.props.shift(box(sx, sy, sz, { uvRepeat: uv || [Math.max(sx, sz) / 2, sy / 2] }), 0, sy / 2, 0);
+const boxAt = (sx, sy, sz, uv, segs = 1) => K.props.shift(box(sx, sy, sz, { uvRepeat: uv || [Math.max(sx, sz) / 2, sy / 2], segs }), 0, sy / 2, 0);
 
 /** Searchlight cone: three crossed trapezoids along +Y (length 1, end width 1). v = 0 at the lamp (bright end of lightShaft). */
 function beamGeo(base = 0.06, sides = 3) {
@@ -172,7 +178,8 @@ export class ColdBase {
     this.snapEnv = new K.Envelope(0.55); this.snap = 0;
     this.m = mat4.create();
     this.time = 0; this.k = 0; this.a = null; this.radarYaw = 0;
-    this.col = { fog: [0, 0, 0], tint: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], one: [1, 1, 1], glow: [0, 0, 0], hot: [0, 0, 0] };
+    this.col = { fog: [0, 0, 0], tint: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], one: [1, 1, 1], glow: [0, 0, 0], hot: [0, 0, 0], red: [0, 0, 0], cold: [0, 0, 0], focus: [0, 0, 0] };
+    this.plights = new K.LightSet({ reach: 16, fade: 0.4 });
   }
 
   _yawTo(p) { return Math.atan2(CENTER[0] - p[0], -(CENTER[2] - p[2])); }
@@ -205,7 +212,7 @@ export class ColdBase {
     // prefab huts with snow-capped roofs and a metal door
     this.windows = [];
     for (const [x, z, w, h, d, yaw] of HUTS) {
-      conc.push({ geo: boxAt(w, h, d), xf: K.xf({ pos: [x, 0, z], rot: [0, yaw, 0] }) });
+      conc.push({ geo: boxAt(w, h, d, undefined, 4), xf: K.xf({ pos: [x, 0, z], rot: [0, yaw, 0] }) });
       caps.push({ geo: boxAt(w + 0.5, 0.28, d + 0.5, [w / 2, 0.2]), xf: K.xf({ pos: [x, h, z], rot: [0, yaw, 0] }) });
       const dp = rotXZ(w * 0.3, d / 2 + 0.03, yaw);
       metal.push({ geo: boxAt(0.9, 2, 0.08, [0.5, 1]), xf: K.xf({ pos: [x + dp[0], 0, z + dp[1]], rot: [0, yaw, 0] }) });
@@ -233,7 +240,7 @@ export class ColdBase {
     }
     // radar mast + equipment hut
     const [rx, rz] = RADAR;
-    conc.push({ geo: boxAt(3, 2.5, 3), xf: K.xf({ pos: [rx, 0, rz] }) });
+    conc.push({ geo: boxAt(3, 2.5, 3, undefined, 3), xf: K.xf({ pos: [rx, 0, rz] }) });
     caps.push({ geo: boxAt(3.4, 0.2, 3.4, [1.5, 0.2]), xf: K.xf({ pos: [rx, 2.5, rz] }) });
     metal.push({ geo: K.props.prism(4, 0.45, 8, { taper: 0.4, uvRepeat: [2, 4] }), xf: K.xf({ pos: [rx, 2.6, rz], rot: [0, Math.PI / 4, 0] }) });
     // fuel tanks on saddles
@@ -326,7 +333,7 @@ export class ColdBase {
   }
 
   update(a, k, dt) {
-    this.a = a; this.k = k; this.time += dt;
+    this.a = a; this.k = k; this.time += dt; this.dt = dt;
     const d = K.drive(a, k), t = this.time;
     if (d.beat) { this.flash.trigger(k); this.snapEnv.trigger(1); }
     this.flash.update(dt); this.snapEnv.update(dt);
@@ -440,6 +447,7 @@ export class ColdBase {
 
     r.setLight([0.35, -0.75, 0.55], scaleColor(col.light, P.role('light'), lerp(0.55, 0.75, k)), scaleColor(col.amb, P.role('ambient'), lerp(0.62, 0.72, k)));
     col.tint[0] = col.tint[1] = col.tint[2] = dim;
+    this._pointLights(r, k, d, fl);
 
     // frozen ridge: own long fog so it reads as a pale silhouette until the storm swallows it
     r.setFog(col.fog, 30, lerp(240, 120, storm));
@@ -513,6 +521,29 @@ export class ColdBase {
 
     this.snow.draw(r, { brightness: dim * 0.95 });
     this.storm.draw(r, { brightness: dim * 0.9 * K.stage(k, 0.2, 0.6) });
+  }
+
+  /** Beacon beams (red, swinging round) and searchlight pools (cold) as point lights; the best 4 near the view. */
+  _pointLights(r, k, d, fl) {
+    const { col } = this, P = this.pal, L = this.plights, eye = this.eye, tg = this.tgt;
+    scaleColor(col.red, P.color(R(2, 2)), 2.2 + fl * 1.2);
+    scaleColor(col.cold, P.role('light'), 1.5 + fl * 0.6 + d.bass * 0.3);
+    L.begin();
+    this.beacons.forEach((bc, i) => {
+      if (bc.on <= 0.01) return;
+      for (let j = 0; j < 2; j++) {   // ~2.4 m out along each beam: walls it faces catch it as it comes round
+        const a = bc.a + j * Math.PI;
+        L.add(i * 2 + j, bc.x + Math.sin(a) * 2.4, bc.y - 0.3, bc.z + Math.cos(a) * 2.4, col.red, 6.5, bc.on * (1 + d.high * 0.3 * Math.sin(this.time * 37 + i * 2.3)));
+      }
+    });
+    this.lights.forEach((S, i) => {
+      if (!S.hit || S.wake <= 0.01) return;
+      const hx = S.x + S.dir[0] * S.len, hz = S.z + S.dir[2] * S.len;
+      L.add(100 + i, hx, groundHeight(hx, hz) + 3, hz, col.cold, 10, S.wake * (0.7 + k * 0.3));
+    });
+    const fx = tg[0] - eye[0], fz = tg[2] - eye[2], fn = Math.hypot(fx, fz) || 1;
+    col.focus[0] = eye[0] + (fx / fn) * 14; col.focus[1] = 2; col.focus[2] = eye[2] + (fz / fn) * 14;
+    L.apply(r, col.focus, this.dt || 1 / 60);
   }
 
   /** How directly a searchlight points at the camera (0..1), for lens glare. */

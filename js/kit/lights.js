@@ -131,3 +131,78 @@ export class Searchlights {
     [this.beams, this.pools, this.glows].forEach((x) => x.dispose());
   }
 }
+
+// Kit v7: LightSet. The pipeline holds 4 point lights per scene; a style with more sources
+// (a hall of candles, a field of panels) adds them all and LightSet keeps the best 4.
+//
+//   this.lights = new K.LightSet();
+//   render: this.lights.begin();
+//           this.lights.add(id, x, y, z, color, radius, level);   // every source, every frame (id: stable number)
+//           this.lights.apply(r, focus, dt);                       // focus: a point a little ahead of the eye
+//
+// Score = level x closeness to the focus. The 4 slots are sticky: a light that drops out of
+// the best 4 fades out over `fade` seconds, and only then does its slot go to the next one,
+// which fades in. So nothing pops, and the set stays fully lit while the camera moves.
+// Colours may exceed 1. A mirror pass reuses what apply() set.
+export class LightSet {
+  constructor({ max = 4, reach = 6, fade = 0.5, cap = 64 } = {}) {
+    this.max = Math.min(4, max); this.reach = reach; this.fadeTime = fade;
+    this.c = Array.from({ length: cap }, () => ({ id: 0, pos: [0, 0, 0], color: [0, 0, 0], radius: 1, level: 0, score: 0 }));
+    this.slots = Array.from({ length: this.max }, () => ({ id: -1, fade: 0, pos: [0, 0, 0], color: [0, 0, 0], radius: 1 }));
+    this.out = Array.from({ length: 4 }, () => ({ pos: [0, 0, 0], color: [0, 0, 0], radius: 1 }));
+    this.list = []; this.n = 0; this.kept = 0;
+  }
+  begin() { this.n = 0; return this; }
+  /** color: [r, g, b] (copied), multiplied by level. A level <= 0 is skipped. */
+  add(id, x, y, z, color, radius, level = 1) {
+    if (level <= 0 || this.n >= this.c.length) return this;
+    const e = this.c[this.n++];
+    e.id = id; e.pos[0] = x; e.pos[1] = y; e.pos[2] = z; e.radius = radius; e.level = level;
+    e.color[0] = color[0] * level; e.color[1] = color[1] * level; e.color[2] = color[2] * level;
+    return this;
+  }
+  /** Forget the slots (after a jump of the camera, or on init). */
+  reset() { for (const s of this.slots) { s.id = -1; s.fade = 0; } return this; }
+  apply(r, focus, dt = 1 / 60) {
+    const n = this.n, c = this.c, m = Math.min(this.max, n), step = Math.min(dt, 0.1) / this.fadeTime;
+    for (let i = 0; i < n; i++) {
+      const e = c[i], d = Math.hypot(e.pos[0] - focus[0], e.pos[1] - focus[1], e.pos[2] - focus[2]);
+      e.score = e.level * Math.max(0, 1 - d / (e.radius + this.reach));
+    }
+    for (let i = 0; i < m; i++) {   // partial selection sort: the best max first
+      let b = i;
+      for (let j = i + 1; j < n; j++) if (c[j].score > c[b].score) b = j;
+      if (b !== i) { const t = c[i]; c[i] = c[b]; c[b] = t; }
+    }
+    const want = (id) => { for (let i = 0; i < m; i++) if (c[i].id === id && c[i].score > 0) return c[i]; return null; };
+    const find = (id) => { for (let i = 0; i < n; i++) if (c[i].id === id) return c[i]; return null; };
+    // existing slots: follow their light, fade up if still wanted, down if not
+    for (const s of this.slots) {
+      if (s.id < 0) continue;
+      const e = find(s.id), w = e && want(s.id);
+      if (e) { s.pos[0] = e.pos[0]; s.pos[1] = e.pos[1]; s.pos[2] = e.pos[2]; s.radius = e.radius; s.color[0] = e.color[0]; s.color[1] = e.color[1]; s.color[2] = e.color[2]; }
+      else { s.color[0] *= 0.9; s.color[1] *= 0.9; s.color[2] *= 0.9; }   // gone this frame (level 0): fade from what it was
+      s.fade = Math.max(0, Math.min(1, s.fade + (w ? step : -step)));
+      if (!w && s.fade <= 0) s.id = -1;
+    }
+    // free slots take the best wanted lights not yet in a slot; they start dark
+    for (let i = 0; i < m; i++) {
+      const e = c[i]; if (e.score <= 0) break;
+      if (this.slots.some((s) => s.id === e.id)) continue;
+      const s = this.slots.find((q) => q.id < 0); if (!s) break;
+      s.id = e.id; s.fade = 0; s.pos[0] = e.pos[0]; s.pos[1] = e.pos[1]; s.pos[2] = e.pos[2]; s.radius = e.radius;
+      s.color[0] = e.color[0]; s.color[1] = e.color[1]; s.color[2] = e.color[2];
+    }
+    this.list.length = 0;
+    for (const s of this.slots) {
+      if (s.id < 0 || s.fade <= 0) continue;
+      const f = s.fade * s.fade * (3 - 2 * s.fade), o = this.out[this.list.length];
+      o.pos[0] = s.pos[0]; o.pos[1] = s.pos[1]; o.pos[2] = s.pos[2]; o.radius = s.radius;
+      o.color[0] = s.color[0] * f; o.color[1] = s.color[1] * f; o.color[2] = s.color[2] * f;
+      this.list.push(o);
+    }
+    this.kept = this.list.length;
+    r.setPointLights(this.list);
+    return this.list;
+  }
+}

@@ -17,6 +17,8 @@
 //          walls breathe (shared `wave`), damp spreads (texture2 blend), fog pulls back
 //   beat   the panel run ahead buzzes brighter (Envelope, limiter-gated)
 //   bass   hum vibration (r.setJitterBoost)
+//   light  the panels nearest the view are point lights (K.LightSet): their flicker, the dead
+//          ones sputtering and the beat buzz move across the walls and carpet around them
 //   highs  flicker sparkle on panels; dead ones sputter
 import { mat4, lerp, clamp, damp } from '../gfx/math.js';
 import { scaleColor } from '../gfx/color.js';
@@ -54,7 +56,7 @@ function gridFace(g, p0, U, V, uv0, uv1, su = 1, sv = 1, col = null) {
  */
 function wallBlock(g, x0, x1, y0, y1, { top = false, bottom = false } = {}) {
   const z = T / 2, L = x1 - x0, hgt = y1 - y0;
-  const su = Math.max(1, Math.round(L / 1.6)), sv = hgt > 1.6 ? 2 : 1;
+  const su = Math.max(1, Math.round(L / 1.6)), sv = hgt > 1.6 ? 3 : 1;   // 3 rows so panel light falls off down the wall
   const u0 = x0 / WALL_U, u1 = x1 / WALL_U, v0 = y0 / H, v1 = y1 / H, du = T / WALL_U;
   gridFace(g, [x0, y0, z], [L, 0, 0], [0, hgt, 0], [u0, v0], [u1, v1], su, sv);          // +z
   gridFace(g, [x1, y0, -z], [-L, 0, 0], [0, hgt, 0], [-u1, v0], [-u0, v1], su, sv);       // -z
@@ -180,6 +182,8 @@ export class Backrooms {
 
     this.runs = new K.Stager(RUNS, { from: [0.04, 0.6], to: [0.2, 0.85], rise: [0.8, 2.6], fall: 1.6 });
     this.buzz = new K.Envelope(0.4);
+    this.lights = new K.LightSet({ reach: 3, fade: 0.35 });
+    this.cand = []; this.nCand = 0;
     this.buzzKey = -1;
     this.breath = new K.Breath({ beats: 16, period: 14 });
 
@@ -191,7 +195,7 @@ export class Backrooms {
     this.walk = 0; this.time = 0; this.k = 0; this.a = null; this.d = K.drive({ level: 0, bass: 0, mid: 0, high: 0, beatPulse: 0, beat: false }, 0);
     this.light = 0.6; this.waveAmp = 0;
     this.m = mat4.create();
-    this.col = { fog: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], tint: [1, 1, 1] };
+    this.col = { fog: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], tint: [1, 1, 1], tube: [0, 0, 0], focus: [0, 0, 0] };
     this._update(0);
   }
 
@@ -267,7 +271,7 @@ export class Backrooms {
 
   // ---- update -------------------------------------------------------------------
   update(a, k, dt) {
-    this.a = a; this.k = k; this.time += dt;
+    this.a = a; this.k = k; this.time += dt; this.dt = dt;
     this.d = K.drive(a, k);
     this._update(dt);
   }
@@ -310,6 +314,7 @@ export class Backrooms {
     const I = this.inst, cgx = Math.floor(eye[0] / C), cgz = Math.floor(eye[2] / C), fx = this.look[0], fz = this.look[1];
     const n = { floor: 0, panel: 0, halo: 0, solid: 0, pillar: 0, doors: [0, 0, 0, 0], stubs: [0, 0, 0] };
     let sum = 0, cnt = 0;
+    this.nCand = 0;
     const lights = new Map(), L = (gx, gz) => {
       const key = gx * 8192 + gz; let v = lights.get(key);
       if (v === undefined) { v = this.cellLight(gx, gz); lights.set(key, v); }
@@ -328,6 +333,10 @@ export class Backrooms {
       for (let j = 0; j < 2; j++) {
         const b = this.panel(gx, gz, j), px = cx + (j ? 1.2 : -1.2), pz = cz + (j ? 1.5 : -1.5);
         I.panel.set(n.panel++, px, 0, pz, 1, 0, 0.42 + 0.8 * b);
+        if (dist < 13 && b > 0.01) {   // light candidates: panels near the camera
+          const c = this.cand[this.nCand] || (this.cand[this.nCand] = [0, 0, 0, 0]);
+          c[0] = (gx * 4096 + gz) * 2 + j; c[1] = px; c[2] = pz; c[3] = b; this.nCand++;
+        }
         if (b > 0.02) I.halo.set(n.halo++, px, 0, pz, 1, 0, b * 0.42);
       }
       // the two edges on this cell's -z and -x sides, and the vertex between them
@@ -361,8 +370,15 @@ export class Backrooms {
     this.cam.apply(r);
     const far = lerp(22, 44, K.stage(k, 0.05, 0.9));
     r.setFog(col.fog, 2.5, far);
-    r.setLight([0.35, -0.8, 0.45], scaleColor(col.light, P.role('light'), 0.38 * dim), scaleColor(col.amb, P.role('ambient'), 0.86 * dim));
+    r.setLight([0.35, -0.8, 0.45], scaleColor(col.light, P.role('light'), 0.38 * dim), scaleColor(col.amb, P.role('ambient'), 0.72 * dim));
     r.setJitterBoost(d.bass * 0.35 + k * 0.04);       // the hum
+    // the nearest tubes light the walls round them; their flicker / buzz rides on b
+    const L = this.lights, eye = this.cam.eye;
+    scaleColor(col.tube, P.color(R(2, 3)), 0.85);
+    L.begin();
+    for (let i = 0; i < this.nCand; i++) { const c = this.cand[i]; L.add(c[0], c[1], H - 0.3, c[2], col.tube, 4.6, c[3]); }
+    col.focus[0] = eye[0] + this.look[0] * 3; col.focus[1] = EYE; col.focus[2] = eye[2] + this.look[1] * 3;
+    L.apply(r, col.focus, this.dt || 1 / 60);
 
     const wave = this.waveAmp > 0.002 ? [this.waveAmp, 0.33, 0.55] : null;
     const id = mat4.identity(this.m), damp2 = K.stage(k, 0.3, 1) * 0.5;

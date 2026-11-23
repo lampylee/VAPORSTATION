@@ -174,7 +174,9 @@ export class MothLamp {
     this.scatter = new K.Spring(2.2);
     this.time = 0; this.k = 0; this.E = 0; this.flood = 0; this.count = 10; this.lamp = 0.4; this.poolR = 3;
     this.mat = mat4.create();
-    this.col = { fog: [0, 0, 0], hi: [0, 0, 0], zen: [0, 0, 0], tint: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], glass: [0, 0, 0], pool: [0, 0, 0], one: [1, 1, 1], grass: [0, 0, 0] };
+    this.col = { fog: [0, 0, 0], hi: [0, 0, 0], zen: [0, 0, 0], tint: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], glass: [0, 0, 0], pool: [0, 0, 0], one: [1, 1, 1], grass: [0, 0, 0], lamp: [0, 0, 0] };
+    // the lamp as a point light (Kit v7): it lights its own post from the head down, the ground and the fence
+    this.lampLight = [{ pos: [0, HEAD_Y - 0.25, 0], color: this.col.lamp, radius: 8 }];
   }
 
   update(a, k, dt) {
@@ -251,6 +253,9 @@ export class MothLamp {
     r.setFog(col.fog, 6, lerp(36, 58, k) + fl * 20);
     r.setLight([0.15, -1, 0.25], scaleColor(col.light, P.role('light'), lerp(0.18, 0.45, k) + fl * 0.5), scaleColor(col.amb, P.role('ambient'), lerp(0.3, 0.45, k) + fl * 0.45));
     const tintV = dim * (0.75 + fl * 0.5);
+    scaleColor(col.lamp, P.role('glow'), this.lamp * 3 + fl * 1.2);
+    this.lampLight[0].radius = 11 + this.poolR * 1.2 + fl * 8;   // reaches past the pool decal into the grass
+    r.setPointLights(this.lampLight);
     col.tint[0] = col.tint[1] = col.tint[2] = tintV;
 
     this.sky.draw(r, this.cam.eye, { horizon: col.fog, zenith: col.zen, brightness: 1, starLevel: lerp(0.45, 0.25, k) * (1 - fl) });
