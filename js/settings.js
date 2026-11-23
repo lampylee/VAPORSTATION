@@ -49,6 +49,8 @@ export const DEFAULTS = {
   strobeSafe: true,         // ≤ 3 beats/flashes per second reach the styles
   flashAmount: 0.5,         // big-moment palette flash strength
   tempoLock: false,         // beats on the tap-tempo grid instead of detected beats
+  conductor: true,          // "Follow song": intensity follows the song's shape (builds, breakdowns, drops)
+  dropSwitch: false,        // change environment on a big drop (at most once per song)
   // midi
   midiOn: false,            // reopen MIDI on load (Chrome remembers the permission)
   midiProgram: true,        // Program Change n selects setlist song n + 1

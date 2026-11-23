@@ -1,6 +1,8 @@
 // Camera rigs. Every rig moves slowly when idle, faster with intensity + bass,
 // and gets beat reactions for free: a vertical nudge, a roll kick and an FOV punch
 // (all scaled by K.feel.motion, so they nearly vanish at Gentle reactivity).
+// With the Conductor, a build-up slowly narrows the FOV (tension) and the drop releases it
+// with a bigger punch.
 //
 //   const cam = new DollyRig(spline, { idleSpeed: 1, activeSpeed: 4 });
 //   update:  cam.update(audio, k, dt)
@@ -41,6 +43,7 @@ export class CameraRig {
     this.nudge = new Spring(6);
     this.rollSpring = new Spring(5);
     this.punch = new Envelope(0.18);
+    this.tension = 0;   // 0..1, eased audio.build (narrows the FOV)
   }
 
   /** Common reactions; subclasses call super.update() then position the camera. */
@@ -52,13 +55,19 @@ export class CameraRig {
       this.rollSpring.kick((Math.random() < 0.5 ? -1 : 1) * this.rollKick * 6 * k);
       this.punch.trigger(k * feel.motion);   // a zoom is motion too: near-still at Gentle reactivity
     }
+    if (audio.drop && k > 0.05) {
+      this.punch.trigger(1.6 * k * feel.motion);
+      this.nudge.kick(this.nudgeAmt * 9 * k * feel.motion);
+    }
+    const tt = (audio.build ?? 0) * k * (0.35 + 0.65 * feel.motion);
+    this.tension = damp(this.tension, tt, tt > this.tension ? 1.2 : 0.35, dt);
     this.nudge.update(dt); this.rollSpring.update(dt); this.punch.update(dt);
   }
 
   apply(r) {
     const e = this.eye;
     _eye[0] = e[0]; _eye[1] = e[1] + this.nudge.x; _eye[2] = e[2];
-    r.setCamera(_eye, this.target, { fov: this.fov + this.punch.v * this.fovPunch, near: this.near, far: this.far, roll: this.roll + this.rollSpring.x });
+    r.setCamera(_eye, this.target, { fov: this.fov * (1 - 0.07 * this.tension) + this.punch.v * this.fovPunch, near: this.near, far: this.far, roll: this.roll + this.rollSpring.x });
   }
 }
 const _eye = [0, 0, 0];

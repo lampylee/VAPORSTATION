@@ -66,6 +66,8 @@ export class ShowUI {
     this.lockBtn = el('button', { className: 'lock', title: 'Lock the environments’ beats to the tapped tempo (L)', onclick: () => { h.onPad('tempoLock'); this.lockBtn.blur(); } });
 
     this.rows = {
+      conductor: check(s, 'conductor', 'Follow song', h.onSetting, 'Intensity follows the song: a slow build, lower in breakdowns, rising through build-ups, the peak saved for drops. Off: full intensity two seconds after the music starts.'),
+      dropSwitch: check(s, 'dropSwitch', 'Change world on drops', h.onSetting, 'On a big drop (after a build or breakdown, 45 s or more into the song), crossfade to the next environment. At most once per song.'),
       strobeSafe: check(s, 'strobeSafe', 'Strobe-safe (max 3 flashes / s)', h.onSetting, 'Limits beats and flashes reaching the environments to 3 per second, and caps the big-moment flash.'),
       flashAmount: slider(s, 'flashAmount', 'Flash strength', 0, 1, 0.05, (v) => Number(v).toFixed(2), h.onSetting),
       blackoutTime: slider(s, 'blackoutTime', 'Blackout fade', 0.2, 5, 0.1, (v) => `${Number(v).toFixed(1)} s`, h.onSetting),
@@ -75,6 +77,7 @@ export class ShowUI {
       el('div', { className: 'seg-row', title: 'Reactivity (R)' }, el('span', { textContent: 'Feel' }), el('div', { className: 'seg seg3' }, ...this.feelSegs)),
       el('div', { className: 'seg-row' }, el('span', { textContent: 'Hold at' }), el('div', { className: 'seg' }, ...this.segs)),
       el('div', { className: 'tempo' }, this.tapBtn, this.lockBtn),
+      this.rows.conductor, this.rows.dropSwitch,
       fold('Fine-tune: flash, fade, tempo',
         this.rows.strobeSafe, this.rows.flashAmount, this.rows.blackoutTime,
         el('div', { className: 'btns' },

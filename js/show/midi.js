@@ -24,6 +24,8 @@ export const MIDI_ACTIONS = [
   ['reactivity', 'Reactivity: gentle → punchy (knob)', 'value'],
   ['tap', 'Tap tempo', 'button'],
   ['tempoLock', 'BPM lock (toggle)', 'button'],
+  ['conductor', 'Follow song (toggle)', 'button'],
+  ['dropSwitch', 'Change world on drops (toggle)', 'button'],
 ];
 
 const describe = (b) => (b ? `${b.type === 'note' ? 'Note' : 'CC'} ${b.num} · ch ${b.ch + 1}` : '—');

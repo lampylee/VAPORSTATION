@@ -65,9 +65,11 @@ Number keys reach 0–9; the rest via N / Shift+N, the dropdown, auto-switch, a 
    section). Left: try it on the gig laptop. Design: `docs/superpowers/specs/2026-11-22-gig-safety-design.md`.
 2. **Add a GitHub remote and push** (the user has to create the repo; everything lives on one disk until then).
 3. Run the "not verified" checks above on the gig laptop.
-4. Song-section awareness (verse / chorus / drop from energy over several bars) so camera moves and reveals land on section
-   changes. Suggested after the safety layer.
-5. Optional: teach a few styles to phrase camera moves on `audio.bar` (tap tempo); no style uses `bpm/beatPhase/bar` yet.
+4. **The Conductor** (2026-11-23): built. Intensity follows the song's shape, sections, auto tempo, optional world change on
+   drops (off). Left: try it with real songs in a visible window (thresholds were tuned on synthetic songs and the demo track).
+   Design + build notes: `docs/superpowers/specs/2026-11-23-conductor-design.md`. Test: `node tools/test-conductor.mjs`.
+5. Optional: teach a few styles to use `audio.build` / `audio.drop` / `audio.bar` (now filled by auto tempo too) for their own
+   moves; today only the kit camera rigs do.
 6. Moonshot, not scheduled: a crossfaded **PS2 mode** toggle (640×448, perspective-correct, filtered textures, feedback
    haze, ~100k-tri budget, kit detail scaling). Needs the user's sign-off on a scoped hard-rule exemption first.
    Design: `docs/superpowers/specs/2026-11-23-ps2-mode-design.md`.
@@ -81,6 +83,12 @@ Number keys reach 0–9; the rest via N / Shift+N, the dropdown, auto-switch, a 
 - **Show control (`js/show/`):** Hold I, Freeze Z, Blackout B, Big moment G, strobe-safe limiter (≤3 beats/s), tap tempo T +
   BPM lock L, Web MIDI with learn + Program Change → song, environment browser with live thumbnails. UI is the "Soft Vapor"
   restyle (`css/style.css`, `js/icons.js`); sections are found by `h2[data-title]`.
+- **Conductor (`js/show/conductor.js`, 2026-11-23):** between PlayState and ShowControl. Per song (reset when `k_play`
+  reached 0): smoothed raw level / bass / highs, a 10 Hz history, sections (intro, groove, build, drop, breakdown, outro; ≥ 4 s
+  each except a drop), and a target intensity: an arc over ~75 s × an energy factor, breakdowns down to ~0.35-0.45, builds up
+  to 0.85, drops to 1 (peak decays ~20 s after). `k = k_play × shaped`. Auto tempo: beat inter-onset histogram folded into
+  80-170 bpm; tap tempo wins. `s.conductor` (Follow song) off = old `k` exactly; `s.dropSwitch` calls `styles.goNext()` once per song.
+  The demo track's third song (82-160 s) has two builds and drops; the debug overlay shows a `song:` line.
 - **Setlists (`js/setlist/`):** songs pick a palette + environment pool; PageDown / → / ] next, PageUp / ← / [ prev, S toggles;
   while playing, Next cues the song until silence (press again to force).
 - **Kit history** (full reference in the guide; each version is shown in `kit-demo.js` or `kit-calm.js`):
