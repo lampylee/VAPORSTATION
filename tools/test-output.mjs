@@ -55,6 +55,35 @@ for (const off of [3, 8, 12]) {
   }
   check('projector drives, laptop adds nothing', lap === 0 && n === 1380, `proj=${n} laptop=${lap}`);
 }
+// (e) prefer(): 60 Hz laptop driving, then prefer('projector') at 144 Hz -> projector drives;
+//     projector stops -> laptop takes over
+{
+  const g = new FrameGuard();
+  const D = 1000 / 144;
+  let t = 1000;
+  for (let i = 0; i < 120; i++, t += F) g.tick(t, 'laptop');
+  g.prefer('projector');
+  let proj = 0, lap = 0, nextLap = t + 5, n = 0;
+  for (let i = 0; i < 288; i++) {
+    const tp = t + i * D;
+    while (nextLap <= tp) { if (g.tick(nextLap, 'laptop')) lap++; nextLap += F; }
+    if (g.tick(tp, 'projector')) proj++;
+    n++;
+  }
+  check('prefer(projector): laptop adds nothing', lap === 0, `laptop=${lap}`);
+  check('prefer(projector): projector accepted at its rate', proj >= n - 2, `proj=${proj}/${n}`);
+  let first = -1, after = 0;
+  for (let i = 0; i < 120; i++, nextLap += F) {
+    if (g.tick(nextLap, 'laptop')) { after++; if (first < 0) first = i; }
+  }
+  check('projector stops -> laptop takes over', first >= 0 && first <= 1 && after >= 118, `first=${first} accepts=${after}`);
+}
+// (f) prefer() on a source that never ticks: the other source is not locked out
+{
+  const g = new FrameGuard();
+  g.tick(1000, 'laptop'); g.prefer('projector');
+  check('prefer(silent source) does not block others', g.tick(1000 + F, 'laptop') === true);
+}
 
 // health
 const base = { wantLive: false, inputSignal: true, ctxLost: false, projector: 'none', governorTier: 0, broken: 0, audioSuspended: false };

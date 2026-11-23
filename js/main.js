@@ -19,7 +19,8 @@ import { ShowUI, MidiUI, EnvBrowser } from './show/ui.js';
 import { Governor } from './safety/governor.js';
 import { Watchdog } from './safety/watchdog.js';
 import { SelfTest } from './safety/selftest.js';
-import { Sink } from './show/output.js';
+import { Sink, Output, watchDpr } from './show/output.js';
+import { FrameGuard } from './show/output-logic.js';
 
 const s = loadSettings();
 const canvas = document.getElementById('view');
@@ -41,6 +42,7 @@ function fitOutput() {
   renderer.resize();
 }
 fitOutput();
+const laptopSink = sink;
 
 const engine = new AudioEngine();
 const analyser = new Analyser();
@@ -177,6 +179,7 @@ function showAction(id, v) {
     case 'prevStyle': styles.goNext(-1); break;
     case 'nextPalette': stepPalette(1); break;
     case 'prevPalette': stepPalette(-1); break;
+    case 'output': openOutput(); break;   // opens / reopens; never closes (a stray pedal press can't kill the projector)
     default: return;
   }
   if (id === 'tempoLock' || id === 'holdLevel' || id === 'reactivity' || id === 'conductor' || id === 'dropSwitch') { showUI.refresh(); saveSettings(s); }
@@ -188,6 +191,7 @@ const showUI = new ShowUI(show, s, {
   onTap: () => showAction('tap'),
   onTempo(cmd) { if (cmd === 'clear') show.tempo.clear(); else show.tempo.nudge(cmd); showUI.update(); },
   onSetting: () => saveSettings(s),
+  onOutput: () => { if (output.state === 'open') closeOutput(); else openOutput(); },
 });
 ui.insertSectionBefore(showUI.section, 'Setlist');
 
@@ -349,6 +353,7 @@ document.addEventListener('fullscreenchange', () => {
   fitOutput();
 });
 addEventListener('resize', () => fitOutput());
+watchDpr(window, () => fitOutput());   // dpr-only change (window moved to a screen with another scale)
 
 addEventListener('keydown', (e) => {
   if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -376,6 +381,7 @@ addEventListener('keydown', (e) => {
   else if (k === 't') { if (e.shiftKey) show.tempo.clear(); else if (!e.repeat) showAction('tap'); }
   else if (k === 'l') { showAction('tempoLock'); }
   else if (k === 'r') showAction('reactivity');   // Gentle → Medium → Punchy
+  else if (k === 'w') showAction('output');       // projector window: open / reopen
   else handled = false;
   if (handled) {
     e.preventDefault();
@@ -384,12 +390,45 @@ addEventListener('keydown', (e) => {
   }
 });
 
+// ---------------- projector output ----------------
+// Optional second window with only the picture (output.html). Both windows' rAF drive frame();
+// the guard runs one tick per display frame, so either window alone keeps the show running.
+const guard = new FrameGuard();
+const badge = document.createElement('div');
+badge.id = 'outputBadge';
+badge.textContent = 'projector lost · W to reopen';
+document.body.appendChild(badge);
+let badgeTimer = 0;
+const output = new Output({
+  laptopSink,
+  onSinkChange(next) { sink = next; fitOutput(); },
+  onState(st) {
+    showUI.setOutput(st);
+    clearTimeout(badgeTimer);
+    badge.classList.toggle('show', st === 'lost');
+    if (st === 'lost') badgeTimer = setTimeout(() => badge.classList.remove('show'), 5000);
+    if (st === 'open') { guard.prefer('projector'); if (s.output !== 'dual') { s.output = 'dual'; saveSettings(s); } }
+    else guard.prefer('laptop');
+  },
+  onFrame(t, src, first) {
+    if (first) guard.prefer(src);   // the projector's display rate drives while it's alive
+    if (guard.tick(t, src)) frame(t);
+  },
+  onStatus: (text, err) => ui.setStatus(text, err),
+});
+// the projector page calls these on load, and again after this page reloads (no click needed)
+window.__vaporOutputAttach = (w) => output.attach(w);
+window.__vaporOutputGone = (w) => output.gone(w);
+function openOutput() { output.open().catch((e) => ui.setStatus(`Could not open the projector window: ${e.message}`, true)); }
+function closeOutput() { output.close(); s.output = 'single'; saveSettings(s); }
+
 // ---------------- gig safety ----------------
 const governor = new Governor(renderer, styles, styleKey);
 const watchdog = new Watchdog({
   canvas: renderer.canvas, renderer, styles, engine, governor,
   wantLive: () => liveWanted,
   reopenLive: () => startLive(),
+  onCover: (on, fog) => output.cover(on, fog),
 });
 try {
   const why = sessionStorage.getItem('vaporstation.recovered');
@@ -401,7 +440,7 @@ const params = new URLSearchParams(location.search);
 if ('serviceWorker' in navigator && location.protocol.startsWith('http') && !params.has('bench') && !params.has('nosw')) {
   navigator.serviceWorker.register('sw.js').then(async () => {
     const reg = await navigator.serviceWorker.ready;
-    const urls = [location.pathname, 'manifest.webmanifest', 'icon.svg', 'demo/demo.wav',
+    const urls = [location.pathname, 'manifest.webmanifest', 'icon.svg', 'demo/demo.wav', 'output.html', 'js/show/output-page.js', 'js/show/output-logic.js',
       ...performance.getEntriesByType('resource').map((e) => e.name)];
     reg.active?.postMessage({ type: 'warm', urls: [...new Set(urls)] });
   }).catch((e) => console.warn('[offline] service worker not registered', e));
@@ -452,7 +491,9 @@ function startSelfTest() {
 if (params.has('selftest') && !bench) startSelfTest();
 let lastIn = null;   // last good analysis result, reused if a frame's analysis throws
 function frame(now) {
-  requestAnimationFrame(frame);
+  output.checkAlive();   // projector window closed -> back to the laptop before drawing
+  // backstop for the dpr watchers (their change event doesn't always come, e.g. under emulation)
+  if ((sink.canvas.ownerDocument.defaultView?.devicePixelRatio || 1) !== renderer.out.dpr) fitOutput();
   const rawMs = now - last;
   const dt = Math.min(0.1, Math.max(0.0001, rawMs / 1000));
   last = now;
@@ -501,8 +542,11 @@ function frame(now) {
     if (!renderer.lost) {
       styles.render();
       renderer.present();
-      if (thumbs.captureCur && !P.fade && P.flash < 0.01) renderer.snapshot(envBrowser.ctx(styles.cur));
-      sink.show(renderer.takeFrame());
+      // the thumbnail must never cost the real frame
+      if (thumbs.captureCur && !P.fade && P.flash < 0.01) try { renderer.snapshot(envBrowser.ctx(styles.cur)); } catch (e) { frameError('thumbnail', e); }
+      const bmp = renderer.takeFrame();
+      sink.show(bmp);
+      if (bmp && output.state === 'open') output.shown(renderer.fogColor);
     }
   } catch (e) { frameError('render', e); }
   markEnvs();
@@ -530,7 +574,11 @@ function frame(now) {
     });
   }
 }
-requestAnimationFrame(frame);
+function laptopLoop(now) {
+  requestAnimationFrame(laptopLoop);
+  if (guard.tick(now, 'laptop')) frame(now);
+}
+requestAnimationFrame(laptopLoop);
 
 // handy for poking at things from the console
-window.viz = { s, engine, analyser, state, conductor, styles, renderer, sink, store, selectPalette, paletteUI, setlists, setlist, setlistUI, show, showUI, midi, midiUI, envBrowser, showAction, governor, watchdog };
+window.viz = { s, engine, analyser, state, conductor, styles, renderer, get sink() { return sink; }, output, store, selectPalette, paletteUI, setlists, setlist, setlistUI, show, showUI, midi, midiUI, envBrowser, showAction, governor, watchdog };

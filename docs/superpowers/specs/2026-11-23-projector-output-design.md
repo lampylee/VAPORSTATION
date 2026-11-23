@@ -180,3 +180,24 @@ Shown instead of the picture on the laptop. Readable from ~2 m: large type, few 
 - Exact operator-view proportions and type sizes within the sketch.
 - The fullscreen and kiosk spikes named above.
 - How the fog cover during context loss reaches the current sink.
+
+**Decided (Task 4, 2026-11-23):**
+- **Fullscreen spike** (Chrome 157, Windows, one display, driven over the DevTools protocol): (a) calling
+  `win.document.documentElement.requestFullscreen()` on the projector window from the opener's click handler is refused
+  (`TypeError: Permissions check failed`; the opener had transient activation, the popup did not). (b) a click in the
+  projector window goes fullscreen. **Kept (b):** the window shows "Click to go fullscreen" until it is fullscreen; any
+  click or key in it requests fullscreen (and keys are still forwarded). Not tried: Chrome's fullscreen-popup /
+  fullscreen-companion-window paths that need the `window-management` permission already granted (revisit with the
+  kiosk spike in Task 6).
+- **Placement without a blocked popup:** when the `window-management` permission is not yet granted, the window opens at
+  once on this screen and `getScreenDetails()` is asked afterwards (a permission prompt can outlast the click's
+  activation); if it is granted the window is moved / resized onto the other screen. Once granted, the screen is picked
+  first and the window opens there directly.
+- **Fog cover:** the watchdog's cover is mirrored via `output.cover(on, fog)`; the projector page also covers itself
+  with the last fog colour sent with each frame. When the opener unloads (reload) it tells the projector to cover
+  immediately: a same-origin popup shares the opener's thread, so its own 0.5 s stall timer can't run while the
+  reloading page loads (measured ~0.8 s blocked).
+- **W / MIDI `output` only open or reopen; the Show card button also turns the projector off** (back to single mode).
+  A stray pedal press can't close the projector mid-show.
+- **Screen removed** (`screenschange`): the projector window is also closed, so Windows doesn't drop it onto the laptop
+  screen over the picture.

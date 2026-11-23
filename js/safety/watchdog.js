@@ -13,7 +13,7 @@ const DEAD_SILENCE = 8;          // seconds of exact zeros before reopening the 
 export class Watchdog {
   /**
    * opts: { canvas (renderer.canvas, the OffscreenCanvas: context events fire there), renderer, styles, engine, governor, wantLive: () => bool, reopenLive: () => Promise,
-   *         status: (text, isError) => void }
+   *         status: (text, isError) => void, onCover: (on, fogRgb) => void (mirror the cover on the projector) }
    */
   constructor(opts) {
     Object.assign(this, opts);
@@ -47,8 +47,9 @@ export class Watchdog {
 
   _showCover(on) {
     const c = this.coverEl;
+    const f = this.renderer.fogColor || [0, 0, 0];
+    try { this.onCover?.(on, f); } catch (e) { console.warn(e); }   // the projector window too
     if (on) {
-      const f = this.renderer.fogColor || [0, 0, 0];
       const rgb = (k) => `rgb(${f.map((v) => Math.round(v * 255 * k)).join(',')})`;
       c.style.backgroundColor = rgb(1);
       c.style.backgroundImage = `conic-gradient(${rgb(0.8)} 25%, transparent 0 50%, ${rgb(0.8)} 0 75%, transparent 0)`;

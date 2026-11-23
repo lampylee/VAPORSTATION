@@ -12,6 +12,11 @@ export class FrameGuard {
     this._pref = null;
     this._lastAccepted = -Infinity;
   }
+  /** Make `source` the preferred one now (the projector window on attach, so its rate drives). */
+  prefer(source) {
+    if (!this._src.has(source)) this._src.set(source, { interval: 16.7, prev: undefined });
+    this._pref = source;
+  }
   get interval() { return this._pref ? this._src.get(this._pref).interval : 16.7; }
   tick(now, source = 'default') {
     let st = this._src.get(source);
@@ -26,7 +31,7 @@ export class FrameGuard {
     else if (source === this._pref) ok = now - this._lastAccepted >= 0.6 * st.interval;
     else {
       const p = this._src.get(this._pref);
-      ok = now - p.prev > 1.5 * p.interval;
+      ok = p.prev === undefined || now - p.prev > 1.5 * p.interval;   // preferred never ticked: don't wait on it
     }
     if (ok) { this._pref = source; this._lastAccepted = now; }
     return ok;
