@@ -12,6 +12,9 @@
 // brighten, dust thickens. Beat = lightning outside (windows + light flash,
 // double strike) and a camera nudge. Bass = chandeliers swing, flames flare.
 // Highs = candle flicker and dust sparkle.
+// Light (Kit v7): candelabras, sconces and chandeliers are point lights (K.LightSet keeps the
+// best 4 near the camera); the nearest pairs use a finer floor / carpet / wall mesh so the
+// pools of candlelight read.
 // Colours: base = stone, secondary = carpet/wax-red, accent = flames/gilt,
 // atmosphere = fog/moonlight/glass.
 import { mat4, lerp, clamp, hash } from '../gfx/math.js';
@@ -27,6 +30,7 @@ const VR = 5.6, VCX = -HW + VR;               // vault arc radius / left arc cen
 const VAULT_APEX = WALL_H + Math.sqrt(VR * VR - VCX * VCX);
 const CHAIN = 4.2;                            // chandelier hang length
 const BAYS = PAIRS * 2;
+const NEAR = 3;                               // pairs (from the camera's) drawn with the fine, candle-lit mesh
 
 // ---------------------------------------------------------------- geometry
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
@@ -235,18 +239,15 @@ export class NightManor {
     const stone = [], glass = [], beams = [], patches = [], portraits = [], props = [];
     this.flames = [];   // [x, y, z] pair-local candle tips
     this.halos = [];    // [x, y, z, size] pair-local glow positions
-    const g = new GeoBuilder();
-    // subdivided so affine texture warping stays PS1-plausible near the camera
-    g.face([0, 0, -PAIR / 2], [HW, 0, 0], [0, 0, -PAIR / 2], [0, 0, 3, 4], 4);
-    const floorGeo = g.build();
-    const gc = new GeoBuilder();
-    gc.face([0, 0.03, -PAIR / 2], [1.3, 0, 0], [0, 0, -PAIR / 2], [0, 0, 1, PAIR / 2.6], 4);
-    const carpetGeo = gc.build();
-    for (const side of [-1, 1]) {
-      const gw = new GeoBuilder(), x = side * HW;
-      gw.face([x, WALL_H / 2, -PAIR / 2], [0, 0, side * PAIR / 2], [0, WALL_H / 2, 0], [0, WALL_H / 2.5, PAIR / 2.5, 0], 3);
-      stone.push({ geo: gw.build() });
-    }
+    // subdivided so affine texture warping stays PS1-plausible near the camera; the fine
+    // versions (near pairs) are dense enough for per-vertex candlelight
+    const floorGeo = (n) => new GeoBuilder().face([0, 0, -PAIR / 2], [HW, 0, 0], [0, 0, -PAIR / 2], [0, 0, 3, 4], n).build();
+    const carpetGeo = (n) => new GeoBuilder().face([0, 0.03, -PAIR / 2], [1.3, 0, 0], [0, 0, -PAIR / 2], [0, 0, 1, PAIR / 2.6], n).build();
+    const wallGeo = (n) => {
+      const gw = new GeoBuilder();
+      for (const side of [-1, 1]) gw.face([side * HW, WALL_H / 2, -PAIR / 2], [0, 0, side * PAIR / 2], [0, WALL_H / 2, 0], [0, WALL_H / 2.5, PAIR / 2.5, 0], n);
+      return gw.build();
+    };
     // half-columns + transverse ribs at both bay boundaries
     const ribIn = pointedCurve(VCX, VR - 0.5, 8), ribOut = pointedCurve(VCX, VR + 0.02, 8);
     for (const zb of [0, -BAY]) {
@@ -306,7 +307,8 @@ export class NightManor {
     placePortrait(-1, -BAY * 1.5); placeWindow(1, -BAY * 1.5);
 
     this.mesh = {
-      floor: r.createMesh(floorGeo), carpet: r.createMesh(carpetGeo),
+      floor: r.createMesh(floorGeo(4)), carpet: r.createMesh(carpetGeo(4)), walls: r.createMesh(wallGeo(3)),
+      floorFine: r.createMesh(floorGeo(12)), carpetFine: r.createMesh(carpetGeo(9)), wallsFine: r.createMesh(wallGeo(9)),
       stone: r.createMesh(merge(stone)), vault: r.createMesh(vault(PAIR)),
       glass: r.createMesh(merge(glass)), beams: r.createMesh(merge(beams)), patches: r.createMesh(merge(patches)),
       portraits: r.createMesh(merge(portraits)), props: r.createMesh(merge(props)),
@@ -337,6 +339,9 @@ export class NightManor {
 
     // ---- instances
     this.pairInst = r.createInstances(PAIRS);
+    this.nearInst = r.createInstances(NEAR); this.farInst = r.createInstances(PAIRS - NEAR);
+    this.lights = new K.LightSet({ cap: 128, reach: 5 });
+    this.lights.g = this.halos.map((h) => h[3] > 1.2);   // candelabra (true) or sconce
     this.flameInst = r.createInstances(PAIRS * this.flames.length + BAYS * chTips.length);
     this.haloInst = r.createInstances(PAIRS * this.halos.length + BAYS);
     this.poolInst = r.createInstances(PAIRS * 4 + BAYS);
@@ -350,11 +355,11 @@ export class NightManor {
     this.flare = new K.Envelope(0.25);
     this.time = 0; this.k = 0; this.a = null; this.d = null;
     this.m = mat4.create();
-    this.col = { fog: [0, 0, 0], tint: [0, 0, 0], dim: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], win: [0, 0, 0], winE: [0, 0, 0], beam: [0, 0, 0], one: [1, 1, 1], tmp: [0, 0, 0] };
+    this.col = { fog: [0, 0, 0], tint: [0, 0, 0], dim: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], warm: [0, 0, 0], focus: [0, 0, 0], win: [0, 0, 0], winE: [0, 0, 0], beam: [0, 0, 0], one: [1, 1, 1], tmp: [0, 0, 0] };
   }
 
   update(a, k, dt) {
-    this.a = a; this.k = k; this.time += dt;
+    this.a = a; this.k = k; this.time += dt; this.dt = dt;
     const d = this.d = K.drive(a, k);
     this.cam.update(a, k, dt);
     const t = this.cam.target;
@@ -402,9 +407,18 @@ export class NightManor {
     const s = this.cam.s, pb = Math.floor(s / PAIR) - 1;
     for (let i = 0; i < PAIRS; i++) this.pairInst.set(i, 0, 0, -(pb + i) * PAIR, 1, 0, 1, 0, 1);
     this.pairInst.upload(PAIRS);
+    for (let i = 0; i < PAIRS; i++) {
+      const z = -(pb + i) * PAIR;
+      if (i >= 1 && i <= NEAR) this.nearInst.set(i - 1, 0, 0, z, 1, 0, 1, 0, 1); else this.farInst.set(i < 1 ? 0 : i - NEAR, 0, 0, z, 1, 0, 1, 0, 1);
+    }
+    this.nearInst.upload(NEAR); this.farInst.upload(PAIRS - NEAR);
     const pi = this.pairInst;
-    r.drawInstanced(mesh.floor, pi, { texture: tex.floor, tint: col.dim });
-    r.drawInstanced(mesh.carpet, pi, { texture: tex.carpet, tint: col.dim });
+    this._lights(r, s, pb);
+    for (const [inst, fine] of [[this.nearInst, true], [this.farInst, false]]) {
+      r.drawInstanced(fine ? mesh.floorFine : mesh.floor, inst, { texture: tex.floor, tint: col.dim });
+      r.drawInstanced(fine ? mesh.carpetFine : mesh.carpet, inst, { texture: tex.carpet, tint: col.dim });
+      r.drawInstanced(fine ? mesh.wallsFine : mesh.walls, inst, { texture: tex.stone, tint: col.dim });
+    }
     r.drawInstanced(mesh.stone, pi, { texture: tex.stone, tint: col.dim });
     scaleColor(col.tmp, col.dim, 0.75);
     r.drawInstanced(mesh.vault, pi, { texture: tex.vault, tint: col.tmp });
@@ -477,6 +491,38 @@ export class NightManor {
     this.dust.draw(r, { brightness: lerp(0.5, 1, k) * (0.55 + d.high * 1.2 + glowAll * 1.2) });
   }
 
+  /** Point lights: every candelabra / sconce / chandelier is a candidate, the LightSet keeps the best 4. */
+  _lights(r, s, pb) {
+    const { col, k, d } = this, L = this.lights, eye = this.cam.eye, tg = this.cam.target;
+    // warm candle colour; a lightning strike washes it out a little, the bass flares it
+    scaleColor(col.warm, this.pal.role('glow'), 1 + d.bass * 0.35 + this.flare.v * 0.3);
+    const fx = tg[0] - eye[0], fy = tg[1] - eye[1], fz = tg[2] - eye[2], fn = Math.hypot(fx, fy, fz) || 1;
+    col.focus[0] = eye[0] + (fx / fn) * 5; col.focus[1] = eye[1]; col.focus[2] = eye[2] + (fz / fn) * 5;
+    L.begin();
+    for (let i = 1; i <= NEAR + 1; i++) {
+      const pz = -(pb + i) * PAIR;
+      for (let h = 0; h < this.halos.length; h++) {
+        const [x, y, z0] = this.halos[h], z = z0 + pz, big = L.g[h];
+        const on = this._candleOn((pb + i) * 64 + this._haloCandle(h), -z - s, k);
+        if (on <= 0.01) continue;
+        const f = this._flick((pb + i) * 64 + 40 + h, d);
+        // pulled a little off the wall so the wall behind lights as a pool, not a hot spot
+        L.add((pb + i) * 64 + h, x * 0.86, y - 0.1, z, col.warm, big ? 6 : 4, on * f * (big ? 2 : 1.2));
+      }
+    }
+    // chandeliers: the light hangs with the swinging ring
+    const bb = pb * 2;
+    for (let j = 1; j < (NEAR + 1) * 2; j++) {
+      const b = bb + j, z = -b * BAY - BAY / 2, dist = Math.max(0, -z - s);
+      const on = K.stage(k, 0.25 + clamp(dist / 60) * 0.5 + hash(b, 3) * 0.08, 0.45 + clamp(dist / 60) * 0.5 + hash(b, 3) * 0.08);
+      if (on <= 0.01) continue;
+      const rx = this.histX.at(clamp(dist / 70)), rz = this.histZ.at(clamp(dist / 70));
+      const y = VAULT_APEX - 0.1 - CHAIN * Math.cos(rx) * Math.cos(rz);
+      L.add(1e6 + b, CHAIN * Math.sin(rz), y - 0.3, z - CHAIN * Math.sin(rx), col.warm, 11, on * 2.4 * this._flick(b * 5.1, d));
+    }
+    L.apply(r, col.focus, this.dt);
+  }
+
   /** Candle brightness 0..1. ~1 in 6 burn even at idle; others swell in by distance. */
   _candleOn(id, dist, k) {
     const h = hash(id, 11);
@@ -504,7 +550,7 @@ export class NightManor {
   dispose(r) {
     Object.values(this.mesh).forEach((m) => m.dispose());
     Object.values(this.tex).forEach((t) => r.deleteTexture(t));
-    [this.pairInst, this.flameInst, this.haloInst, this.poolInst].forEach((i) => i.dispose());
+    [this.pairInst, this.nearInst, this.farInst, this.flameInst, this.haloInst, this.poolInst].forEach((i) => i.dispose());
     this.dust.dispose(r);
   }
 }

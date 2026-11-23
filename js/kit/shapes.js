@@ -6,7 +6,7 @@
 //   f.add(parts, K.props.crate(1), { pos: [0, 0, 2], rot: [0, 0.3, 0] });
 //   f.add(parts, K.props.wall(4, 3), { pos: [0, 0, -2] });
 //   const mesh = r.createMesh(merge(parts));
-import { GeoBuilder, box, merge as mergeRaw } from '../gfx/geometry.js';
+import { GeoBuilder, box, merge as mergeRaw, smoothNormals } from '../gfx/geometry.js';
 import { clamp } from '../gfx/math.js';
 
 // ---- vectors ([x, y, z] arrays) ----
@@ -290,4 +290,177 @@ export function skyBand(e0, e1, { radius = 85, segs = 24, uRepeat = 3 } = {}) {
     g.tri(P(i, ea), P(i + 1, eb), P(i, eb), [u0, 1 - va], [u1, 1 - vb], [u0, 1 - vb], n, [A, B, B]);
   }
   return g.build();
+}
+
+// ---------------------------------------------------------------- ring zones (Kit v5)
+
+/**
+ * Kit v5: one ring (annulus) of ground between radius r0 and r1 around (cx, cz), following
+ * height(x, z), with world-space UVs (uv = repeats per unit) and smooth normals.
+ * Split ground into rings with K.ringBands and give each its own texture2 / blend, so a
+ * change (blight, frost, a spreading light) can run outward from a point. r0 = 0 = a disc.
+ * From Colour from the Well.
+ */
+export function ringBand(r0, r1, { height = () => 0, segs = 40, uv = 0.25, cx = 0, cz = 0, step = 3 } = {}) {
+  const g = new GeoBuilder(), steps = Math.max(1, Math.ceil((r1 - r0) / step));
+  const P = (rad, a) => { const x = cx + Math.cos(a) * rad, z = cz + Math.sin(a) * rad; return [x, height(x, z), z]; };
+  const T = (p) => [p[0] * uv, p[2] * uv];
+  for (let j = 0; j < steps; j++) {
+    const ra = r0 + (r1 - r0) * (j / steps), rb = r0 + (r1 - r0) * ((j + 1) / steps);
+    for (let i = 0; i < segs; i++) {
+      const a0 = (i / segs) * Math.PI * 2, a1 = ((i + 1) / segs) * Math.PI * 2;
+      const p0 = P(ra, a0), p1 = P(ra, a1), p2 = P(rb, a1), p3 = P(rb, a0);
+      if (ra < 1e-4) g.tri(p0, p2, p3, T(p0), T(p2), T(p3));   // centre disc: skip the degenerate half
+      else g.quad(p0, p1, p2, p3, T(p0), T(p1), T(p2), T(p3));
+    }
+  }
+  return smoothNormals(g.build());
+}
+
+/**
+ * Kit v5: ground split into rings at the given edges, e.g. [0, 6, 12, 20, 30, 45].
+ * Returns [{ geo, r0, r1, mid }]. In update, give ring i a blend from the spread radius:
+ *   const spread = K.swell(k, 4, 40);
+ *   rings.forEach((g) => g.blend = Math.min(1, Math.max(0, (spread - g.mid) / 6)));
+ * Same options as ringBand (segs can be an array to use fewer segments near the centre).
+ */
+export function ringBands(edges, opts = {}) {
+  const out = [];
+  for (let i = 0; i < edges.length - 1; i++) {
+    const segs = Array.isArray(opts.segs) ? opts.segs[i] : opts.segs;
+    out.push({ geo: ringBand(edges[i], edges[i + 1], { ...opts, segs: segs ?? 40 }), r0: edges[i], r1: edges[i + 1], mid: (edges[i] + edges[i + 1]) / 2 });
+  }
+  return out;
+}
+
+// ---- Kit v6 (Ember Vigil): round openings and rose windows ----
+
+/** Where a ray from (cx, cy) along (dx, dy) leaves a convex polygon [[x, y], ...]. */
+function rayExit(poly, cx, cy, dx, dy) {
+  let best = Infinity;
+  for (let i = 0; i < poly.length; i++) {
+    const [ax, ay] = poly[i], [bx, by] = poly[(i + 1) % poly.length], ex = bx - ax, ey = by - ay;
+    const den = dx * ey - dy * ex;
+    if (Math.abs(den) < 1e-9) continue;
+    const t = ((ax - cx) * ey - (ay - cy) * ex) / den, s = ((ax - cx) * dy - (ay - cy) * dx) / den;
+    if (t > 1e-6 && s >= -1e-6 && s <= 1 + 1e-6) best = Math.min(best, t);
+  }
+  return [cx + dx * best, cy + dy * best];
+}
+
+/**
+ * Wall panel with a round hole (rose windows, portholes, tunnel mouths). Lies in the XY plane,
+ * facing +z, x from -w/2 to w/2, y from 0 to h, plus an optional `gable` peak on top. The hole is
+ * centred at (cx, cy) with radius r; `depth` adds the reveal (the inner surface of the hole) going
+ * to z = -depth, and `back` the rear face. UVs world-scaled (one repeat per `tile` units).
+ */
+export function wallWithHole(w = 16, h = 20, cx = 0, cy = 12, r = 5, { segs = 32, tile = 2, gable = 0, depth = 0.8, back = false } = {}) {
+  const a = w / 2, poly = [[-a, 0], [a, 0], [a, h]];
+  if (gable > 0) poly.push([0, h + gable]);
+  poly.push([-a, h]);
+  const top = h + gable, uv = (x, y) => [(x + a) / tile, (top - y) / tile];
+  const g = new GeoBuilder();
+  const ang = (i) => (i / segs) * Math.PI * 2;
+  const inner = [], outer = [];
+  for (let i = 0; i <= segs; i++) {
+    const t = ang(i), dx = Math.cos(t), dy = Math.sin(t);
+    inner.push([cx + dx * r, cy + dy * r]);
+    outer.push(rayExit(poly, cx, cy, dx, dy));
+  }
+  const cornerAng = poly.map(([x, y]) => (Math.atan2(y - cy, x - cx) + Math.PI * 2) % (Math.PI * 2));
+  const face = (z, want) => {
+    const P = (q) => [q[0], q[1], z];
+    for (let i = 0; i < segs; i++) {
+      quadFacing(g, P(inner[i]), P(inner[i + 1]), P(outer[i + 1]), P(outer[i]), uv(...inner[i]), uv(...inner[i + 1]), uv(...outer[i + 1]), uv(...outer[i]), want);
+      // a polygon corner that falls between two rays: fill the triangle out to it
+      const t0 = ang(i), t1 = ang(i + 1);
+      poly.forEach((c, k) => {
+        if (cornerAng[k] > t0 + 1e-6 && cornerAng[k] < t1 - 1e-6) {
+          const p0 = P(outer[i]), p1 = P(outer[i + 1]), pc = P(c);
+          const n = vcross(vsub(p1, p0), vsub(pc, p0));
+          if (vdot(n, want) >= 0) g.tri(p0, p1, pc, uv(...outer[i]), uv(...outer[i + 1]), uv(...c));
+          else g.tri(p0, pc, p1, uv(...outer[i]), uv(...c), uv(...outer[i + 1]));
+        }
+      });
+    }
+  };
+  face(0, [0, 0, 1]);
+  if (back) face(-depth, [0, 0, -1]);
+  if (depth > 0) {
+    const circ = 2 * Math.PI * r;
+    for (let i = 0; i < segs; i++) {
+      const p = inner[i], q = inner[i + 1], mid = ang(i + 0.5);
+      const u0 = (i / segs) * circ / tile, u1 = ((i + 1) / segs) * circ / tile;
+      quadFacing(g, [p[0], p[1], 0], [q[0], q[1], 0], [q[0], q[1], -depth], [p[0], p[1], -depth],
+        [u0, 0], [u1, 0], [u1, depth / tile], [u0, depth / tile], [-Math.cos(mid), -Math.sin(mid), 0]);
+    }
+  }
+  return g.build();
+}
+
+/**
+ * Gothic rose window, centred at the origin in the XY plane facing +z: an outer rim, a hub,
+ * `petals` radial spokes, a ring of foils (small round lights) and the glass between them.
+ * `broken` = petal indices whose glass, foil and part of their spokes and rim are gone.
+ * Returns { tracery, glass }: draw the tracery as stone, the glass additive + unlit with
+ * K.tex.stainedGlass (its UVs repeat `glassTile` times across the window).
+ */
+export function roseWindow(radius = 5, { petals = 12, depth = 0.45, rim = 0.09, hub = 0.2, spoke = 0.045, broken = [], glassTile = 3, seed = 2 } = {}) {
+  const R0 = radius, g = new GeoBuilder(), gl = new GeoBuilder(), Fw = [0, 0, 1];
+  const brk = new Set(broken), sector = (Math.PI * 2) / petals;
+  const P = (cx, cy, rr, t, z = 0) => [cx + Math.cos(t) * rr, cy + Math.sin(t) * rr, z];
+  const tuv = (p) => [p[0] / R0, p[1] / R0];
+  const gu = (p) => [(p[0] / R0 + 1) * glassTile * 0.5, (1 - p[1] / R0) * glassTile * 0.5];
+  // extruded band between radii r0..r1 over angles a0..a1 around (cx, cy)
+  const band = (cx, cy, r0, r1, a0, a1, n) => {
+    for (let i = 0; i < n; i++) {
+      const t0 = a0 + (a1 - a0) * (i / n), t1 = a0 + (a1 - a0) * ((i + 1) / n), tm = (t0 + t1) / 2;
+      const A = P(cx, cy, r0, t0), B = P(cx, cy, r0, t1), C = P(cx, cy, r1, t1), D = P(cx, cy, r1, t0);
+      quadFacing(g, A, B, C, D, tuv(A), tuv(B), tuv(C), tuv(D), Fw);
+      const Az = P(cx, cy, r0, t0, -depth), Bz = P(cx, cy, r0, t1, -depth), Cz = P(cx, cy, r1, t1, -depth), Dz = P(cx, cy, r1, t0, -depth);
+      quadFacing(g, A, B, Bz, Az, [0, 0], [0.3, 0], [0.3, 0.1], [0, 0.1], [-Math.cos(tm), -Math.sin(tm), 0]);
+      quadFacing(g, D, C, Cz, Dz, [0, 0], [0.3, 0], [0.3, 0.1], [0, 0.1], [Math.cos(tm), Math.sin(tm), 0]);
+    }
+  };
+  // rim: one arc per sector; a broken sector loses a bite out of it
+  for (let s = 0; s < petals; s++) {
+    const a0 = s * sector, a1 = a0 + sector;
+    if (brk.has(s)) { band(0, 0, R0 * (1 - rim), R0, a0, a0 + sector * 0.3, 2); band(0, 0, R0 * (1 - rim * 0.5), R0, a0 + sector * 0.65, a1, 2); }
+    else band(0, 0, R0 * (1 - rim), R0, a0, a1, 3);
+  }
+  band(0, 0, R0 * hub * 0.55, R0 * hub, 0, Math.PI * 2, 12);     // hub ring
+  // spokes (one between two broken sectors is gone, next to one broken sector it snaps off)
+  const rIn = R0 * hub, rOut = R0 * (1 - rim), w = R0 * spoke;
+  for (let s = 0; s < petals; s++) {
+    const t = s * sector, prev = (s - 1 + petals) % petals;
+    const both = brk.has(s) && brk.has(prev), one = brk.has(s) || brk.has(prev);
+    const len = both ? 0 : one ? 0.45 + 0.3 * Math.abs(Math.sin(seed * 7.1 + s)) : 1;
+    if (len <= 0) continue;
+    const c = Math.cos(t), sn = Math.sin(t), px = -sn * w, py = c * w, r1 = rIn + (rOut - rIn) * len;
+    const A = [c * rIn + px, sn * rIn + py, 0], B = [c * rIn - px, sn * rIn - py, 0], C = [c * r1 - px, sn * r1 - py, 0], D = [c * r1 + px, sn * r1 + py, 0];
+    const z = (p) => [p[0], p[1], -depth];
+    quadFacing(g, A, B, C, D, tuv(A), tuv(B), tuv(C), tuv(D), Fw);
+    quadFacing(g, A, D, z(D), z(A), [0, 0], [1, 0], [1, 0.1], [0, 0.1], [px, py, 0]);
+    quadFacing(g, B, C, z(C), z(B), [0, 0], [1, 0], [1, 0.1], [0, 0.1], [-px, -py, 0]);
+    if (len < 1) quadFacing(g, C, D, z(D), z(C), [0, 0], [0.1, 0], [0.1, 0.1], [0, 0.1], [c, sn, 0]);   // snapped end
+  }
+  // foils and glass per intact sector
+  const rm = (rIn + rOut) * 0.56, rf = (rOut - rIn) * 0.26;
+  for (let s = 0; s < petals; s++) {
+    if (brk.has(s)) continue;
+    const tm = (s + 0.5) * sector;
+    band(Math.cos(tm) * rm, Math.sin(tm) * rm, rf * 0.72, rf, 0, Math.PI * 2, 8);
+    for (let i = 0; i < 3; i++) {
+      const t0 = s * sector + sector * (i / 3), t1 = s * sector + sector * ((i + 1) / 3);
+      const A = P(0, 0, rIn, t0, -depth * 0.5), B = P(0, 0, rIn, t1, -depth * 0.5), C = P(0, 0, rOut, t1, -depth * 0.5), D = P(0, 0, rOut, t0, -depth * 0.5);
+      quadFacing(gl, A, B, C, D, gu(A), gu(B), gu(C), gu(D), Fw);
+    }
+  }
+  // the hub's own glass disc
+  const O = [0, 0, -depth * 0.5];
+  for (let i = 0; i < 10; i++) {
+    const A = P(0, 0, rIn * 0.55, (i / 10) * Math.PI * 2, -depth * 0.5), B = P(0, 0, rIn * 0.55, ((i + 1) / 10) * Math.PI * 2, -depth * 0.5);
+    gl.tri(O, A, B, gu(O), gu(A), gu(B));
+  }
+  return { tracery: g.build(), glass: gl.build() };
 }

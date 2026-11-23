@@ -91,13 +91,6 @@ export class Streaks {
 
   draw(r, { brightness = 1 } = {}) {
     this.tint[0] = this.tint[1] = this.tint[2] = brightness;
-    if (!this.additive) {
-      for (const p of this.list) {
-        if (p.f < 0.02) continue;
-        r.draw(this.mesh, mat4.trs(this.m, p.x, p.y, p.z, 0, 0, 0, p.s), { texture: this.tex, unlit: true, tint: this.tint, opacity: p.f });
-      }
-      return;
-    }
     r.drawInstanced(this.mesh, this.inst, { texture: this.tex, unlit: true, additive: true, tint: this.tint });
   }
   dispose(r) { this.mesh.dispose(); r.deleteTexture(this.tex); this.inst.dispose(); }
@@ -188,9 +181,30 @@ export class Ripples {
     }
     this.inst.upload(n);
   }
+  /**
+   * Kit v5: ring level at (x, z), 0..~1: how strongly a ring's edge is passing that point
+   * right now (sum over rings). width = how wide the edge band is in world units.
+   * Lets trees, grass or lamps brighten as a ring runs past them.
+   */
+  at(x, z, width = 2.5) {
+    let v = 0;
+    for (const p of this.list) {
+      if (p.s === undefined) continue;
+      const d = Math.hypot(x - p.x, z - p.z), rr = p.s * 0.5;
+      v += p.f * Math.max(0, 1 - Math.abs(d - rr) / width);
+    }
+    return v;
+  }
   draw(r, { brightness = 1 } = {}) {
     if (!this.list.length) return;
     this.tint[0] = this.tint[1] = this.tint[2] = brightness;
+    if (!this.additive) {                                     // solid mode (Kit v4): screen-door fade per ring
+      for (const p of this.list) {
+        if (!(p.f >= 0.02)) continue;
+        r.draw(this.mesh, mat4.trs(this.m, p.x, p.y, p.z, 0, 0, 0, p.s), { texture: this.tex, unlit: true, tint: this.tint, opacity: p.f });
+      }
+      return;
+    }
     r.drawInstanced(this.mesh, this.inst, { texture: this.tex, unlit: true, additive: true, tint: this.tint });
   }
   dispose(r) { this.mesh.dispose(); r.deleteTexture(this.tex); this.inst.dispose(); }

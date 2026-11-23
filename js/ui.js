@@ -101,6 +101,7 @@ export class UI {
     this.drawer.append(el('section', { className: 'foot' },
       el('div', { className: 'btns' },
         el('button', { textContent: 'Fullscreen (F)', onclick: () => h.onFullscreen() }),
+        el('button', { textContent: 'Pre-show check', title: 'Runs every environment briefly on this machine and checks audio, MIDI, offline copy and power (about 2 minutes)', onclick: () => h.onSelfTest?.() }),
         el('button', { textContent: 'Reset settings', onclick: () => h.onReset() })),
       el('pre', { className: 'keys', textContent: 'F fullscreen   H hide UI   D debug\n1-9 style      N / Shift+N next/prev\n0 test scene   A auto-switch  C CRT\nP / Shift+P palette   O style palettes\nS setlist mode\nPgDn → ]  next song (footswitch)\nPgUp ← [  previous song\nI hold   Z freeze   B blackout\nG big moment   T tap   Shift+T clear\nL lock beats to tempo   R feel\nDrop an image, palette, setlist or\naudio file anywhere.' })));
 
@@ -237,6 +238,6 @@ export class UI {
     d.beat.textContent = `BEAT ${a.beatCount}`;
     d.state.textContent = info.state;
     d.state.className = 'dstate ' + (info.playing ? 'playing' : 'silent');
-    d.foot.textContent = `${info.source}\nstyle: ${info.style}${info.transition ? '  → ' + info.transition : ''}\nsetlist: ${info.setlist}\nshow: ${info.show}\nauto-switch: ${info.autoSwitch ? 'on' : 'off'} · idle ${info.idle.toFixed(0)} s · auto-gain ×${a.gain.bass.toFixed(0)} (bass)`;
+    d.foot.textContent = `${info.source}\nstyle: ${info.style}${info.transition ? '  → ' + info.transition : ''}\nsetlist: ${info.setlist}\nshow: ${info.show}\nsafety: ${info.safety || ''}\nauto-switch: ${info.autoSwitch ? 'on' : 'off'} · idle ${info.idle.toFixed(0)} s · auto-gain ×${a.gain.bass.toFixed(0)} (bass)`;
   }
 }

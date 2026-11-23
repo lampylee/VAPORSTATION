@@ -175,3 +175,106 @@ export function cracks({ ramp = 0, cells = 4, jitter = 5, seed = 3, crack = R(ra
     return patches != null && tileBlob(x, y, 8, seed + 1) > 1 - patchAmount ? patches : fill;
   });
 }
+
+// ---------------------------------------------------------------- Kit v6 (Ember Vigil): dark fantasy stone + glass
+
+/**
+ * Worn flagstone floor: irregular slabs in running rows, dark grout, chipped corners, a few
+ * hairline cracks, centres polished lighter by footsteps. Tileable 64x64.
+ */
+export function flagstones({ ramp = 0, seed = 5 } = {}) {
+  const ROWS = [[16, 24, 24], [32, 16, 16], [24, 24, 16], [16, 16, 32]];
+  const slabAt = (x, y) => {
+    const row = Math.floor(y / 16), ws = ROWS[row], off = (row * 11) % 64, xx = (x + off) % 64;
+    let x0 = 0, i = 0;
+    while (xx >= x0 + ws[i]) { x0 += ws[i]; i++; }
+    return { row, i, lx: xx - x0, ly: y - row * 16, w: ws[i] };
+  };
+  return make(64, 64, (x, y) => {
+    const s = slabAt(x, y), id = s.row * 4 + s.i;
+    const ex = Math.min(s.lx, s.w - 1 - s.lx), ey = Math.min(s.ly, 15 - s.ly), edge = Math.min(ex, ey);
+    if (edge < 1) return R(ramp, 0);                                         // grout
+    if (ex < 3 && ey < 3 && ex + ey < 3 + rnd(id, 1, seed) * 2) return R(ramp, 0);   // chipped corner
+    // hairline crack through some slabs
+    if (rnd(id, 2, seed) > 0.6) {
+      const k = (rnd(id, 3, seed) - 0.5) * 1.6, c = s.w * rnd(id, 4, seed);
+      if (Math.abs(s.lx - (c + (s.ly - 8) * k) + Math.sin(s.ly * 1.3 + id) * 0.8) < 0.55) return R(ramp, 0);
+    }
+    const base = 1.05 + rnd(id, 5, seed) * 0.75;                             // each slab its own stone
+    const worn = Math.min(1, edge / 6) * 0.45;                               // polished centre, darker rim
+    const grit = (rnd(x, y, seed) - 0.5) * 0.28 + (tileBlob(x, y, 8, seed + id) - 0.5) * 0.45;
+    return dshade(ramp, base + worn + grit, x, y);
+  });
+}
+
+/**
+ * Cut ashlar blocks (cathedral walls, piers): running bond, mortar, chisel speckle and soot
+ * blackening in blotches. Tileable 64x64. soot 0..1.
+ */
+export function ashlar({ ramp = 0, seed = 9, rows = 4, soot = 0.5 } = {}) {
+  const rh = 64 / rows;
+  return make(64, 64, (x, y) => {
+    const row = Math.floor(y / rh), off = row % 2 ? 16 : 0, bx = Math.floor(((x + off) % 64) / 32);
+    const lx = (x + off) % 32, ly = y % rh;
+    if (ly === 0 || lx === 0) return R(ramp, 0);
+    const bevel = (ly === 1 || lx === 1) ? 0.45 : (ly === rh - 1 || lx === 31) ? -0.35 : 0;
+    const sooty = tileBlob(x, y, 16, seed) * soot * 1.4;
+    const v = 1.4 + rnd(bx, row, seed) * 0.6 + bevel - sooty + (rnd(x, y, seed + 1) - 0.5) * 0.55;
+    return dshade(ramp, v, x, y);
+  });
+}
+
+/**
+ * Leaded glass: irregular panes in accent / atmosphere / secondary shades, lead cames and
+ * broken holes transparent (CLEAR). Draw additive and unlit for backlit windows. 32x32.
+ */
+export function stainedGlass({ seed = 3, holes = 0.12, ramps = [2, 3, 1, 2] } = {}) {
+  const N = 4, S = 32 / N, pts = [];
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) pts.push([i * S + rnd(i, j, seed) * S, j * S + rnd(i, j, seed + 1) * S, i + j * N]);
+  return make(32, 32, (x, y) => {
+    let d1 = 1e9, d2 = 1e9, id = 0;
+    for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) for (const p of pts) {
+      const d = Math.hypot(x - p[0] - ox * 32, y - p[1] - oy * 32);
+      if (d < d1) { d2 = d1; d1 = d; id = p[2]; } else if (d < d2) d2 = d;
+    }
+    if (d2 - d1 < 1.1) return CLEAR;                       // lead came: see-through dark line when additive
+    if (rnd(id, 7, seed) < holes) return CLEAR;            // pane knocked out
+    const ramp = ramps[Math.floor(rnd(id, 8, seed) * ramps.length)];
+    return dshade(ramp, 1.2 + rnd(id, 9, seed) * 1.2 + Math.max(0, 0.9 - d1 / S) * 0.8, x, y);
+  });
+}
+
+/**
+ * Plate armour: horizontal lames with a lit upper edge and shadowed lower edge, rivets,
+ * scratches and rust (secondary ramp) creeping in. 32x32; base ramp = the steel.
+ */
+export function plateArmor({ ramp = 0, rust = 1, seed = 11 } = {}) {
+  // two broad plates per tile: a bright rolled edge, a smooth curved face (light from above, a
+  // soft sheen band), a shadowed overlap. No per-pixel noise, so it reads as metal, not stone.
+  return make(32, 32, (x, y) => {
+    const ly = y % 16;
+    if (ly === 15) return R(ramp, 0);
+    if (ly === 14) return dshade(ramp, 0.9, x, y);
+    if ((x % 10 === 4) && ly === 3) return R(ramp, 3);                                       // rivet
+    const r = tileBlob(x * 2, y * 2, 16, seed) + rnd(x >> 1, y >> 1, seed) * 0.12;
+    if (r > 0.9) return dshade(rust, 0.9 + (r - 0.9) * 10, x, y);                            // rust bloom
+    if (Math.abs(x - y * 0.6 - 7) < 0.5 && ly > 4 && ly < 12) return R(ramp, 3);            // one long scratch
+    const v = ly < 2 ? 3 : 2.5 - (ly / 14) * 1.6 + Math.exp(-((ly - 5) ** 2) / 4) * 0.5;
+    return dshade(ramp, v, x, y);
+  });
+}
+
+/**
+ * Worn cloth for capes and drapes, 32x64 (u across, v down): vertical folds, a faded border,
+ * moth holes and a ragged, transparent hem at the bottom.
+ */
+export function wornCloth({ ramp = 3, trim = R(1, 1), seed = 13 } = {}) {
+  const hem = Array.from({ length: 32 }, (_, x) => 52 + Math.floor(rnd(x, 1, seed) * 11));
+  return make(32, 64, (x, y) => {
+    if (y > hem[x]) return CLEAR;
+    if (y > 14 && rnd(x >> 1, y >> 1, seed + 4) > 0.955) return CLEAR;
+    if (y < 3) return trim;
+    const fold = Math.sin(x / 32 * Math.PI * 6 + Math.sin(y * 0.05) * 0.8) * 0.55;
+    return dshade(ramp, 0.75 + fold + (rnd(x, y, seed) - 0.5) * 0.4 - (y > hem[x] - 5 ? 0.35 : 0), x, y);
+  });
+}

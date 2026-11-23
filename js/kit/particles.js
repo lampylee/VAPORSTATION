@@ -27,6 +27,9 @@ export const PARTICLE_PRESETS = {
   mist: { count: 18, sprite: 'mist', size: 10, height: 0.25, vel: [0.3, 0, 0.06], jitter: [0.12, 0, 0.12], area: [56, 1.5, 56], yOffset: -1.3, color: R(3, 3), opacity: 0.4 },
   drizzle: { count: 320, sprite: 'streak', size: 0.04, height: 6, vel: [0.2, -12, 0], jitter: [0.1, 2, 0.1], area: [30, 20, 30], color: R(3, 3), additive: true, glow: 0.3 },
   skyLanterns: { count: 40, sprite: 'glow', size: 0.4, vel: [0.12, 0.45, 0.05], jitter: [0.15, 0.15, 0.15], wobble: 0.35, area: [60, 30, 60], yOffset: 9, color: R(2, 3), additive: true, glow: 0.9, flicker: 1, flickerRate: 1.2 },
+  // Kit v5: additive mist. Screen-door 'mist' can read as a dotted fence against dark water or
+  // a shoreline; this one adds a faint tint instead (brightness ~ fog dimming, it never goes black).
+  softMist: { count: 16, sprite: 'mist', size: 12, height: 0.22, vel: [0.25, 0, 0.05], jitter: [0.1, 0, 0.1], area: [60, 1.4, 60], yOffset: -1.2, color: R(3, 2), additive: true, glow: 0.22 },
   starTwinkle: { count: 60, sprite: 'twinkle', size: 0.3, vel: [0, 0, 0], jitter: [0, 0, 0], area: [60, 20, 60], yOffset: 14, color: R(3, 3), additive: true, glow: 0.8, flicker: 1, flickerRate: 2.2 },
 };
 const SPRITES = { dot, streak, glow, petal, leaf, twinkle, mist: mistBank };
@@ -42,6 +45,7 @@ export class Particles {
   constructor(r, preset = 'snow', overrides = {}) {
     const p = { ...(typeof preset === 'string' ? PARTICLE_PRESETS[preset] : preset), ...overrides };
     this.p = p;
+    this.r = r;   // r.quality (governor) scales how many are shown
     this.mesh = r.createMesh(quad());
     const name = p.sprite || 'dot', sprite = SPRITES[name];
     this.tex = r.texture(p.texture ? (typeof p.texture === 'function' ? p.texture() : p.texture) : RAMP_SPRITES.has(name) ? sprite({ ramp: p.color >> 2 }) : sprite({ index: p.color }));
@@ -81,7 +85,7 @@ export class Particles {
     this.g *= Math.exp(-dt / (this.gDecay || 0.9));
     const g = this.g, gs = speed * (1 + g), gw = g * 2.5;
     wind = [wind[0] + this.gDir[0] * gw, wind[1] + this.gDir[1] * gw];
-    this.visible = Math.round(n * Math.max(0, Math.min(1, amount)));
+    this.visible = Math.round(n * Math.max(0, Math.min(1, amount)) * (this.r?.quality ?? 1));
     const cy = center[1] + (p.yOffset || 0);
     for (let i = 0; i < n; i++) {
       const o = i * 3, ph = this.phase[i];

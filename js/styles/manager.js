@@ -7,14 +7,13 @@ import { LivePalette } from '../palette/palette.js';
 export class StyleManager {
   constructor(renderer, classes, startIndex = 1) {
     this.r = renderer;
+    this.classes = classes;
     this.override = null;   // a palette applied to every style, or null = each style's own
-    this.styles = classes.map((C) => {
-      const s = new C();
-      s.pal = new LivePalette(renderer, C.palette);
-      s.init(renderer);
-      return s;
-    });
+    this.broken = new Set(); // styles that threw this session: out of the rotation, drawn as fog
+    this.avoid = new Set();  // governor: too heavy for this machine, out of the rotation
+    this.styles = classes.map((C, i) => this._make(C, i));
     this.cur = Math.min(Math.max(0, startIndex), this.styles.length - 1);
+    if (this.broken.has(this.cur)) this.cur = this.rotation[0] ?? this.cur;
     this.next = -1;
     this.t = 0;
     this.queued = -1;
@@ -24,10 +23,33 @@ export class StyleManager {
     this.pool = null;       // setlist: indices N / auto-switch rotate through (null = whole rotation)
   }
 
+  _make(C, i, palette = C.palette) {
+    const s = new C();
+    s.pal = new LivePalette(this.r, palette);
+    try { s.init(this.r); } catch (e) { this._fail(i, e, 'init'); }
+    return s;
+  }
+
+  /** A style threw: keep the show going. It is drawn as plain fog and leaves the rotation. */
+  _fail(i, e, where) {
+    if (!this.broken.has(i)) console.error(`[safety] style "${this.name(i)}" failed in ${where}; skipping it this session.`, e);
+    this.broken.add(i);
+    if (i === this.cur && this.next < 0) this.goNext();
+    else if (i === this.next && this.queued < 0) this.queued = this.rotation.find((j) => j !== i) ?? -1;
+  }
+
+  /**
+   * After a lost WebGL context is restored every GL object is gone: re-create every style
+   * and palette from scratch, keeping which style shows, the crossfade, the palette override and the pool.
+   */
+  rebuild() {
+    this.styles = this.classes.map((C, i) => this._make(C, i, this.styles[i]?.pal.palette || C.palette));
+  }
+
   get count() { return this.styles.length; }
   get transitioning() { return this.next >= 0; }
   get target() { return this.queued >= 0 ? this.queued : this.next >= 0 ? this.next : this.cur; }
-  name(i) { return this.styles[i].constructor.meta?.name || `Style ${i}`; }
+  name(i) { return this.classes[i]?.meta?.name || `Style ${i}`; }
 
   /** The palette the visible (or incoming) style is showing. */
   get activePalette() { return this.styles[this.target].pal.palette; }
@@ -49,17 +71,22 @@ export class StyleManager {
 
   /** Indices in the rotation: the setlist song's pool if set, else styles without meta.hidden. */
   get rotation() {
-    if (this.pool?.length) return this.pool;
-    return this.styles.map((s, i) => (s.constructor.meta?.hidden ? -1 : i)).filter((i) => i >= 0);
+    const all = this.pool?.length ? this.pool : this.styles.map((s, i) => (s.constructor.meta?.hidden ? -1 : i)).filter((i) => i >= 0);
+    // broken styles never come back; heavy ones only if nothing else is left
+    const ok = all.filter((i) => !this.broken.has(i));
+    const light = ok.filter((i) => !this.avoid.has(i));
+    return light.length ? light : ok;
   }
 
   /** Next style in the rotation (skips hidden styles like the test scene). */
   goNext(dir = 1) {
     const rot = this.rotation;
     if (!rot.length) return;
-    const pos = rot.indexOf(this.target);
-    const i = pos < 0 ? (dir > 0 ? 0 : rot.length - 1) : (pos + dir + rot.length) % rot.length;
-    this.goTo(rot[i]);
+    const t = this.target, pos = rot.indexOf(t);
+    if (pos >= 0) { this.goTo(rot[(pos + dir + rot.length) % rot.length]); return; }
+    // the current style left the rotation (broken / heavy / not in this song's pool): its neighbour in order
+    const after = dir > 0 ? rot.find((j) => j > t) : [...rot].reverse().find((j) => j < t);
+    this.goTo(after ?? (dir > 0 ? rot[0] : rot[rot.length - 1]));
   }
 
   update(audio, intensity, playing, dt, s) {
@@ -82,16 +109,25 @@ export class StyleManager {
       }
     }
     for (const st of this.styles) st.pal.update(dt);
-    this.styles[this.cur].update(audio, intensity, dt);
-    if (this.next >= 0) this.styles[this.next].update(audio, intensity, dt);
+    const step = (i) => {
+      if (this.broken.has(i)) return;
+      try { this.styles[i].update(audio, intensity, dt); } catch (e) { this._fail(i, e, 'update'); }
+    };
+    step(this.cur);
+    if (this.next >= 0) step(this.next);
   }
 
   render() {
     const r = this.r;
-    const draw = (which, st) => { r.beginScene(which); r.setPalette(st.pal); st.render(r); };
-    draw('A', this.styles[this.cur]);
+    const draw = (which, i) => {
+      const st = this.styles[i];
+      r.beginScene(which); r.setPalette(st.pal);
+      if (this.broken.has(i)) { r.clear(st.pal.role('fog')); return; }
+      try { st.render(r); } catch (e) { this._fail(i, e, 'render'); r.beginScene(which); r.setPalette(st.pal); r.clear(st.pal.role('fog')); }
+    };
+    draw('A', this.cur);
     let mix = 0;
-    if (this.next >= 0) { draw('B', this.styles[this.next]); mix = smoothstep(this.t); }
+    if (this.next >= 0) { draw('B', this.next); mix = smoothstep(this.t); }
     r.composite(mix);
   }
 

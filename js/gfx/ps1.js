@@ -22,7 +22,7 @@ layout(location=2) in vec2 aUV;
 layout(location=3) in vec3 aColor;
 layout(location=4) in vec4 aInst0;   // instancing: xyz position, uniform scale
 layout(location=5) in vec4 aInst1;   // instancing: rotY, shade, sway phase, height scale
-layout(location=6) in vec4 aInst2;   // instancing: rotX, rotZ (tilt / swing; rotZ spins billboards), unused, unused
+layout(location=6) in vec4 aInst2;   // instancing: rotX, rotZ (tilt / swing; rotZ spins billboards), stretch X, stretch Z (0 = 1)
 uniform mat4 uModel, uView, uProj;
 uniform vec2 uSnapGrid;      // half internal resolution / snap size in pixels
 uniform float uSnapOn;
@@ -37,6 +37,9 @@ uniform vec2 uFade;          // distance fade: near, far (far <= near = off)
 uniform vec2 uMirror;        // x: 1 = reflect the world in the plane y = uMirror.y, 2 = only clip below it
 uniform vec4 uWave;          // world-space wave on y: amp, spatial freq, speed, 0 (amp 0 = off); same field for every draw that uses it
 uniform float uTwoSided;     // 1 = flip the normal toward the camera (paper cards, leaves, banners lit on both faces)
+uniform vec4 uPL[4];         // point lights (Kit v6): xyz position, w radius
+uniform vec3 uPLc[4];        // point light colours
+uniform int uPLn;            // how many are on (beginScene resets to 0)
 out vec3 vUVw;               // uv * w, w  -> undoes perspective correction
 out vec2 vUVp;               // perspective-correct uv (for blending amount)
 out vec3 vColor;
@@ -50,6 +53,10 @@ void main() {
   if (uInstanced > 0.5) {
     p.x += sin(uTime * 1.7 + aInst1.z) * uSway * max(p.y, 0.0);
     p.y *= aInst1.w;
+    // Kit v5: per-instance X / Z stretch (0 = unset = 1, so older styles are unchanged)
+    vec2 sxz = vec2(aInst2.z == 0.0 ? 1.0 : aInst2.z, aInst2.w == 0.0 ? 1.0 : aInst2.w);
+    p.x *= sxz.x; p.z *= sxz.y;
+    nrm = normalize(vec3(nrm.x / sxz.x, nrm.y, nrm.z / sxz.y));
     shade = aInst1.y;
     float cx = cos(aInst2.x), sx = sin(aInst2.x), cz = cos(aInst2.y), sz = sin(aInst2.y);
     if (uBillboard > 0.5) {
@@ -91,6 +98,15 @@ void main() {
   if (uTwoSided > 0.5 && dot(mat3(uView) * n, view.xyz) > 0.0) n = -n;
   float d =max(dot(n, -uLightDir), 0.0);
   vec3 lit = uAmbient + uLightColor * d;
+  // per-vertex point lights (torches, fires), Gouraud like PS1 vertex lighting; 30 % wraps round so backs still glow
+  for (int i = 0; i < 4; i++) {
+    if (i >= uPLn) break;
+    vec3 lp = uPL[i].xyz;
+    if (uMirror.x > 0.5 && uMirror.x < 1.5) lp.y = 2.0 * uMirror.y - lp.y;
+    vec3 L = lp - world.xyz;
+    float dl = length(L), f = clamp(1.0 - dl / uPL[i].w, 0.0, 1.0);
+    lit += uPLc[i] * (f * f) * (0.3 + 0.7 * max(dot(n, L / max(dl, 1e-4)), 0.0));
+  }
   vColor = aColor * shade * mix(lit, vec3(1.0), uUnlit);
   vec2 uv = aUV * uUVScale + uUVOffset;
   vUVp = uv;
@@ -268,7 +284,7 @@ class Mesh {
 
 /**
  * Per-instance data for drawInstanced: 12 floats each
- * [x, y, z, scale, rotY, shade, swayPhase, heightScale, rotX, rotZ, -, -].
+ * [x, y, z, scale, rotY, shade, swayPhase, heightScale, rotX, rotZ, stretchX, stretchZ].
  * A negative heightScale flips the mesh vertically (handy for wing flaps).
  */
 const INST_STRIDE = 12;
@@ -289,6 +305,13 @@ class InstanceBuffer {
   }
   /** Change only the tilt of instance i (after set()). */
   tilt(i, rotX = 0, rotZ = 0) { const o = i * INST_STRIDE; this.data[o + 8] = rotX; this.data[o + 9] = rotZ; }
+  /**
+   * Kit v5: stretch instance i along its local X and Z (after set(); Y is heightScale).
+   * Applied before tilt / rotY, so a box instance becomes any w x h x d block.
+   * Billboards use sx as a width multiplier. Values persist until changed: call
+   * stretch(i) (= 1, 1) when you reuse a slot for an unstretched instance.
+   */
+  stretch(i, sx = 1, sz = 1) { const o = i * INST_STRIDE; this.data[o + 10] = sx; this.data[o + 11] = sz; }
   /** Upload the first `count` instances (call after set()). */
   upload(count = this.count) {
     this.count = Math.min(count, this.max);
@@ -314,13 +337,9 @@ export class PS1Renderer {
     });
     if (!gl) throw new Error('WebGL2 is not available in this browser.');
     this.gl = gl;
-    this.world = program(gl, WORLD_VS, WORLD_FS);
-    this.comp = program(gl, FULLSCREEN_VS, COMPOSITE_FS);
-    this.present_ = program(gl, FULLSCREEN_VS, PRESENT_FS);
-    this.emptyVao = gl.createVertexArray();
-    this.whiteTex = this.createTexture({ data: new Uint8Array([255, 255, 255, 255]), width: 1, height: 1 });
-    this.defaultClut = this.createClutTexture(); // grey ramp, used if a scene sets no palette
-    this.updateClut(this.defaultClut, Float32Array.from({ length: 48 }, (_, i) => Math.floor(i / 3) / 15));
+    this._initGL();
+    this.lost = false;   // WebGL context lost (driver reset): draws are no-ops until restore()
+    this.quality = 1;    // governor: 0..1 detail scale (kit particles read it)
 
     // Global look parameters (set from settings / audio every frame).
     this.params = {
@@ -331,6 +350,7 @@ export class PS1Renderer {
       flash: 0,         // show control: 0..1 flash toward flashColor (composite pass)
       flashColor: [1, 1, 1],
       fade: 0,          // show control: 0..1 fade to black (blackout)
+      maxDpr: 0,        // governor: cap on devicePixelRatio for the backbuffer (0 = none)
     };
     this.width = 0; this.height = 0;
     this.targets = {};
@@ -338,6 +358,26 @@ export class PS1Renderer {
     this.proj = mat4.create();
     this.fogColor = [0, 0, 0];
     this.stats = { draws: 0, tris: 0 };
+    this.resize();
+  }
+
+  /** Programs + built-in textures. Run at start and again after a lost context is restored. */
+  _initGL() {
+    const gl = this.gl;
+    this.world = program(gl, WORLD_VS, WORLD_FS);
+    this.comp = program(gl, FULLSCREEN_VS, COMPOSITE_FS);
+    this.present_ = program(gl, FULLSCREEN_VS, PRESENT_FS);
+    this.emptyVao = gl.createVertexArray();
+    this.whiteTex = this.createTexture({ data: new Uint8Array([255, 255, 255, 255]), width: 1, height: 1 });
+    this.defaultClut = this.createClutTexture(); // grey ramp, used if a scene sets no palette
+    this.updateClut(this.defaultClut, Float32Array.from({ length: 48 }, (_, i) => Math.floor(i / 3) / 15));
+  }
+
+  /** Rebuild what the renderer owns after webglcontextrestored (the style manager rebuilds styles). */
+  restore() {
+    this.targets = {}; this.width = 0; this.height = 0;
+    this._initGL();
+    this.lost = false;
     this.resize();
   }
 
@@ -466,7 +506,7 @@ export class PS1Renderer {
 
   /** Call on window resize and whenever resolution settings change. */
   resize() {
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = Math.min(window.devicePixelRatio || 1, this.params.maxDpr || Infinity);
     const cw = Math.max(1, Math.round(this.canvas.clientWidth * dpr));
     const ch = Math.max(1, Math.round(this.canvas.clientHeight * dpr));
     if (this.canvas.width !== cw || this.canvas.height !== ch) { this.canvas.width = cw; this.canvas.height = ch; }
@@ -507,6 +547,7 @@ export class PS1Renderer {
     this.mirrorY = null;
     this.setPalette(null);
     this.setLight([0.3, -0.8, -0.5], [0.9, 0.9, 0.9], [0.25, 0.25, 0.3]);
+    this.setPointLights(null);
     this.setFog([0, 0, 0], 10, 60);
   }
 
@@ -569,6 +610,23 @@ export class PS1Renderer {
     gl.uniform3f(u.uLightDir, dir[0] / l, dir[1] / l, dir[2] / l);
     gl.uniform3fv(u.uLightColor, color);
     gl.uniform3fv(u.uAmbient, ambient);
+  }
+
+  /**
+   * Kit v6: up to 4 point lights for the rest of this scene, lit per vertex (subdivide big floors so the
+   * pool is smooth). list = [{ pos: [x, y, z], color: [r, g, b] (may exceed 1), radius }], or null / [] = off.
+   * beginScene() turns them off, so they never leak into another style. Unlit draws ignore them.
+   */
+  setPointLights(list) {
+    const gl = this.gl, u = this.world.u, n = Math.min(4, list?.length || 0);
+    const P = this._plPos || (this._plPos = new Float32Array(16)), C = this._plCol || (this._plCol = new Float32Array(12));
+    for (let i = 0; i < n; i++) {
+      const l = list[i];
+      P[i * 4] = l.pos[0]; P[i * 4 + 1] = l.pos[1]; P[i * 4 + 2] = l.pos[2]; P[i * 4 + 3] = Math.max(0.01, l.radius);
+      C[i * 3] = l.color[0]; C[i * 3 + 1] = l.color[1]; C[i * 3 + 2] = l.color[2];
+    }
+    if (n) { gl.uniform4fv(u['uPL[0]'], P); gl.uniform3fv(u['uPLc[0]'], C); }
+    gl.uniform1i(u.uPLn, n);
   }
 
   /**

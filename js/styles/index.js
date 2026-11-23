@@ -38,5 +38,9 @@ import { BackRoadLights } from './back-road-lights.js';
 import { PaperCrowd } from './paper-crowd.js';
 import { Newsprint } from './newsprint.js';
 import { RightPlace } from './right-place.js';
+import { ColourWell } from './colour-well.js';
+import { Backrooms } from './backrooms.js';
+import { FogHarbour } from './fog-harbour.js';
+import { EmberVigil } from './ember-vigil.js';
 
-export const STYLES = [TestScene, Fogway, Monoliths, Relic, KitDemo, AshfallTown, LostValley, NeonCircuit, NightManor, DrownedRuins, RouteNine, ColdBase, StationDeck, DreamJournal, GraveyardHill, ArcadeAfterHours, AuroraField, KitCalm, LanternRiver, RainWindow, CloudSea, PetalSteps, MoonlitShallows, GreenhouseDusk, QuietHouse, MothLamp, UnderTheHull, StillPool, Underriver, BeforeDawn, SaltFlat, SearchlightTown, BackRoadLights, PaperCrowd, Newsprint, RightPlace];
+export const STYLES = [TestScene, Fogway, Monoliths, Relic, KitDemo, AshfallTown, LostValley, NeonCircuit, NightManor, DrownedRuins, RouteNine, ColdBase, StationDeck, DreamJournal, GraveyardHill, ArcadeAfterHours, AuroraField, KitCalm, LanternRiver, RainWindow, CloudSea, PetalSteps, MoonlitShallows, GreenhouseDusk, QuietHouse, MothLamp, UnderTheHull, StillPool, Underriver, BeforeDawn, SaltFlat, SearchlightTown, BackRoadLights, PaperCrowd, Newsprint, RightPlace, ColourWell, Backrooms, FogHarbour, EmberVigil];

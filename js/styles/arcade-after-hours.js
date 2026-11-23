@@ -15,6 +15,8 @@
 // life, carpet goes blacklight, dance floor starts chasing.
 // Reactions: beat = tile pattern steps + screen flash + camera nudge;
 // bass = tile brightness + camera bob; highs = screen sparkle / flicker.
+// Light (Kit v7): screen glow down each aisle, the centre ceiling tubes and the dance floors are
+// point lights (K.LightSet, best 4 ahead): colour spills onto cabinets, carpet, counter and ceiling.
 import { mat4, lerp, clamp, damp } from '../gfx/math.js';
 import { scaleColor } from '../gfx/color.js';
 import { GeoBuilder, box, merge } from '../gfx/geometry.js';
@@ -280,11 +282,12 @@ export class ArcadeAfterHours {
     this.areas = [];
     this.m = mat4.create();
     this.time = 0; this.k = 0; this.a = null;
-    this.col = { fog: [0, 0, 0], tint: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], dance: [0, 0, 0], white: [1, 1, 1], glow: [0, 0, 0] };
+    this.col = { fog: [0, 0, 0], tint: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], dance: [0, 0, 0], white: [1, 1, 1], glow: [0, 0, 0], lScr: [0, 0, 0], lTube: [0, 0, 0], lDance: [0, 0, 0], focus: [0, 0, 0] };
+    this.lights = new K.LightSet({ reach: 6, cap: 96 }); this.cand = []; this.nCand = 0;
   }
 
   update(a, k, dt) {
-    this.a = a; this.k = k; this.time += dt;
+    this.a = a; this.k = k; this.time += dt; this.dt = dt;
     const d = K.drive(a, k);
     this.cam.update(a, k, dt);
     // bass: a soft dip plus a footstep bob that grows with the beat
@@ -371,7 +374,12 @@ export class ArcadeAfterHours {
   _place(d, k) {
     const s = this.cam.s, t = this.time, fl = this.flash.v;
     const cnt = { cab: 0, lod: 0, scr: [0, 0, 0, 0], mq: [0, 0, 0, 0], pool: 0, long: 0, cross: 0, glow: 0 };
-    this.areas.length = 0;
+    this.areas.length = 0; this.nCand = 0;
+    const cand = (id, x, y, z, kind, level) => {
+      const c = this.cand[this.nCand] || (this.cand[this.nCand] = [0, 0, 0, 0, 0, 0]);
+      c[0] = id; c[1] = x; c[2] = y; c[3] = z; c[4] = kind; c[5] = level; this.nCand++;
+    };
+    let ss = 0, sn = 0;
     const cab = (x, z, rot, lane, i, j, detail) => {
       const h = K.rand2(i * 3 + j, lane, 21), v = Math.floor(K.rand2(i * 3 + j, lane, 22) * 4) % 4;
       // cabinets power on row by row (inner rows first), staggered along each row
@@ -383,18 +391,21 @@ export class ArcadeAfterHours {
       else this.lodInst.set(cnt.lod++, x, 0, z, 1, rot, 1);
       this.screenInst[v].set(cnt.scr[v]++, x, 0, z, 1, rot, scr);
       this.marqInst[v].set(cnt.mq[v]++, x, 0, z, 1, rot, 0.05 + p * 0.95 * flick);
+      if (detail) { ss += scr; sn++; }
       if (detail) this.poolInst.set(cnt.pool++, x + Math.sin(rot) * 1.0, 0, z + Math.cos(rot) * 1.0, 1, rot, (0.16 + p * 0.3 + fl * 0.2) * hiFlick);
     };
     let lastArea = null;
     K.forSegments(s, { length: SEG, ahead: AHEAD, behind: BEHIND }, (_, z0, i) => {
       const ty = ((i % PERIOD) + PERIOD) % PERIOD, open = ty >= OPEN0, cross = ty === 4;
       if (cnt.cab > MAXCAB - 8) return;
+      ss = 0; sn = 0;
       for (let j = 0; j < 3; j++) {
         const z = -(z0 + 0.5 + j);
         if (!open && !cross) { cab(-INNER_X, z, Math.PI / 2, 0, i, j, true); cab(INNER_X, z, -Math.PI / 2, 1, i, j, true); }
         if (!open) cab(-OUTER_X, z, Math.PI / 2, 2, i, j, false);
         cab(OUTER_X, z, -Math.PI / 2, 3, i, j, false);
       }
+      if (sn) cand(i * 4, 0, 1.4, -(z0 + SEG / 2), 0, (ss / sn) * 0.9);   // the screens either side of the aisle
       if (open) { const id = Math.floor((i - OPEN0) / PERIOD); if (id !== lastArea) { lastArea = id; this.areas.push(-((id * PERIOD + OPEN0) * SEG + 6)); } }
       // ceiling tubes: each segment flickers to life at its own point in the swell
       const zc = -(z0 + SEG / 2);
@@ -405,6 +416,7 @@ export class ArcadeAfterHours {
         const b = Math.max(night, on * fl2) * (1 + d.pulse * 0.25) * (1 - d.high * 0.15 * K.rand2(i, Math.floor(t * 24), n));
         this.longInst.set(cnt.long++, x, TUBE_Y, zc, 1, 0, 0.08 + b * 0.92);
         this.glowInst.set(cnt.glow++, x, TUBE_Y - 0.15, zc, 1.6 + d.pulse * 0.5, 0, b * 0.4);
+        if (n === 1 && i % 2 === 0) cand(i * 4 + 1, 0, TUBE_Y - 0.5, zc, 1, b);
       });
       if (i % 2 === 0) {
         const th = 0.25 + K.rand2(i, 9, 33) * 0.45, on = K.stage(k, th, th + 0.12);
@@ -424,6 +436,7 @@ export class ArcadeAfterHours {
 
   render(r) {
     const { col, k } = this, P = this.pal, d = K.drive(this.a, k);
+    const dlv = (0.75 + d.bass * 0.7 + d.pulse * 0.2) * K.stage(k, 0.3, 0.8);
     const dim = lerp(0.62, 1, k);
     scaleColor(col.fog, P.role('fog'), dim);
     r.clear(col.fog);
@@ -432,6 +445,14 @@ export class ArcadeAfterHours {
     r.setLight([0.25, -1, 0.35], scaleColor(col.light, P.role('light'), lerp(0.18, 0.55, k)), scaleColor(col.amb, P.role('ambient'), lerp(0.42, 0.55, k)));
     col.tint[0] = col.tint[1] = col.tint[2] = dim;
     const m = this.m;
+    // coloured light: screens (atmosphere-light), ceiling neon (accent), dance floors (secondary, on the bass)
+    scaleColor(col.lScr, P.color(R(3, 3)), 1.1); scaleColor(col.lTube, P.color(R(2, 2)), 1.5); scaleColor(col.lDance, P.color(R(1, 3)), 2.2);
+    const L = this.lights, eye = this.cam.eye, KC = [col.lScr, col.lTube], KR = [4.2, 5.5];
+    L.begin();
+    for (let i = 0; i < this.nCand; i++) { const c = this.cand[i]; L.add(c[0], c[1], c[2], c[3], KC[c[4]], KR[c[4]], c[5]); }
+    this.areas.forEach((zc, i) => L.add(1e6 + Math.round(zc), 0.8, 0.8, zc, col.lDance, 8, dlv));
+    col.focus[0] = 0; col.focus[1] = 1.6; col.focus[2] = eye[2] - 6;
+    L.apply(r, col.focus, this.dt || 1 / 60);
 
     // hall shell
     const zf = Math.round(-this.cam.s / 4) * 4;

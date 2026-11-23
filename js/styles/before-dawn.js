@@ -27,7 +27,9 @@ const WIN = { x0: -0.8, x1: 0.8, y0: 0.9, y1: 2.1 };   // window opening in the 
 const CYCLE = 300;          // seconds for one slow drift out and back in (idle)
 const N_BANDS = 5;
 
-const B = (sx, sy, sz, cx, cy, cz, uv = [Math.max(sx, sz) / 1.5, sy / 1.5]) => K.props.shift(box(sx, sy, sz, { uvRepeat: uv }), cx, cy, cz);
+// segs: subdivided so the bedside lamp (a per-vertex point light) lights the room as a soft pool
+const B = (sx, sy, sz, cx, cy, cz, uv = [Math.max(sx, sz) / 1.5, sy / 1.5], segs = 1) => K.props.shift(box(sx, sy, sz, { uvRepeat: uv, segs }), cx, cy, cz);
+const LAMP = [0.45, 0.86, -2.68];
 
 const height = (x, z) => {
   const d = Math.hypot(x, z * 0.8);
@@ -116,13 +118,21 @@ export class BeforeDawn {
     const gable = new GeoBuilder();
     for (const z of [-hz - t / 2 - 0.01, hz + t / 2 + 0.01]) gable.tri([-hx - t / 2, h + t, z], [hx + t / 2, h + t, z], [0, ridge - 0.08, z], [0, 1], [3, 1], [1.5, 0]);
     walls.push(gable.build());
+    // rebuilt subdivided: the big pieces get 6 cells a side, the strips round the window 3
+    const S = (sx, sy, sz, cx, cy, cz, n) => B(sx, sy, sz, cx, cy, cz, undefined, n);
+    walls.splice(0, walls.length - 1,
+      S(2 * hx + t, h, t, 0, h / 2, -hz, 7),
+      S(t, h, 2 * hz + t, -hx, h / 2, 0, 7), S(t, h, 2 * hz + t, hx, h / 2, 0, 7),
+      S(wx, h, t, -(hx + t / 2 - wx / 2), h / 2, hz, 3), S(wx, h, t, hx + t / 2 - wx / 2, h / 2, hz, 3),
+      S(WIN.x1 - WIN.x0, WIN.y0, t, 0, WIN.y0 / 2, hz, 2), S(WIN.x1 - WIN.x0, h - WIN.y1, t, 0, (h + WIN.y1) / 2, hz, 2),
+      S(2 * hx + t, t, 2 * hz + t, 0, h + t / 2, 0, 7));
     this.wallMesh = r.createMesh(merge(walls.map((geo) => ({ geo }))));
     this.wallTex = r.texture(plaster());
 
     const run = hx + 0.35, slab = run / Math.cos(0.5) + 0.1;
     const roof = [-1, 1].map((sd) => K.transform(box(slab, 0.12, 2 * hz + 0.6, { uvRepeat: [2, 4] }), { pos: [sd * run / 2, h + t + (run / 2) * Math.tan(0.5), 0], rot: [0, 0, -sd * 0.5] }));
     this.roofMesh = r.createMesh(merge(roof.map((geo) => ({ geo, color: [0.55, 0.55, 0.6] }))));
-    this.floorMesh = r.createMesh(B(2 * hx, 0.1, 2 * hz, 0, -0.05, 0, [4, 5]));
+    this.floorMesh = r.createMesh(B(2 * hx, 0.1, 2 * hz, 0, -0.05, 0, [4, 5], 8));
     this.boardsTex = r.texture(K.tex.boards({ ramp: 0 }));
 
     // --- wood: bed frame, headboard, bedside table, window frame, one casement swung open outwards ---
@@ -143,11 +153,11 @@ export class BeforeDawn {
 
     // --- bedding and the lampshade ---
     this.sheetMesh = r.createMesh(merge([
-      { geo: B(1.5, 0.18, 2.0, -0.7, 0.46, -1.9) }, { geo: B(0.9, 0.13, 0.4, -0.7, 0.61, -2.62) },
+      { geo: B(1.5, 0.18, 2.0, -0.7, 0.46, -1.9, undefined, 3) }, { geo: B(0.9, 0.13, 0.4, -0.7, 0.61, -2.62, undefined, 2) },
       { geo: K.props.shift(K.props.prism(8, 0.16, 0.2, { taper: 0.6 }), 0.45, 0.8, -2.68) },
     ]));
     this.sheetTex = r.texture(cloth(0, 1.6));
-    this.blanketMesh = r.createMesh(merge([{ geo: B(1.58, 0.08, 1.35, -0.7, 0.58, -1.45) }, { geo: B(0.04, 0.3, 1.35, -1.5, 0.44, -1.45) }, { geo: B(0.04, 0.3, 1.35, 0.1, 0.44, -1.45) }]));
+    this.blanketMesh = r.createMesh(merge([{ geo: B(1.58, 0.08, 1.35, -0.7, 0.58, -1.45, undefined, 3) }, { geo: B(0.04, 0.3, 1.35, -1.5, 0.44, -1.45) }, { geo: B(0.04, 0.3, 1.35, 0.1, 0.44, -1.45) }]));
     this.blanketTex = r.texture(cloth(1, 0.9));
     this.curtainTex = r.texture(cloth(1, 0.6));
     this.curtains = [
@@ -199,7 +209,8 @@ export class BeforeDawn {
     this.lamp = 0.25; this.wind = 0;
     this.m = mat4.create();
     this._t = [0, 0, 0];
-    this.col = { fog: [0, 0, 0], zen: [0, 0, 0], tint: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], glow: [0, 0, 0], band: [0, 0, 0], tmp: [0, 0, 0], tmp2: [0, 0, 0], patch: [0, 0, 0], house: [0, 0, 0] };
+    this.col = { fog: [0, 0, 0], zen: [0, 0, 0], tint: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], glow: [0, 0, 0], band: [0, 0, 0], tmp: [0, 0, 0], tmp2: [0, 0, 0], patch: [0, 0, 0], house: [0, 0, 0], lamp: [0, 0, 0] };
+    this.lampLight = [{ pos: [LAMP[0], LAMP[1] + 0.12, LAMP[2] + 0.15], color: this.col.lamp, radius: 3.9 }];
   }
 
   update(a, k, dt) {
@@ -279,6 +290,9 @@ export class BeforeDawn {
     mixColor(col.light, scaleColor(col.tmp, P.role('light'), lerp(0.24, 0.38, K.stage(k, 0, 0.7))), scaleColor(col.tmp2, P.role('glow'), 0.75), s);
     mixColor(col.amb, scaleColor(col.tmp, P.role('ambient'), 0.32), scaleColor(col.tmp2, P.color(R(2, 1)), 0.3), s * 0.6);
     r.setLight(L, col.light, col.amb);
+    // the bedside lamp lights the room (walls, bed, curtains); it swells with the song, flares on the beat
+    scaleColor(col.lamp, P.role('glow'), this.lamp * 3.6);
+    r.setPointLights(this.lampLight);
     col.tint[0] = col.tint[1] = col.tint[2] = dim;
 
     // the house and the room

@@ -1,10 +1,12 @@
 // ?bench — cycles every style through idle and full intensity with synthetic
 // audio and reports frame timings. Results: console.table + window.benchResults.
 
-const IDLE_S = 2, ACTIVE_S = 4;
+const IDLE = 2, ACTIVE = 4;
 
 export class Bench {
-  constructor(styles, renderer) {
+  /** opts: { idle, active } seconds per phase; quiet = no console.table (the self-test uses it). */
+  constructor(styles, renderer, { idle = IDLE, active = ACTIVE, quiet = false } = {}) {
+    this.idleS = idle; this.activeS = active; this.quiet = quiet;
     this.styles = styles;
     this.r = renderer;
     this.i = 0;
@@ -23,7 +25,7 @@ export class Bench {
     this.cpu = { idle: [], active: [] };
   }
 
-  get phase() { return this.t < IDLE_S ? 'idle' : 'active'; }
+  get phase() { return this.t < this.idleS ? 'idle' : 'active'; }
   get intensity() { return this.phase === 'idle' ? 0 : 1; }
 
   /** Synthetic 128 bpm music. */
@@ -42,10 +44,10 @@ export class Bench {
   }
 
   record(dt, cpuMs) {
-    if (this.t < 0.3 || (this.t > IDLE_S && this.t < IDLE_S + 0.3)) return; // skip warm-up frames
+    if (this.t < 0.3 || (this.t > this.idleS && this.t < this.idleS + 0.3)) return; // skip warm-up frames
     this.frames[this.phase].push(dt);
     this.cpu[this.phase].push(cpuMs);
-    if (this.t >= IDLE_S + ACTIVE_S) this._finishStyle();
+    if (this.t >= this.idleS + this.activeS) this._finishStyle();
   }
 
   _finishStyle() {
@@ -67,7 +69,7 @@ export class Bench {
     if (this.i + 1 < this.styles.count) this._enter(this.i + 1);
     else {
       this.done = true;
-      console.table(this.results);
+      if (!this.quiet) console.table(this.results);
       window.benchResults = this.results;
     }
   }

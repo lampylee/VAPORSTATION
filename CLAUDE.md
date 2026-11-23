@@ -15,6 +15,7 @@ Plan: `ROADMAP.md`. **Current status, open items and next steps: `docs/HANDOFF.m
 - `node serve.js` → http://localhost:8080 (creates `demo/demo.wav` on first run).
 - **Play demo track** button: synthetic gig with silence, a 1.2 s mid-song stop, a quiet passage, and a gap between songs. Press **D** for the debug overlay (state, intensity, beats, fps).
 - `test.html`: bare pipeline test scene.
+- `?kiosk` (what `kiosk.bat` opens): no panel / cursor, live input on. `sw.js` caches the app for offline use (network first, so edits still show; `?nosw` skips it). `?selftest`: pre-show check (short bench of every style + GPU / audio / MIDI / offline / power report; rewrites the heavy list).
 - `http://localhost:8080/?bench`: cycles every style idle → active with synthetic audio, logs fps / CPU ms / draws / tris via `console.table` and `window.benchResults`.
 - The Claude browser pane blocks microphone access; test live input in real Chrome.
 
@@ -23,9 +24,10 @@ Plan: `ROADMAP.md`. **Current status, open items and next steps: `docs/HANDOFF.m
 - `js/gfx/ps1.js` — low-res FBOs, vertex snap, affine UVs, per-vertex fog/light, CLUT palette lookup, dissolve + dither composite, nearest upscale, CRT.
 - `js/gfx/textures.js` — procedural **indexed** textures (palette slot per pixel).
 - `js/palette/` — palette model (4 ramps × 4 shades + roles), live crossfading palettes, library, user store, editor UI.
-- `js/kit/` — world kit: sky, terrain, particles, sprites, props, camera rigs, swell helpers, GLB loader.
+- `js/kit/` — world kit: sky, terrain, particles, sprites, props, camera rigs, swell helpers, GLB loader, fantasy lights (fire, candles, lightning). The pipeline has up to 4 per-vertex point lights (`r.setPointLights`).
 - `js/show/` — show control between audio and styles (hold, freeze, blackout, big-moment flash, strobe-safe beat limiter, tap tempo → `audio.bpm/beatPhase/bar`), Web MIDI with learn, panel UI incl. environment browser thumbnails.
 - `js/setlist/` — setlists (song → palette + environment pool), cue-until-silence stepping, panel + editor.
+- `js/safety/` — gig safety: performance governor (steps detail down, marks heavy styles) and watchdog (WebGL context loss/restore, audio resume + input reopen). The style manager skips any style that throws.
 - `js/styles/` — one file per environment + `index.js` registry + `manager.js` (crossfades, idle auto-switch, palettes).
 
 ## Palettes (CLUT)

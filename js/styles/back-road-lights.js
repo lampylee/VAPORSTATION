@@ -1,4 +1,6 @@
 // BACK ROAD LIGHTS — for "Subterranean Homesick Alien" (OK Computer palette).
+// Light (Kit v7): the hovering lights wash the field below them, and a lowered beam lights the
+// grass, fence and buildings where it lands (K.LightSet, the best 4).
 //
 // A gravel back road at night, a post-and-rail fence, a ploughed field beyond it
 // with a few round bales, one farmhouse (a warm window or two), a barn, a windmill
@@ -287,7 +289,8 @@ export class BackRoadLights {
     this.time = 0; this.k = 0; this.energy = 0; this.mid = 0; this.purpose = 0; this.rot = 0; this.spin = 0;
     this.mode = 0; this.modeClock = 0; this.porchLevel = 0; this.beamSum = 0;
     this.m = mat4.create(); this.mI = mat4.create(); this.mRotor = mat4.create();
-    this.col = { fog: [0, 0, 0], zen: [0, 0, 0], tint: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], one: [1, 1, 1], beam: [0, 0, 0], pool: [0, 0, 0] };
+    this.col = { fog: [0, 0, 0], zen: [0, 0, 0], tint: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], one: [1, 1, 1], beam: [0, 0, 0], pool: [0, 0, 0], hover: [0, 0, 0], land: [0, 0, 0], focus: [0, 0, 0] };
+    this.plights = new K.LightSet({ reach: 30, fade: 0.6 });
   }
 
   /** Subdivided disc-ish square lying on the terrain (POOL_SEGS x POOL_SEGS). */
@@ -323,7 +326,7 @@ export class BackRoadLights {
 
   update(a, k, dt) {
     dt = Math.min(dt, 0.1);
-    this.a = a; this.k = k; this.time += dt;
+    this.a = a; this.k = k; this.time += dt; this.dt = dt;
     const d = K.drive(a, k), t = this.time;
     const br = this.breath.update(a, dt);
     this.cam.update(a, k, dt);
@@ -417,6 +420,19 @@ export class BackRoadLights {
     r.setFog(col.fog, 12, lerp(95, 118, k));
     r.setLight([0.3, -0.6, -0.7], scaleColor(col.light, P.role('light'), lerp(0.3, 0.42, k) + this.beamSum * 0.06), scaleColor(col.amb, P.role('ambient'), 0.5));
     col.tint[0] = col.tint[1] = col.tint[2] = dim;
+    // point lights: every hovering light faintly, a beam that is down strongly where it lands
+    const PL = this.plights, pale = P.color(R(3, 3));
+    scaleColor(col.hover, pale, 2.2); scaleColor(col.land, pale, 5);
+    PL.begin();
+    this.lights.forEach((L, i) => PL.add(i, L.pos[0], L.pos[1] - L.dipS - 1, L.pos[2], col.hover, 22 + L.size * 6, L.pres * 0.6));
+    this.beams.forEach((b, j) => {
+      if (b.light < 0) return;
+      const L = this.lights[b.light], x = L.pos[0], z = L.pos[2];
+      PL.add(100 + j * 32 + b.light, x, height(x, z) + 3, z, col.land, 20, Math.min(1, b.v * 2) * b.ext * b.ext);
+    });
+    const tg = this.cam.target, fx = tg[0] - eye[0], fz = tg[2] - eye[2], fn = Math.hypot(fx, fz) || 1;
+    col.focus[0] = eye[0] + (fx / fn) * 30; col.focus[1] = 2; col.focus[2] = eye[2] + (fz / fn) * 30;
+    PL.apply(r, col.focus, this.dt || 1 / 60);
     const I = mat4.identity(this.mI);
 
     // ---- opaque world

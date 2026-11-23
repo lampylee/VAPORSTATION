@@ -15,6 +15,8 @@
 // Beat = a door wave travels down the corridor (open doors slam, shut ones bang
 // open), alarm beacons flash, camera nudge. Bass = drift speed + hum vibration.
 // Highs = holo glitches (row tearing) and sparkle.
+// Light (Kit v7): each section's ceiling lamps are a point light as it powers up; in low power
+// (and on the alarm) a red emergency light glows low in the corridor instead (K.LightSet, best 4).
 // Colours: base = gunmetal hull, secondary = teal screens/planet, accent =
 // warning red/amber (emergency strips, beacons, hazard trim), atmosphere = navy.
 import { mat4, lerp, clamp, hash } from '../gfx/math.js';
@@ -324,11 +326,12 @@ export class StationDeck {
     this.wave = new K.History(90);
     this.time = 0; this.k = 0; this.d = null;
     this.m = mat4.create();
-    this.col = { fog: [0, 0, 0], space: [0, 0, 0], zen: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], tmp: [0, 0, 0], lamp: [0, 0, 0], one: [1, 1, 1], strip: [0, 0, 0], holo: [0, 0, 0] };
+    this.col = { fog: [0, 0, 0], space: [0, 0, 0], zen: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], tmp: [0, 0, 0], lamp: [0, 0, 0], one: [1, 1, 1], strip: [0, 0, 0], holo: [0, 0, 0], pLamp: [0, 0, 0], pRed: [0, 0, 0], focus: [0, 0, 0] };
+    this.lights = new K.LightSet({ reach: 6, cap: 32 });
   }
 
   update(a, k, dt) {
-    this.k = k; this.time += dt;
+    this.k = k; this.time += dt; this.dt = dt;
     const d = this.d = K.drive(a, k);
     this.cam.update(a, k, dt);
     // hum vibration: the hull buzzes with the bass
@@ -377,11 +380,17 @@ export class StationDeck {
     // ---- recycle the corridor segments around the camera
     let n = 0, nd = 0, nb = 0, nh0 = 0, nh1 = 0;
     this.signs.length = 0;
+    const L = this.lights;
+    scaleColor(col.pLamp, P.color(R(3, 3)), 2.6 + al * 0.4); scaleColor(col.pRed, P.color(R(2, 2)), 2.4);
+    L.begin();
     K.forSegments(s, { length: SEG, ahead: AHEAD, behind: SEG, period: RING }, (j, _z, ia) => {
       if (n >= MAXSEG) return;
       const th = (j * SEG) / RR, dist = ia * SEG - s, pw = this._power(j, k);
       inst.shell.set(n, 0, 0, 0, 1, th, lerp(0.8, 1.15, pw) * (1 + al * 0.12), 0, 1);
       inst.lamp.set(n, 0, 0, 0, 1, th, pw, 0, 1);
+      const lp = ringPt(0, CY - 0.45, j * SEG + 4), lr = ringPt(0, 0.7, j * SEG + 4);
+      L.add(j * 2, lp[0], lp[1], lp[2], col.pLamp, 6.5, pw);
+      L.add(j * 2 + 1, lr[0], lr[1], lr[2], col.pRed, 4.5, (1 - pw) * 0.55 + al * (0.7 + 0.3 * Math.sin(t * 9 + j)));
       inst.strip.set(n, 0, 0, 0, 1, th, lerp(1, 0.35, pw) + al * 0.9, 0, 1);
       // holo panel (alternating screens), dim standby until its section powers up
       const hp = ringPt(-HW + 0.07, 1.7, j * SEG + 4), hl = lerp(0.18, 1, pw) * (1 + glitch * 0.3);
@@ -409,6 +418,8 @@ export class StationDeck {
       }
       if (dist > -2 && dist < far) this.signs.push([...ringPt(0, 2.74, j * SEG - 0.3), th]);
     });
+    col.focus[0] = eye[0] + fx * 6; col.focus[1] = EYE; col.focus[2] = eye[2] + fz * 6;
+    L.apply(r, col.focus, this.dt || 1 / 60);
     inst.shell.upload(n); inst.lamp.upload(n); inst.strip.upload(n);
     inst.holo0.upload(nh0); inst.holo1.upload(nh1);
     inst.bulk.upload(nb); inst.door.upload(nd); inst.beacon.upload(nb * 2);

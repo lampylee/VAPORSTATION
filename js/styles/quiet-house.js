@@ -11,6 +11,8 @@
 // toward secondary/accent shades, the composite pass dithers it).
 // Beat: one small glint per beat at most (a fence post, a window corner, a star),
 // a glockenspiel twinkle that eases in and rings out. Idle: the odd star twinkles.
+// Light (Kit v7): the street lamp and the lit ground-floor windows are point lights (K.LightSet);
+// the lawn, path, pavement and road near the house are subdivided so their light pools read.
 import { mat4, lerp, clamp, damp } from '../gfx/math.js';
 import { scaleColor, mixColor } from '../gfx/color.js';
 import { GeoBuilder, merge } from '../gfx/geometry.js';
@@ -97,8 +99,12 @@ function face(g, c, u, v, tile = 2) {
   g.face(c, u, v, [0, 0, lu, lv]);
 }
 /** Flat strip on the ground along X (road, kerb, pavement). */
-function strip(g, x0, x1, z0, z1, y, tile) {
-  face(g, [(x0 + x1) / 2, y, (z0 + z1) / 2], [(x1 - x0) / 2, 0, 0], [0, 0, -(z1 - z0) / 2], tile);
+function strip(g, x0, x1, z0, z1, y, tile, fine = null) {
+  if (!fine) { face(g, [(x0 + x1) / 2, y, (z0 + z1) / 2], [(x1 - x0) / 2, 0, 0], [0, 0, -(z1 - z0) / 2], tile); return; }
+  // fine = [fx0, fx1, cell]: coarse either side, cells of `cell` (a multiple of tile, so the texture stays seamless) between
+  const [fx0, fx1, cell] = fine;
+  strip(g, x0, fx0, z0, z1, y, tile); strip(g, fx1, x1, z0, z1, y, tile);
+  for (let x = fx0; x < fx1 - 1e-6; x += cell) face(g, [x + cell / 2, y, (z0 + z1) / 2], [cell / 2, 0, 0], [0, 0, -(z1 - z0) / 2], tile);
 }
 
 export class QuietHouse {
@@ -177,16 +183,16 @@ export class QuietHouse {
 
     // ---- garden and street ----
     const flat = new GeoBuilder();
-    strip(flat, -110, 110, 10.2, 13.6, 0.06, 4);                  // road
+    strip(flat, -110, 110, 10.2, 13.6, 0.06, 4, [-10, 22, 2]);                  // road
     this.roadMesh = r.createMesh(flat.build());
     const paved = new GeoBuilder();
-    strip(paved, -110, 110, 8.5, 10.2, 0.1, 1.2);                // near pavement
+    strip(paved, -110, 110, 8.5, 10.2, 0.1, 1.2, [-9.6, 21.6, 1.2]);                // near pavement
     strip(paved, -110, 110, 13.6, 15.0, 0.1, 1.2);               // far pavement (camera side)
-    face(paved, [0, 0.1, (2.75 + 8.5) / 2], [0.6, 0, 0], [0, 0, -(8.5 - 2.75) / 2], 1.2);   // garden path
+    paved.face([0, 0.1, (2.75 + 8.5) / 2], [0.6, 0, 0], [0, 0, -(8.5 - 2.75) / 2], [0, 0, 1, (8.5 - 2.75) / 1.2], 5);   // garden path
     this.pavedMesh = r.createMesh(paved.build());
     this.roadTex = r.texture(asphaltTex());
     this.pavedTex = r.texture(K.props.tiles({ ramp: 0, cells: 2, cracked: 0.05, shades: [1, 2] }));
-    this.lawnMesh = r.createMesh(K.decal(GARDEN_X * 2, FENCE_Z - 2.75, 0.06));
+    this.lawnMesh = r.createMesh(new GeoBuilder().face([0, 0.06, 0], [GARDEN_X, 0, 0], [0, 0, -(FENCE_Z - 2.75) / 2], [0, 0, 1, 1], 9).build());   // subdivided for the window light
     this.lawnTex = r.texture(lawnTex());
 
     // picket fences (double-sided quads, CLEAR between the pickets)
@@ -245,7 +251,8 @@ export class QuietHouse {
     this.breath = new K.Breath({ beats: 8, period: 12 });
     this.time = 0; this.k = 0; this.green = 0; this.energy = 0; this.lampLevel = 0;
     this.m = mat4.create(); this.mLawn = mat4.create();
-    this.col = { fog: [0, 0, 0], wrong: [0, 0, 0], tmp: [0, 0, 0], zen: [0, 0, 0], tint: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], glass: [1, 1, 1], halo: [0, 0, 0], pool: [0, 0, 0], tw: [1, 1, 1] };
+    this.col = { fog: [0, 0, 0], wrong: [0, 0, 0], tmp: [0, 0, 0], zen: [0, 0, 0], tint: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], glass: [1, 1, 1], halo: [0, 0, 0], pool: [0, 0, 0], tw: [1, 1, 1], lamp: [0, 0, 0], win: [0, 0, 0], focus: [0, 2, 4] };
+    this.lights = new K.LightSet({ reach: 12 });
   }
 
   _twinkle(spot, amp) {
@@ -255,7 +262,7 @@ export class QuietHouse {
   }
 
   update(a, k, dt) {
-    this.a = a; this.k = k; this.time += dt;
+    this.a = a; this.k = k; this.time += dt; this.dt = dt;
     const d = K.drive(a, k);
     const b = this.breath.update(a, dt);
     this.cam.update(a, k, dt);
@@ -317,6 +324,13 @@ export class QuietHouse {
     r.setFog(col.fog, 10, lerp(72, 62, this.green));
     r.setLight([0.45, -0.4, -0.65], scaleColor(col.light, P.role('light'), lerp(0.32, 0.4, k)), scaleColor(col.amb, P.role('ambient'), 0.55));
     col.tint[0] = col.tint[1] = col.tint[2] = dim;
+    // the lamp and the lit ground-floor windows light the lawn, path, fence and street (gently: the quietest scene)
+    const L = this.lights, lp = this.lampPos;
+    scaleColor(col.lamp, P.role('glow'), 2.2); scaleColor(col.win, P.role('glow'), 1.3);
+    L.begin();
+    L.add(999, lp[0] - 0.6, lp[1] - 0.4, lp[2], col.lamp, 8, this.lampLevel);
+    this.poolWins.forEach((w, i) => L.add(i, w.x + w.nx * 0.9, w.y + 0.7, w.z + w.nz * 0.9, col.win, 4.2, w.level));
+    L.apply(r, col.focus, this.dt || 1 / 60);
     const I = mat4.identity(this.m);
 
     this.ground.draw(r, { texture: this.groundTex, tint: col.tint });

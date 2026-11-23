@@ -17,5 +17,6 @@ export * from './fx.js';
 export * from './life.js';
 export * from './gltf.js';
 export * from './lights.js';
+export * from './fantasy.js';
 export { billboardQuad, centredQuad } from './billboard.js';
 export { waveAt } from '../gfx/ps1.js';

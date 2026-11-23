@@ -1,0 +1,14 @@
+{
+  "name": "Vaporstation",
+  "short_name": "Vaporstation",
+  "description": "Live audio-reactive visualizer with a PS1-era look",
+  "start_url": "./?kiosk",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#1b1a24",
+  "theme_color": "#1b1a24",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

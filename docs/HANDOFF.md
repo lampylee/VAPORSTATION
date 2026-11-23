@@ -1,129 +1,111 @@
-# Handoff — state as of 2026-11-20
+# Handoff — state as of 2026-11-22
 
-Read this first when picking the project back up. Also read `CLAUDE.md` (rules),
-`ROADMAP.md` (plan) and `docs/ENVIRONMENT-GUIDE.md` (how environments are built).
+Read this first when picking the project back up. Also read `CLAUDE.md` (rules), `ROADMAP.md` (plan)
+and `docs/ENVIRONMENT-GUIDE.md` (how environments are built, full kit reference).
+Older detail (per-wave concept tables, the original kit backlog) is in git history: `git log -p docs/HANDOFF.md`.
 
 ## Where things stand
 
-All work is committed on `main` (local only: **no git remote yet**, nothing pushed).
+All work is committed on `main`, **local only: no git remote yet**, nothing pushed.
 
 | Phase | Status |
 |---|---|
-| v1: PS1 pipeline, audio analysis, play/silence state machine, 3 styles | done |
+| v1: PS1 pipeline, audio analysis, play/silence state machine | done |
 | 0: housekeeping (`.gitignore`, `CLAUDE.md`, `?bench`) | done |
-| 1: CLUT palettes, editor, album-art extraction, import/export, P/O keys, setlist mode | done |
-| 2: world kit (`js/kit/`), Kit Demo, environment guide | done |
-| 3: environment library | **done: 30 merged** (waves 1–3 + wave 4a/4b Radiohead set) |
-| 4: UI pass, MIDI, tap tempo, overrides | done (2026-11-19), real MIDI hardware untested |
-| 5: gig hardening (PWA, kiosk, reconnect tests) | not started |
+| 1: CLUT palettes, editor, album-art extraction, import/export, setlist mode | done |
+| 2: world kit (`js/kit/`), Kit Demo, environment guide | done; kit now at **v5** |
+| 3: environment library | done: **36 environments** + 3 hidden reference scenes |
+| 4: UI pass, MIDI, tap tempo, show control, Feel setting | done; real MIDI hardware untested |
+| 5: gig hardening | **in progress** (2026-11-22): gig-safety layer, see below |
 
-### Styles on main (`js/styles/index.js`)
+## Styles on main (`js/styles/index.js`)
 
-| Index / key | Style | In auto rotation | Draws / tris (idle → active) |
-|---|---|---|---|
-| 0 | Pipeline test | hidden | 15 / 200 |
-| 1 | Fogway | yes | 52→86 / 0.8–1k |
-| 2 | Monoliths | yes | 45→77 / 5k |
-| 3 | Relic | yes | 45 / 2.3k |
-| 4 | Kit demo (shows Kit v2 too) | hidden | 13–14 / 10.5k |
-| 5 | Ashfall Town | yes | 9–10 / 3–4.8k |
-| 6 | Lost Valley | yes | 54–56 / 10.5–11k |
-| 7 | Neon Circuit | yes | 18–19 / 17.5k |
-| 8 | Night Manor | yes | 21–25 / 14–15.5k |
-| 9 | Drowned Ruins | yes | 13–16 / 10–12.5k |
-| 10 | Route 9 | yes | 16–17 / 7–8.5k (up to 55 draws at some road points) |
-| 11 | Cold Base | yes | 23–24 / 12–14k |
-| 12 | Station Deck | yes | 15–17 / 6.6–6.8k |
-| 13 | Dream Journal | yes | 20–21 / 5.5–5.9k |
-| 14 | Graveyard Hill | yes | 14–18 / 16.2–16.8k |
-| 15 | Arcade After Hours | yes | 32 / 14–15k |
-| 16 | Aurora Field | yes | 12–17 / 8.9–11.3k |
-| 17 | Kit calm (pond): Kit v3 reference for slow songs | hidden | 25–29 / 11.8–12.4k (the reflection doubles the world) |
-| 18 | Lantern River | yes | 35–36 / 15.9–16.2k |
-| 19 | Rain Window | yes | 42–45 / 7.2–8.1k |
-| 20 | Cloud Sea | yes | 8 / 7.9–9.1k |
-| 21 | Petal Steps | yes | 14–15 / 8.6–9.1k |
-| 22 | Moonlit Shallows | yes | 23–25 / 15–15.1k |
-| 23 | Greenhouse at Dusk | yes | 28–30 / 5.9–6.3k |
+Draws / tris measured at idle → full intensity (320×240, stepped with synthetic audio, 2026-11-22). Budget: ≤150 draws, ≤20k tris.
 
-Number keys only reach 0–9; indices 10–23 are reachable via **N / Shift+N**, the dropdown, auto-switch, a setlist song, or the environment browser (thumbnails under Styles).
+| # | Style | # | Style | # | Style |
+|---|---|---|---|---|---|
+| 0 | Pipeline test *(hidden)* 15 / 0.2k | 13 | Dream Journal 20–21 / 5.5–5.9k | 26 | Under the Hull 14 / 10.8k |
+| 1 | Fogway 52–87 / 0.8–1.1k | 14 | Graveyard Hill 14–18 / 16.2–16.8k | 27 | Still Pool 14–16 / 13.4k |
+| 2 | Monoliths 45–77 / 5–5.2k | 15 | Arcade After Hours 32 / 14.2–15.2k | 28 | Underriver 10 / 7.6–7.8k |
+| 3 | Relic 45 / 2.3k | 16 | Aurora Field 12–17 / 8.9–11.3k | 29 | Before Dawn 17–22 / 9.8–10.4k |
+| 4 | Kit demo *(hidden)* 31–37 / 11.2–11.4k | 17 | Kit calm *(hidden)* 25–29 / 11.8–12.4k | 30 | Salt Flat 9–13 / 14.6–15.6k |
+| 5 | Ashfall Town 9 / 3–4.3k | 18 | Lantern River 35–36 / 15.9–16.2k | 31 | Searchlight Town 8 / 12.8k |
+| 6 | Lost Valley 54–56 / 10.5–10.9k | 19 | Rain Window 42–45 / 7.2–8.1k | 32 | Back Road Lights 20–24 / 9–9.1k |
+| 7 | Neon Circuit 18–19 / 17.5–17.8k | 20 | Cloud Sea 8 / 7.9–9.1k | 33 | Paper Crowd 14–15 / 1.9–2.1k |
+| 8 | Night Manor 25–29 / 16–17.6k | 21 | Petal Steps 14–15 / 8.6–9.1k | 34 | Newsprint 8–9 / 5.6–6.2k |
+| 9 | Drowned Ruins 13–16 / 10–12.3k | 22 | Moonlit Shallows 23–25 / 15–15.1k | 35 | Right Place 8–9 / 6.1–6.4k |
+| 10 | Route 9 16–17 / 7.1–7.5k | 23 | Greenhouse at Dusk 28–30 / 7–7.3k | 36 | Colour from the Well 38–44 / 6.4–7.4k |
+| 11 | Cold Base 23–24 / 13.5–15.6k | 24 | Quiet House 19 / 4.2k | 37 | The Backrooms 14 / 13.6–15k |
+| 12 | Station Deck 14–16 / 6.5–6.8k | 25 | Moth Lamp 13 / 5–5.4k | 38 | Fog Harbour 46–52 / 13.3–14k |
+|  |  |  |  | 39 | Ember Vigil 48–50 / 17.3–18.3k |
 
-### Verified vs. not verified
+Groups: 1–16 waves 1–2 (general), 17–23 wave 3 (slow songs, built from Kit calm), 24–35 wave 4 Radiohead set (album
+palettes in `ALBUM_PALETTES`, `js/palette/library.js`; spec `docs/superpowers/specs/2026-11-20-radiohead-setlist-environments-design.md`),
+36–38 wave 5 horror (spec `docs/superpowers/specs/2026-11-21-horror-wave-design.md`; six more concepts from that spec were dropped by the user).
+39 Ember Vigil, a single showpiece built in one session (dark fantasy: knight at a fire in a ruined cathedral, keep + eclipse +
+colossus through the rose window; spec `docs/superpowers/specs/2026-11-22-ember-vigil-design.md`). It is the Kit v6 reference.
+Number keys reach 0–9; the rest via N / Shift+N, the dropdown, auto-switch, a setlist song or the environment browser.
 
-- **Verified (in the Claude browser pane):** every style at idle and at full intensity with synthetic audio, no GL/console errors, within budget, crossfades, palette swaps, album-art extraction, hex/GPL import, editor save, GLB loader on a hand-built model, demo-track state machine timeline.
-- **Not verified yet:**
-  1. **`?bench` real fps.** The Claude pane is hidden during agent work, which pauses `requestAnimationFrame`. Run `http://localhost:8080/?bench` in a **visible normal Chrome tab** and leave it ~1 min; results print via `console.table` and `window.benchResults`.
-  2. **Live input with the Scarlett 2i2.** The Claude pane blocks the microphone. Test in real Chrome: pick device → Start live input → check the threshold meter during soundcheck.
-  3. **The gig laptop itself** (perf, fullscreen, sleep settings).
-  4. **Real MIDI hardware** (learn + footswitch + Program Change). Tested only with simulated MIDI bytes via `viz.midi.handle([...])`.
-  5. **Thumbnail cost on the gig laptop**: one extra style update+render every 0.4 s while the panel is visible (none in fullscreen / hidden UI).
+## Verified vs. not verified
 
-## Reactivity pass (2026-11-20)
+- **Verified (Claude browser pane):** every style at idle and full intensity with synthetic audio, no GL/console errors, within
+  budget; crossfades; palette swaps; album-art extraction; hex/GPL import; editor save; GLB loader; demo-track state machine;
+  setlist stepping and cue logic; simulated MIDI bytes.
+- **Not verified yet** (all need real hardware or a visible window):
+  1. **`?bench` real fps.** The pane is hidden during agent work, which pauses `requestAnimationFrame`. Run
+     `http://localhost:8080/?bench` in a visible normal Chrome tab for ~1 min; results in `console.table` and `window.benchResults`.
+  2. **Live input with the Scarlett 2i2** (the pane blocks the microphone): real Chrome → pick device → Start live input → check the threshold meter.
+  3. **The gig laptop** (perf, fullscreen, sleep settings), plus thumbnail cost there (one extra style render every 0.4 s while the panel is open).
+  4. **Real MIDI hardware** and a **USB footswitch** (check which key it sends; add it in `main.js` if needed).
+  5. How the **Feel** setting feels with real songs in a visible window.
 
-Feedback: with real music the visuals felt bumpy, strobey and aggressive (club-style), not complementary. Causes: ~30 ms band attacks, 0.18 s beat pulses, up to 3–5 beats/s, and every kick firing a camera nudge + roll + FOV punch + colour flash + whole-frame vertex wobble (`jitterBoost`), with styles mapping `bass` straight to FOV/speed.
-Fix, centrally: **Feel** setting (`s.reactivity`, 0 Gentle default / 0.5 Medium / 1 Punchy = the old behaviour; Show card, R key, MIDI knob). `ShowControl` blends three profiles (`PROFILES` in `js/show/control.js`): extra band smoothing pulled toward the new `audio.energy` (analyser: a few seconds of level against a ~minute reference), a beat-strength gate + min gap (Gentle ≈ 1 beat/s), eased beat pulse, and `K.feel` (`js/kit/swell.js`) which scales every `K.Envelope` (smaller, eased in, longer) and `K.Spring` kick; kit camera FOV punch scales by motion; the beat vertex wobble is 0 at Gentle. Hand-rolled beat reactions in Fogway, Monoliths, Relic, Lost Valley (tremor) and Neon Circuit (FOV) now use `audio.accent/motion/decay`.
-Measured on the demo track (same passage): Punchy 2 beats/s, bass movement 2.12/s; Gentle 1 beat/s, 0.24/s. All 23 styles ran at Gentle and Punchy without errors. **Not verified:** how it *feels* with real songs in a visible window (the pane was hidden, so no live look), `?bench` (CPU cost is a few multiplies per frame). Tuning knobs are the `PROFILES` rows.
+## Open items (priority)
 
-## Open items (rough priority)
+1. **Gig-safety layer (Phase 5)**: built (governor, watchdog, offline PWA, kiosk launcher, pre-show check; see the last
+   section). Left: try it on the gig laptop. Design: `docs/superpowers/specs/2026-11-22-gig-safety-design.md`.
+2. **Add a GitHub remote and push** (the user has to create the repo; everything lives on one disk until then).
+3. Run the "not verified" checks above on the gig laptop.
+4. Song-section awareness (verse / chorus / drop from energy over several bars) so camera moves and reveals land on section
+   changes. Suggested after the safety layer.
+5. Optional: teach a few styles to phrase camera moves on `audio.bar` (tap tempo); no style uses `bpm/beatPhase/bar` yet.
+6. Moonshot, not scheduled: a crossfaded **PS2 mode** toggle (640×448, perspective-correct, filtered textures, feedback
+   haze, ~100k-tri budget, kit detail scaling). Needs the user's sign-off on a scoped hard-rule exemption first.
+   Design: `docs/superpowers/specs/2026-11-23-ps2-mode-design.md`.
 
-1. Run `?bench` + Scarlett live test in real Chrome (5 minutes, unblocks confidence).
-2. ~~Kit v2 pass~~ — done, see below.
-3. ~~Wave 2 environments~~ — done: built in six parallel sessions, merged 2026-11-19 (smoke-tested at k=0/1 + crossfades; real-fps `?bench` still pending, see item 1). Their reports list suggested kit additions (Kit v3).
-4. ~~Setlist mode~~ — done 2026-11-19 (`js/setlist/`): songs pick a palette + an environment pool; PageDown/→/] next, PageUp/←/[ prev, S toggles; while playing, Next cues the song until silence (press again to force). Verified in the pane: stepping/cue logic, editor, import, persistence. **Not verified:** a real USB footswitch (check which key it sends; add it in `main.js` if it isn't one of those). Also fixed a manager bug where a style queued mid-crossfade was rendered once before its first `update()` (crashed Cold Base / Arcade for one frame).
-5. ~~Housekeeping~~ — done 2026-11-19: all twelve `claude/env-*` branches and worktrees deleted, the twelve environment sessions archived.
-6. Add a GitHub remote and push, so work is backed up off this machine.
-7. ~~Phase 4~~ — done 2026-11-19 (`js/show/`): show-control pads (Hold I, Freeze Z, Blackout B, Big moment G), strobe-safe limiter (≤3 beats/s), tap tempo T + BPM lock L (styles get `audio.bpm/beatPhase/bar`; no style uses them yet), Web MIDI with learn + Program Change → song, environment browser with live thumbnails, palette strip, collapsible sections. Pipeline gained composite `flash`/`fade` params and `r.snapshot(ctx)`. Then a UI restyle ("Soft Vapor", picked from 10 directions on a design canvas): muted plum tokens in `css/style.css`, icon cards from `js/icons.js` (`card()`, `fold()`), live essentials in four cards (Show, Setlist, Palette, Worlds), everything else in fold-outs and a Settings drawer; hold level is five steps (.2–1) instead of a slider; palette tiles are 4×4 CLUT grids. Sections are found by `h2[data-title]`, not text. Next: Phase 5 (PWA, kiosk script, reconnect tests); optionally teach a few styles to phrase camera moves on `bar`.
+## Systems in brief
 
-## Kit v2 — done (2026-11-19)
+- **Reactivity (2026-11-20):** the **Feel** setting (`s.reactivity`: 0 Gentle default, 0.5 Medium, 1 Punchy; Show card, R key,
+  MIDI knob) blends the `PROFILES` rows in `js/show/control.js`: extra band smoothing toward `audio.energy`, a beat-strength gate
+  + minimum gap (Gentle ≈ 1 beat/s), eased beat pulse, and `K.feel`, which scales every `K.Envelope` / `K.Spring` kick and the
+  kit camera's FOV punch. Styles should scale hand-rolled beat reactions by `audio.accent / motion / decay`.
+- **Show control (`js/show/`):** Hold I, Freeze Z, Blackout B, Big moment G, strobe-safe limiter (≤3 beats/s), tap tempo T +
+  BPM lock L, Web MIDI with learn + Program Change → song, environment browser with live thumbnails. UI is the "Soft Vapor"
+  restyle (`css/style.css`, `js/icons.js`); sections are found by `h2[data-title]`.
+- **Setlists (`js/setlist/`):** songs pick a palette + environment pool; PageDown / → / ] next, PageUp / ← / [ prev, S toggles;
+  while playing, Next cues the song until silence (press again to force).
+- **Kit history** (full reference in the guide; each version is shown in `kit-demo.js` or `kit-calm.js`):
+  v2 path frames, scatter, segments, neon text, pendulum, instance tilt, dither crossfade, draw `fade`;
+  v3 `K.tex` surfaces, caustics / streaks / pulses / ripples, fish & bird schools, `Breath`, screen-door `opacity`, planar reflections;
+  v4 `twoSided`, GPU `wave`, `setJitterBoost`, searchlights, `BarClock` / `Stager` / `Follow3`, gabled house, `Wobble`;
+  v7 (2026-11-23, relight) `K.LightSet`: many light sources, the best 4 kept in sticky slots that fade (no pops); used by
+  Night Manor, Fog Harbour, The Backrooms, Cold Base, then Ashfall Town, Quiet House, Arcade After Hours, Station Deck,
+  Back Road Lights, Under the Hull (Before Dawn and Moth Lamp set one light directly). 12 styles relit in all. Spec
+  `docs/superpowers/specs/2026-11-23-relight-design.md`;
+  v6 (2026-11-22, Ember Vigil) **pipeline point lights** (`r.setPointLights`, 4 per scene, per vertex), `gothicPier`, `keep`,
+  `knight`, `wallWithHole`, `roseWindow`, `Fire` / `Candles` / `Lightning` (`js/kit/fantasy.js`), `tex.flagstones/ashlar/
+  stainedGlass/plateArmor/wornCloth`, `sprites.tatteredBanner/colossus/corona/disc`;
+  v5 (2026-11-22) instance `stretch`, `ringBands`, `Ripples.at`, well / rock / sag strip / house windows, figure + panel sprites,
+  `softMist`, `Walkers`, `OrbitFocusRig` / `DriftRig` / `GridWanderRig`; also fixed Ripples' solid mode (it had been pasted into `Streaks.draw`).
+  Environments keep the local copies they were built with; only Colour from the Well and Fog Harbour were moved onto Kit v5
+  (pixel-diffed: visually identical).
 
-All starred items below are in the kit, documented in `docs/ENVIRONMENT-GUIDE.md` and exercised by `js/styles/kit-demo.js`:
-`r.updateTexture`, `texture2`/`blend` dither-crossfade, instance tilt (`rotX`/`rotZ`, billboard spin), draw `fade` (lights through fog), `K.xf`/`K.Frame`/`props.rotX/Y/Z`, `K.PathFrames` (+ `sweep`, `placeEvery`, `PathRig` `rollFn`), `K.roadStrip`, `K.forSegments`, `K.scatter`, `K.orientedBox`, `Sky` `moonTexture` + `sprites.moon`, `K.NeonText`/`K.textTexture` (full 5x7 font).
-Also promoted: `K.Pendulum` (soft limit), `K.fadeOut/fadeIn`, pixel helpers (`makeIndexed`, `dshade`, `bayer`, `rnd`, `blobNoise`, `ditherPick`), `pointedArch`/`pointedCurve`/`lancet`/`vault`, `chain`, `flatPoly`, `decal`, `quadFacing`, `atlasUV`, sprites `fern`/`kelp`/`cactus`/`lightShaft`; negative `heightScale` flip is documented.
-Ashfall Town now uses `r.updateTexture`; the other wave-1 styles keep their local copies (working code, not worth the churn).
-**Kit v3 (2026-11-19)** promoted the rest into `js/kit/`: `K.tex` (moss stone, cliff rock, jungle floor, waterfall, caustic frames, plus new water, lily pad, sand, paper, boards, cloud layer), `fx.js` (`Caustics`, `Streaks`, `Pulses`, `Ripples`), `life.js` (`School`: fish and birds), `boxAtlas`, `Breath`. It also adds slow-song sprites (willow, blossom tree, reeds, lantern, petal, leaf, mist bank, twinkle) and particle presets (petals, leaves, pollen, mist, drizzle, skyLanterns, starTwinkle; per-particle spin). Pipeline: draw `opacity` (screen-door transparency) and planar reflections (`setMirror`, `setClipBelow`, `clearDepth`). Reference scene: `js/styles/kit-calm.js` (hidden, index 17). The wave-1/2 environments keep their local copies (working code, not migrated).
+## Verification tips for agents
 
-**Kit v4 (2026-11-20, from the wave 4b reports, landed before merging wave 4b)**, all in `docs/ENVIRONMENT-GUIDE.md` and exercised by `js/styles/kit-demo.js` (gabled house, two searchlights turning round once per bar, a sky band, snow gusts):
-- Pipeline (default off, existing styles unchanged): draw options `twoSided` (light the face towards the camera) and `wave: [amp, freq, speed]` (shared GPU world-space wave; `K.waveAt` is the CPU copy), and `r.setJitterBoost(extra)` (per-style snap wobble, reset by `beginScene`).
-- `js/kit/lights.js`: `K.Searchlights` (cone + pool + lens glow, dims near the lens, `boostAt`), `coneGeo`, `poolSprite`.
-- `swell.js`: `K.BarClock` (bar steps with the beatCount fallback and a backup timer), `K.Stager` (ordered rows that keep their order on jumps), `K.Follow3` (springy 3D follower).
-- Geometry: `K.centredQuad`, `worldFace`, `worldBox`, `terrainDecal`, `skyBand`, `K.props.gableHouse`. Textures: `K.tex.cracks`, `K.tileBlob` (seamless `blobNoise`).
-- `K.Wobble` (CPU vertex wobble), `Particles` `texture` override + `gust()`, `Ripples` `{additive: false}` solid mode + per-ring `amp`. Fix: `School` wings no longer jump when `flap` changes (phase integrates; Kit calm now eases its flap).
-- Not promoted (scene-specific): Right Place's slot shuffler, Paper Crowd's glide-past rig and silhouette buckets, Salt Flat's horizon strip, Newsprint's bending stacks and full `PageStorm` (gust + texture cover most of it). The wave 4b environments keep their local copies (working code), as earlier waves did.
-
-### Original backlog (for reference)
-
-Each was implemented locally inside one environment file. Starred = asked for by 2+ sessions or clearly reusable.
-
-**Renderer**
-- ★ `r.updateTexture(tex, gen)` for in-place re-uploads (Ashfall Town calls `texSubImage2D` directly).
-- ★ Dither-crossfade between two indexed textures (Ashfall's "rusts over" swell) as a reusable helper or shader path.
-- ★ Instances that tilt/swing (rotation around X/Z, not just Y): toppled columns, swinging chandeliers, path-aligned props.
-- ★ Distance fade for scattered things around the camera, and "lights that shine through fog" (`fog: false` + manual distance fade), so nothing pops in at the edge.
-
-**Geometry / props**
-- ★ `merge()` parts with rotation (a frame/transform helper); export `rotY`/`rotZ` from `props.js`.
-- ★ Path tools: evenly resampled spline with banked frames (pos/dir/up/right/roll), `orientedBox(centre, axes)`, ribbon/track mesh, road strip with finer rows near the camera, endless segment placement along a path with per-segment deterministic contents.
-- Pointed (gothic) arch, vault and lancet window panel; `chain()` of tilted boxes (necks/tails); `flatPoly` (upward-facing disc); flat ground decals (light pools); `quadFacing` winding helper; UV atlas helper; texture-atlas box faces.
-
-**Sprites / textures**
-- Fern, kelp, cactus, light shaft sprites; moss stone, cliff rock, jungle floor, scrolling waterfall textures; caustic flipbook + overlay helper.
-- ★ `Sky` option for a custom moon texture (the default accent glow reads pink in many palettes).
-- ★ Pixel font + neon text helper with per-letter staging (Route 9 and Neon Circuit both built one).
-
-**Motion / particles**
-- Underdamped pendulum (bass-pumped swing; `Spring` is critically damped).
-- Fish/boid school helper.
-- Direction-aligned streak particles (speed lines).
-- Light strips along a path with per-segment brightness and beat pulses that travel along the path.
-- Repeat/loop settings for terrain and particles along an endless road.
-- Document that a negative instance `heightScale` flips sprites (used for bird wing flaps).
-
-## Verification tips for agents (learned in wave 1)
-
-- Give every parallel session its own port (`node serve.js 81xx`) and its own `.claude/launch.json` (gitignored).
-- The pane is usually hidden, so `requestAnimationFrame` doesn't run. Step frames by hand from the console:
+- Give every parallel session its own port (`node serve.js 81xx`) and its own gitignored `.claude/launch.json`.
+- The pane is usually hidden, so `requestAnimationFrame` doesn't run. Step frames by hand (set `viz.s.autoSwitch = false` first,
+  or the idle auto-switch swaps styles mid-test):
   ```js
-  const { styles, renderer, s } = viz;
+  const { styles, renderer, s } = viz; s.autoSwitch = false;
   styles.cur = INDEX; styles.next = -1;
   const a = { level: .6, bass: .5, mid: .5, high: .6, beat: false, beatPulse: 0, beatCount: 0, rmsDb: -20, rmsDbSmooth: -20 };
   for (let i = 0; i < 120; i++) {
@@ -133,59 +115,87 @@ Each was implemented locally inside one environment file. Starred = asked for by
   }
   renderer.gl.getError(); // expect 0; also read renderer.stats.draws / .tris
   ```
-  To screenshot the live loop at full intensity, stub `viz.analyser.update` to return fake audio and `viz.state.update` to set `playing = true, intensity = 1`.
-- The first screenshot after stubbing may still show an idle frame (one real frame was already queued). Take a second one.
+- To screenshot the live loop at full intensity, stub `viz.analyser.update` to return fake audio and `viz.state.update` to set
+  `playing = true, intensity = 1`. The first screenshot after stubbing may still show an idle frame; take a second one.
+- Changed kit files are cached by the page's module graph: **reload the page** after editing `js/kit/*` before testing.
+- Before/after pixel diffs: render both versions with a seeded `Math.random` and identical audio, copy each frame with
+  `r.snapshot(ctx)` right after `present()`, and compare `getImageData`. A control run (same class twice) must give 0%.
 - `viz.selectPalette(id)` **persists** to localStorage. Reset with `viz.selectPalette('', 0)` afterwards.
 
-## Merging environment branches
+## Building a wave of environments
 
-Every environment branch adds one file plus one line in `js/styles/index.js`, so each merge after the first conflicts only in that registry. Wave 1 was merged with a loop that runs `git merge --no-ff` per branch and, on conflict, regenerates `index.js` from the cumulative list of `file:Class` pairs (base styles first, then environments in merge order). Afterwards, smoke-test all styles with the stepping snippet above at k=0 and k=1.
+1. Check `git branch` for leftover `claude/env-*` branches first.
+2. Write a spec with one row per environment: NAME, FILE / CLASS, PORT, CONCEPT (idle / swell / beat / bass / highs), palette
+   hint, three test palettes. See the wave 4 and 5 specs.
+3. One `start_session` per environment (`initiation: user_asked`, `use_worktree: true`, fresh context). **Background** (adapt):
+   > Vaporstation is a live audio-reactive visualizer for a friend's band: a static WebGL2 web app (no build step, no
+   > dependencies) with an authentic PS1 look (320x240, vertex jitter, affine textures, dithered colour, heavy fog), shown
+   > fullscreen at gigs. A play/silent state machine drives one 0..1 `intensity`; a CLUT palette system recolours any
+   > environment; a world kit (`js/kit/`) and 36 environments exist. Environments evoke the mood of late-90s games but must
+   > be fully original: no names, characters, logos, maps or assets from real games.
+4. **Prompt template:**
+   > Build one new environment for Vaporstation: **NAME**, on your own branch in this worktree.
+   > **Read first:** `CLAUDE.md`, `docs/ENVIRONMENT-GUIDE.md`, `docs/HANDOFF.md` (verification tips), `js/styles/kit-demo.js`
+   > (copy `kit-calm.js` instead for slow songs) and the wave spec. Use the kit instead of re-implementing it.
+   > **Concept:** CONCEPT. Palette: `static palette = fromKeys('FILE', 'NAME', [...])` with PALETTE-HINT, inline in your file.
+   > **Rules:** create `js/styles/FILE.js` (class `CLASS`); the only other change allowed is appending it to `STYLES` in
+   > `js/styles/index.js`. Don't edit the kit, pipeline or other styles; implement missing pieces locally and list them as
+   > suggested kit additions. Everything scales with intensity, nothing pops, colours only via `this.pal`, ≤150 draws, ≤20k tris.
+   > **Verify:** `node serve.js PORT` with your own `.claude/launch.json`; k=0 and k=1, a crossfade in, `dispose()`, three other
+   > palettes (TEST-PALETTES), then reset the palette.
+   > **Done =** the guide's checklist passes. Commit on your branch (end with the Co-Authored-By line). Don't merge or push.
+   > Report: branch; draws / tris idle and active; idle and active looks; suggested kit additions.
+5. **Merge:** `git merge --no-ff` per branch. Each merge after the first conflicts only in `js/styles/index.js`: rebuild it from
+   the last good version plus one import + one array entry per branch, using a **repo-relative** temp path (on Windows `/tmp`
+   doesn't exist for node; wave 5's merge went wrong that way). Check for conflict markers before committing, then smoke-test
+   every style at k=0 and k=1.
+6. Afterwards: promote reported kit suggestions (a Kit vN pass, shown in `kit-demo.js`), then delete the branches, worktrees and
+   archive the sessions once the user agrees.
 
-## Wave 2 — session briefs (used 2026-11-19; reuse the template for future waves)
+## Gig-safety layer (Phase 5) — built, needs gig-laptop checks
 
-Start each with `start_session` (`initiation: user_asked`, `use_worktree: true`, fresh context), one per environment, cut from `main`. Use this **background** for all six:
+Design: `docs/superpowers/specs/2026-11-22-gig-safety-design.md`.
 
-> Vaporstation is a live audio-reactive visualizer for a friend's band: a static WebGL2 web app (no build step, no dependencies) with an authentic PS1 look (320x240, vertex jitter, affine textures, dithered 15-bit colour, heavy fog). It's shown fullscreen at gigs. Phases done and committed on main: the PS1 pipeline, audio analysis with a play/silent state machine that drives a single 0..1 `intensity` value, a CLUT palette system (indexed textures, 4 ramps x 4 shades, album palettes that recolour any environment), a world kit (`js/kit/`), and six wave-1 environments (`js/styles/`). Phase 3 wave 2 builds six more environments in parallel, one session per environment, each on its own branch. Environments evoke the mood of late-90s games but must be fully original: no names, characters, logos, maps or assets from real games.
+**Landed (2026-11-22):**
+- **Governor** `js/safety/governor.js` (`viz.governor`): 3 s windows under 45 fps step down once each: backbuffer dpr cap →
+  particles to 60 % (`renderer.quality`, read by kit `Particles`, ramped) → the showing style is marked heavy (localStorage
+  `vaporstation.heavy`, by style key) and leaves the rotation; under 30 fps it crossfades away (at most once a minute). Stops
+  marking after ¼ of the styles ("machine is slow overall"). Never steps back up; `viz.governor.reset()` clears it. Off in `?bench`.
+- **Style guard** in `StyleManager`: a style that throws in init / update / render / thumbnail is `broken` for the session, drawn as
+  fog, leaves the rotation, and the manager crossfades to its neighbour. `frame()` also guards the audio and render sections.
+- **Watchdog** `js/safety/watchdog.js` (`viz.watchdog`): WebGL context loss → dithered fog cover, `renderer.restore()` +
+  `styles.rebuild()` on restore, cover fades out; no restore in 6 s or rebuild throws → reload. AudioContext not running →
+  `resume()` every 2 s. Live input wanted but closed → reopen with backoff 0.5…10 s. 8 s of exact digital zero → reopen.
+- Debug overlay (D) has a `safety:` line. Rotation now skips broken / heavy styles; `goNext` from a style outside the
+  rotation goes to its neighbour in order.
 
-**Prompt template** (fill in NAME, FILE, CLASS, PORT, CONCEPT, PALETTE-HINT, TEST-PALETTES):
+Tested in the pane: injected throws in render and update, `WEBGL_lose_context` lose → restore (0.8 s, picture back, no GL
+errors), governor tiers + the saturation cap with synthetic frame times, every style at k=0 / k=1 through the guarded path.
+**Not tested:** a real driver reset (TDR), a real interface unplug / dead stream (needs real Chrome + hardware).
 
-> Build one new environment for Vaporstation: **NAME**, on your own branch in this worktree.
->
-> **Read first:** `CLAUDE.md`, `docs/ENVIRONMENT-GUIDE.md`, `docs/HANDOFF.md` (verification tips), and `js/styles/kit-demo.js` (the reference implementation). **Use the Kit v2 helpers** (path frames, scatter, segments, NeonText, Pendulum, instance tilt, texture2/blend, draw fade, pixel helpers) instead of re-implementing them. Wave-1 environments in `js/styles/` show more techniques; feel free to borrow from them.
->
-> **Concept:** CONCEPT
-> Palette: `static palette = fromKeys('FILE', 'NAME', [...])` with PALETTE-HINT, inline in your file.
->
-> **Rules:** create `js/styles/FILE.js` (class `CLASS`); the only other change allowed is appending it to the end of `STYLES` in `js/styles/index.js` (one import + one array entry). Don't edit the kit, pipeline or other styles. If the kit lacks something, implement it locally and list it in your report as a suggested kit addition. Golden rules: everything scales with intensity, nothing pops, colours only via `this.pal`, ≤150 draws, ≤20k tris.
->
-> **Verify:** serve on `node serve.js PORT` with your own gitignored `.claude/launch.json`. Follow the stepping tips in `docs/HANDOFF.md`. Check k=0 and k=1, a crossfade into your style, `dispose()`, and 3 other palettes (TEST-PALETTES). Reset the palette afterwards.
->
-> **Done =** the guide's checklist passes. Commit on your branch (end the message with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`). Don't merge or push. Report: branch name; draws/tris idle and active; idle and active looks; suggested kit additions.
+**Landed (2026-11-22, part 2): offline + kiosk**
+- `sw.js` service worker: network first (edits show at once while developing; 2.5 s timeout), cache fallback. The page
+  posts every resource it loaded (`warm`), so all modules, styles and `demo/demo.wav` are cached on first visit with no
+  file list to maintain. Range requests (the audio player) bypass it unless offline. `?nosw` skips registration; bump
+  `CACHE` in `sw.js` to drop old caches. `manifest.webmanifest` + `icon.svg` (installable, starts at `?kiosk`).
+- `?kiosk`: panel hidden, cursor hidden while it is, live input opened (default device if none saved). Screen wake lock in
+  kiosk and fullscreen. Startup counts as "live wanted", so the watchdog keeps retrying an interface plugged in later.
+- `kiosk.bat`: starts `node serve.js` minimised (or relies on the cache if node is missing), finds Chrome / Edge, launches
+  `--kiosk` with its own profile (`%LOCALAPPDATA%\Vaporstation\chrome`), autoplay allowed, input permission auto-accepted,
+  background throttling off. Dry-run checked (the command it builds); not launched for real.
+- Tested in the pane: 90 files cached; server stopped → `?kiosk` reload loads fully from cache, no GL errors; input retry
+  backoff 0.5 → 1 → 2 → 4 s.
 
-| NAME | FILE / CLASS | PORT | CONCEPT | PALETTE-HINT | TEST-PALETTES |
-|---|---|---|---|---|---|
-| **Cold Base** | `cold-base` / `ColdBase` | 8107 | Original snowy research/military outpost at night (evokes late-90s stealth-ops levels; recreates nothing). Perimeter fences, hangars and prefab huts, stacked crates, a slowly rotating radar dish, watchtowers with sweeping searchlight cones (additive), a frozen ridge behind. Camera: slow security-camera sweeps alternating with a low glide (`SweepRig`/`DollyRig`). **Idle:** quiet, light snow, one searchlight lazily sweeping. **Swell:** snowstorm thickens (`snow` amount + wind), more searchlights wake in sequence, alarm beacons start rotating. **Beat:** searchlights snap toward the camera + beacon flash + nudge; **bass:** wind gusts; **highs:** beacon/spark flicker. | concrete grey, olive/steel secondary, alarm-orange accent, icy blue-black fog | `vapor`, `bloodmoon`, `amber` |
-| **Station Deck** | `station-deck` / `StationDeck` | 8108 | Endless ring corridor of an original orbital station (evokes late-90s sci-fi shooters/adventures; recreates nothing). Ribbed walls, floor grating, pipes, sliding doors that open in sequence ahead, viewport windows showing stars and a large planet, holo panels with animated indexed patterns. Recycle corridor segments (like Fogway/Night Manor). **Idle:** low-power mode, emergency strip lights only, doors shut, slow drift. **Swell:** lights power up section by section, doors cycle open, holo panels boot. **Beat:** doors slam/open in a wave + alarm flash + nudge; **bass:** drift speed + hum vibration; **highs:** panel glitches/sparkle. | gunmetal, teal secondary, warning red/amber accent, deep navy fog | `toxic`, `sunset`, `handheld` |
-| **Dream Journal** | `dream-journal` / `DreamJournal` | 8109 | Surreal dream-diary world (evokes late-90s experimental dream games; recreates nothing). Floating rooms and fragments (a doorway, half a staircase, a table and lamp) over a checkerboard void, giant everyday objects, staircases to nowhere, an endless drift between islands. **Idle:** still, slow, quiet colours. **Swell:** reality warps: objects breathe in scale, rooms rotate slowly, the checker floor ripples (`History`), extra fragments drift in from beyond the fog (fade, never pop). **Beat:** a room flips or blinks to an alternate texture via dither, camera nudge; **bass:** warp/breath amount; **highs:** sparkle and tiny floating symbols. | pastel base, contrasting secondary, vivid accent, soft lavender fog | `ashfall`, `deepsea`, `mono` |
-| **Graveyard Hill** | `graveyard-hill` / `GraveyardHill` | 8110 | Spooky hillside cemetery (evokes late-90s gothic/horror platformers; recreates nothing). Crooked terrain, rows of `tombstone` props and crosses, `deadTree` sprites, iron fence runs, a ruined chapel silhouette on the crest, big moon and drifting clouds. Camera orbits/glides around the hill. **Idle:** mist, stillness, faint moonlight. **Swell:** will-o'-wisps (glow particles) rise between graves in sequence, bats flock across the moon, mist thickens and glows. **Beat:** wisps flare + lightning-ish moon pulse + nudge; **bass:** tree sway + mist roll; **highs:** wisp sparkle. | weathered stone, dead-grass/olive secondary, ghostly green-or-violet accent, midnight-blue fog | `vapor`, `sunset`, `glacier` |
-| **Arcade After Hours** | `arcade-after-hours` / `ArcadeAfterHours` | 8111 | A 90s mall arcade at closing time (evokes the era, recreates nothing; **no real cabinets, games, brands or logos**). Rows of original cabinet shapes with glowing screens showing abstract animated indexed patterns, patterned carpet, neon ceiling tubes, a prize counter, a light-up dance-floor tile area. Dolly slowly through the aisles. **Idle:** mostly dark, attract-mode screens dimly cycling. **Swell:** cabinets power on row by row, ceiling neon flickers to life, floor tiles start chasing. **Beat:** floor tile pattern steps + screen flash + nudge; **bass:** tile brightness + subtle camera bob; **highs:** screen sparkle/flicker. | dark carpet purple, chrome/teal secondary, neon pink-yellow accent, near-black fog | `ashfall`, `glacier`, `jungle` |
-| **Aurora Field** | `aurora-field` / `AuroraField` | 8112 | Calm, beautiful snowfield at night: the between-songs favourite (original). Gentle snowy terrain, a pine-forest edge, a frozen lake, and big aurora ribbons in the sky (additive animated ribbon meshes rippling like curtains), stars. Slow, wide camera glides. **Idle:** faint aurora, gentle snowfall, very calm (must look great at k=0, since it will often be on between songs). **Swell:** aurora brightens and spreads, more ribbons, colour shifts across the accent ramp. **Beat:** soft aurora pulse (keep it gentle) + tiny nudge; **mids:** ribbon ripple speed; **highs:** star twinkle + snow sparkle. | snow white-blue base, pine green secondary, aurora green-or-magenta accent, deep night-blue fog | `bloodmoon`, `amber`, `vapor` |
+**Landed (2026-11-22, part 3): pre-show check**
+- `js/safety/selftest.js`, started by `?selftest` or the **Pre-show check** button (Settings foot). Runs `Bench` with
+  short phases (1 s idle + 2.5 s active per style, ~2.5 min) while sampling the live input peak, then shows a report
+  dialog (OK / WARN / FAIL / INFO): GPU (fails on software rendering), display + refresh, frame rate (styles under 45 fps
+  **replace** the governor's heavy list, unless more than a quarter fail = "machine slow overall", list left alone),
+  audio start without a click, input peak (clipping / silence), MIDI devices, offline cache, wake lock, battery.
+  Copy report / Run again / Close (Close drops `?selftest` from the URL). `window.selfTestReport` holds the result.
+- Pauses auto-switch and the governor while it runs and restores both. `Bench` now takes `{ idle, active, quiet }`.
+- Tested in the pane: full run on the dev laptop (GTX 1660 Ti, 120 Hz: all 39 at 120 fps, report renders, Close works);
+  `finish()` with fake results marks the right style heavy and ignores the hidden test scene.
 
-## Wave 4 — Radiohead set (spec: `docs/superpowers/specs/2026-11-20-radiohead-setlist-environments-design.md`)
-
-Album palettes are `ALBUM_PALETTES` in `js/palette/library.js` (signed off 2026-11-20). **Wave 4a merged 2026-11-20** (indices 24–29, in set order): Quiet House, Moth Lamp, Under the Hull, Still Pool, Underriver, Before Dawn. Smoke-tested all 30 styles at k=0/1 with no GL or console errors; the new six use 10–22 draws and ≤13.5k tris; a crossfade chain through them peaked at 49 draws. When stepping frames at k=0, set `viz.s.autoSwitch = false` first, or the idle auto-switch swaps styles mid-test. Real-fps `?bench` still pending. **Wave 4b merged 2026-11-20** after Kit v4 (indices 30–35, in set order): Salt Flat (High and Dry), Searchlight Town (Karma Police), Back Road Lights (Subterranean Homesick Alien), Paper Crowd (You and Whose Army?), Newsprint (Daily Mail), Right Place (Everything In Its Right Place). Smoke-tested all 36 styles at k=0/1 with no GL or console errors (single style peak 88 draws / 17.9k tris); the new six use 8–24 draws and ≤15.6k tris; a crossfade chain through them peaked at 39 draws / 28.5k tris (two styles at once). Real-fps `?bench` still pending. The wave 4a and 4b `claude/env-*` branches and worktrees are still around; delete them when the user says so. **Next:** the 12-song setlist JSON in `setlists/`.
-
-## Wave 3 — slow-song environments (done: built in six parallel sessions, merged 2026-11-19)
-
-Smoke-tested after the merge: all 24 styles at k=0/1 with no GL or console errors, plus a crossfade chain through all six (peak during a crossfade: 107 draws / 27k tris, two styles at once). Real-fps `?bench` is still pending (open item 1). Before starting a wave, check `git branch` for existing `claude/env-*` branches: this wave was nearly launched twice because this file was stale.
-
-Same background and prompt template as wave 2, with two changes to the prompt: **read `js/styles/kit-calm.js` too and copy it instead of `kit-demo.js`**, and follow the guide's "Slow songs and ballads" section (light rises with intensity, not speed; phrase with `K.Breath`; one soft event per beat). Use the Kit v3 pieces (reflections, `opacity`, `K.tex`, `Ripples`, `Pulses`, `School`, the calm sprites and particle presets).
-
-| NAME | FILE / CLASS | PORT | CONCEPT | PALETTE-HINT | TEST-PALETTES |
-|---|---|---|---|---|---|
-| **Lantern River** | `lantern-river` / `LanternRiver` | 8113 | A slow night drift down a calm river between reed banks and willows (original). The water reflects everything (`setMirror`); paper lanterns float with the current; low stone footbridges pass overhead now and then (recycled segments, like Fogway). **Idle:** mist on the water, a few lanterns, the drift barely moving. **Swell:** lanterns are lit upstream one by one, fireflies and pollen come out on the banks, the far bank's windows warm up. **Beat:** a ripple under the nearest lantern + a soft pulse running along the lantern line (`Pulses`); **mids:** willow sway. | mossy stone base, reed green secondary, warm lantern amber accent, deep teal night fog | `vapor`, `glacier`, `bloodmoon` |
-| **Rain Window** | `rain-window` / `RainWindow` | 8114 | Inside a quiet room at night, looking out of a big rain-streaked window at a sleeping city (original, no real skyline). A desk lamp, plants, a mug; beyond the glass, rooftops, water towers and distant traffic lights as soft glows. Drops slide down the glass (streak sprites on a pane with `opacity`), the room reflects faintly in it. **Idle:** drizzle, most city lights out, slow camera breath (`Breath`). **Swell:** rain thickens, windows across the city light up block by block, a train's lights glide past far off. **Beat:** one drop runs down the glass + a distant light blinks; **highs:** glints on the drops. | warm wood/interior base, cool slate secondary, amber-and-pink city-light accent, rain-blue fog | `amber`, `deepsea`, `mono` |
-| **Cloud Sea** | `cloud-sea` / `CloudSea` | 8115 | Above the clouds at dawn (original): scrolling cloud layers (`K.tex.cloudLayer` on several heights with `opacity`), mountain peaks rising through them like islands, a huge low sun, birds gliding in loose V-shapes (`School`, `flap: 0`). Very slow forward glide. **Idle:** pre-dawn, faint stars, the cloud sea almost still. **Swell:** the sun rises and the clouds take its colour, more birds, sky lanterns drift up from below. **Beat:** a soft brightening wave across the cloud tops (`History`); **bass:** cloud scroll speed. | pale peak stone base, cloud-white secondary, sunrise gold-or-pink accent, high-altitude blue fog | `sunset`, `toxic`, `ashfall` |
-| **Petal Steps** | `petal-steps` / `PetalSteps` | 8116 | A long flight of old stone steps climbing a wooded hillside, lined with original paper-lantern posts and blossom trees (no real shrine, temple or landmark). Petals fall and drift, mist sits in the hollows, the camera climbs very slowly (`PathRig` on a gentle path). **Idle:** dusk, mist, a few lanterns, petals barely falling. **Swell:** lanterns light up the steps ahead, the petal fall thickens, light shafts through the canopy. **Beat:** a pulse runs up the line of lanterns (`Pulses`); **mids:** blossom sway. | weathered stone base, moss green secondary, blossom pink accent, lavender dusk fog | `deepsea`, `amber`, `jungle` |
-| **Moonlit Shallows** | `moonlit-shallows` / `MoonlitShallows` | 8117 | A tidal flat at night (original): wet sand, a sheet of shallow water mirroring a huge moon (`setMirror`), driftwood, rock pools, gentle waves rolling in as long bright lines. Soft glowing drifting creatures float just above the water (glow particles bobbing, or `School`). **Idle:** low tide, still water, only the moon. **Swell:** the glowing drifters gather and brighten, waves get longer, `starTwinkle` comes out. **Beat:** a ripple ring opens where a drifter touches the water; **bass:** wave height. | sand base, kelp/driftwood secondary, bioluminescent cyan-or-violet accent, midnight-blue fog | `sunset`, `handheld`, `bloodmoon` |
-| **Greenhouse at Dusk** | `greenhouse-dusk` / `GreenhouseDusk` | 8118 | Inside an old glass greenhouse at dusk (original): iron-framed glass roof, ferns and hanging plants, a small koi pond with fish (`School`) and caustic light on its floor (`Caustics`), strings of warm bulbs along the beams, condensation on the panes. **Idle:** blue dusk through the glass, a few bulbs, pollen floating. **Swell:** bulb strings light up beam by beam, light shafts through the glass, koi gather and the caustics brighten. **Beat:** a pulse runs along the bulb strings (`Pulses`) + a ripple on the pond; **highs:** pollen sparkle. | verdigris iron base, leaf green secondary, warm bulb amber accent, dusky blue fog | `vapor`, `mono`, `glacier` |
+**Phase 5 remaining:** run the not-verified checks on the gig laptop (kiosk.bat for real, Scarlett unplug / replug, a
+pre-show check there), and add the GitHub remote.

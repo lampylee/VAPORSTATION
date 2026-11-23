@@ -87,10 +87,15 @@ Plus v1's Fogway, Monoliths and Relic. More can be added any time from the same 
 
 ## Phase 5 — Gig hardening
 
-- [ ] Service worker (PWA) so the app loads with no network at all, even without `serve.js`.
-- [ ] Chrome kiosk launch script (`--kiosk --autoplay-policy=no-user-gesture-required`) so audio starts without a click.
+- [x] Service worker (PWA) so the app loads with no network at all, even without `serve.js` (after a first visit).
+- [x] Chrome kiosk launch script (`kiosk.bat`: own profile, `--kiosk`, autoplay, auto-accepted input permission) + `?kiosk` mode + screen wake lock.
+- [x] Performance governor, style crash guard, WebGL context-loss recovery, audio resume / input reopen watchdog.
+- [x] Pre-show check (`?selftest` / button): per-style fps on this machine feeds the heavy list; GPU, audio, MIDI, offline, power checks.
 - [ ] Auto-reconnect test with the Scarlett unplug/replug; low-battery / sleep prevention checklist.
 - [ ] Profile on the actual gig laptop.
+
+## Moonshot — PS2 mode
+- [ ] Global, crossfaded PS2 look toggle. Design and phases: `docs/superpowers/specs/2026-11-23-ps2-mode-design.md`.
 
 ---
 
