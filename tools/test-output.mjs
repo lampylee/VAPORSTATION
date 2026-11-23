@@ -9,35 +9,51 @@ const check = (name, ok, extra = '') => {
 };
 const F = 1000 / 60;
 
-// FrameGuard: two windows at 60 Hz, 3 ms offset -> one true per frame
-{
+// FrameGuard
+// (a) two 60 Hz sources at several phase offsets -> one accept per frame
+for (const off of [3, 8, 12]) {
   const g = new FrameGuard();
-  let trues = 0;
+  let n = 0;
   for (let i = 0; i < 300; i++) {
     const t = 1000 + i * F;
-    if (g.tick(t)) trues++;
-    if (g.tick(t + 3)) trues++;
+    if (g.tick(t, 'laptop')) n++;
+    if (g.tick(t + off, 'projector')) n++;
   }
-  check('two windows, one true per frame', Math.abs(trues - 300) <= 1, `trues=${trues}`);
+  check(`two 60 Hz sources, offset ${off} ms`, Math.abs(n - 300) <= 1, `accepts=${n}`);
 }
-// one caller stops after 100 frames; the other still runs every frame
+// (b) preferred source stops -> other takes over within 2 of its frames, then one per frame
 {
-  const g = new FrameGuard();
-  let late = 0;
+  const h = new FrameGuard();
+  let n = 0, first = -1;
   for (let i = 0; i < 300; i++) {
     const t = 1000 + i * F;
-    const a = g.tick(t);
-    const b = i < 100 ? g.tick(t + 3) : false;
-    if (i >= 100 && a) late++;
-    void b;
+    if (i < 100) h.tick(t, 'laptop');
+    const a = h.tick(t + 8, 'projector');
+    if (i >= 100 && a) { n++; if (first < 0) first = i - 100; }
   }
-  check('survivor still gets every frame', Math.abs(late - 200) <= 1, `late=${late}`);
+  check('takeover within 2 frames', first >= 0 && first <= 1, `first=${first}`);
+  check('then one accept per frame', Math.abs(n - 200) <= 1, `accepts=${n}`);
 }
-// 144 Hz converges
+// (c) lone 144 Hz source
 {
   const g = new FrameGuard();
-  for (let i = 0; i < 60; i++) g.tick(1000 + i * (1000 / 144));
+  let n = 0;
+  for (let i = 0; i < 300; i++) if (g.tick(1000 + i * (1000 / 144), 'projector') && i >= 60) n++;
   check('144 Hz interval converges', Math.abs(g.interval - 6.94) < 0.5, `interval=${g.interval.toFixed(2)}`);
+  check('144 Hz one accept per call after warm-up', n === 240, `accepts=${n}`);
+}
+// (d) 60 Hz laptop + 144 Hz projector (projector preferred first)
+{
+  const g = new FrameGuard();
+  let n = 0, lap = 0;
+  const D = 1000 / 144;
+  let nextLap = 1000 + 5;
+  for (let i = 0; i < 1440; i++) {
+    const t = 1000 + i * D;
+    while (nextLap <= t) { if (g.tick(nextLap, 'laptop')) lap++; nextLap += F; }
+    if (g.tick(t, 'projector') && i >= 60) n++;
+  }
+  check('projector drives, laptop adds nothing', lap === 0 && n === 1380, `proj=${n} laptop=${lap}`);
 }
 
 // health

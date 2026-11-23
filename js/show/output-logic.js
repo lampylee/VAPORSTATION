@@ -1,28 +1,35 @@
 // Pure logic for the projector output + operator view. No DOM access (runs under Node).
 
 /**
- * Shared rAF gate: several windows call tick() from their own rAF loops; only one
- * call per display frame returns true. interval is an EMA of accepted frame gaps.
+ * Shared rAF gate: the laptop and projector windows call tick(now, source) from their own
+ * rAF loops (arbitrary phase offsets); only one call per display frame returns true.
+ * One source is "preferred" (the last accepted); the other is accepted only if the
+ * preferred source has stalled (no call for > 1.5 x its interval).
  */
 export class FrameGuard {
   constructor() {
-    this._interval = 16.7;
-    this._last = -Infinity;
-    this._prev = undefined;
+    this._src = new Map();      // source -> { interval, prev }
+    this._pref = null;
+    this._lastAccepted = -Infinity;
   }
-  get interval() { return this._interval; }
-  tick(now) {
-    // Learn the frame interval from the gap since the previous call from ANY caller.
-    // Gaps under 4 ms are same-frame duplicates from another window (ignored); this lets a
-    // lone 144 Hz caller converge even though the stale interval would reject some frames.
-    if (this._prev !== undefined) {
-      const raw = now - this._prev;
-      if (raw >= 4) this._interval += (Math.min(100, raw) - this._interval) * 0.2;
+  get interval() { return this._pref ? this._src.get(this._pref).interval : 16.7; }
+  tick(now, source = 'default') {
+    let st = this._src.get(source);
+    if (!st) this._src.set(source, st = { interval: 16.7, prev: undefined });
+    if (st.prev !== undefined) {
+      const gap = Math.min(100, Math.max(4, now - st.prev));
+      st.interval += (gap - st.interval) * 0.2;
     }
-    this._prev = now;
-    if (now - this._last < 0.6 * this._interval) return false;
-    this._last = now;
-    return true;
+    st.prev = now;
+    let ok;
+    if (this._pref === null) ok = true;
+    else if (source === this._pref) ok = now - this._lastAccepted >= 0.6 * st.interval;
+    else {
+      const p = this._src.get(this._pref);
+      ok = now - p.prev > 1.5 * p.interval;
+    }
+    if (ok) { this._pref = source; this._lastAccepted = now; }
+    return ok;
   }
 }
 
