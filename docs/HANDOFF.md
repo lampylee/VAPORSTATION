@@ -68,6 +68,9 @@ Number keys reach 0–9; the rest via N / Shift+N, the dropdown, auto-switch, a 
 4. Song-section awareness (verse / chorus / drop from energy over several bars) so camera moves and reveals land on section
    changes. Suggested after the safety layer.
 5. Optional: teach a few styles to phrase camera moves on `audio.bar` (tap tempo); no style uses `bpm/beatPhase/bar` yet.
+6. Moonshot, not scheduled: a crossfaded **PS2 mode** toggle (640×448, perspective-correct, filtered textures, feedback
+   haze, ~100k-tri budget, kit detail scaling). Needs the user's sign-off on a scoped hard-rule exemption first.
+   Design: `docs/superpowers/specs/2026-11-23-ps2-mode-design.md`.
 
 ## Systems in brief
 

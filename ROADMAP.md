@@ -94,6 +94,9 @@ Plus v1's Fogway, Monoliths and Relic. More can be added any time from the same 
 - [ ] Auto-reconnect test with the Scarlett unplug/replug; low-battery / sleep prevention checklist.
 - [ ] Profile on the actual gig laptop.
 
+## Moonshot — PS2 mode
+- [ ] Global, crossfaded PS2 look toggle. Design and phases: `docs/superpowers/specs/2026-11-23-ps2-mode-design.md`.
+
 ---
 
 ## Tools that will help
