@@ -115,6 +115,8 @@ The **Show** card at the top of the panel is for running the show by hand. Every
 - **Blackout** (B): a dithered fade to black over *Blackout fade*, and back on the second press. Never a hard cut.
 - **Big moment** (G): one palette flash, a beat and a push to full intensity, decaying over about 1.5 s.
 - **Tap tempo** (T): tap along four or more times. The dot blinks on the beat (pink on the downbeat). **Lock beats to tempo** (L) makes the environments' beats land on that grid instead of the detected beats (detected beats keep it in phase). −1 / +1 nudge it, *Clear* (Shift+T) forgets it.
+- **Follow song** (on by default): intensity follows the shape of the song instead of jumping to full two seconds in. It starts around the middle (higher for a loud song), grows slowly through the song, falls back for breakdowns and quiet stretches, climbs through build-ups, and saves the very top (the biggest reveals) for the drop. A song that never drops but stays big for a couple of minutes still gets there. It also guesses the tempo from the beats, so environments can phrase moves on bars without tapping (a tapped tempo always wins). Turn it off for the old behaviour: full intensity as soon as the music starts.
+- **Change world on drops** (off by default): on a big drop that follows a build-up or breakdown, at least 45 s into the song, crossfade to the next environment (from the setlist song's pool if one is set). At most once per song.
 - **Strobe-safe** (on by default): at most 3 beats per second reach the environments, at most one big moment per second, and the big-moment flash is capped. Leave it on unless you know the room.
 
 Hold, freeze and blackout always start off when the page loads.
@@ -163,7 +165,7 @@ js/gfx/geometry.js      low-poly mesh builders
 js/gfx/textures.js      procedural 64×64 indexed textures
 js/palette/             palette model, crossfading, library, editor/import UI
 js/setlist/             setlists: store, player (cue / step), panel + editor UI
-js/show/                show control (hold, freeze, blackout, flash, strobe limiter, tap tempo), MIDI, show/MIDI/environment-browser UI
+js/show/                show control (hold, freeze, blackout, flash, strobe limiter, tap tempo), the Conductor (song shape, auto tempo), MIDI, show/MIDI/environment-browser UI
 js/kit/                 world kit for building environments (see docs/ENVIRONMENT-GUIDE.md)
 js/styles/*.js          styles + StyleManager (crossfades, idle auto-switch)
 ```

@@ -14,7 +14,9 @@
 //              (detected beats nudge its phase so it doesn't drift)
 //
 // Styles also receive audio.bpm (0 = unknown), audio.beatPhase (0..1 within the
-// beat) and audio.bar (beat index within a 4-beat bar) for phrasing camera moves.
+// beat) and audio.bar (beat index within a 4-beat bar) for phrasing camera moves:
+// from tap tempo when tapped, else from the Conductor's automatic estimate. And the
+// Conductor's song shape: audio.section, audio.build (0..1), audio.drop (one frame), audio.songTime.
 //
 // Reactivity (s.reactivity, 0 = Gentle, 0.5 = Medium, 1 = Punchy) reshapes the
 // audio before any style sees it. Gentle follows the song's energy rather than
@@ -101,7 +103,7 @@ export class ShowControl {
     this.lastBeat = -1;
     this.lastFlash = -10;
     this.pendingFlash = false;
-    this.out = { level: 0, bass: 0, mid: 0, high: 0, energy: 0, beat: false, beatPulse: 0, beatCount: 0, accent: 1, motion: 1, decay: 1, bpm: 0, beatPhase: 0, bar: 0 };
+    this.out = { level: 0, bass: 0, mid: 0, high: 0, energy: 0, beat: false, beatPulse: 0, beatCount: 0, accent: 1, motion: 1, decay: 1, bpm: 0, beatPhase: 0, bar: 0, section: '', build: 0, drop: false, songTime: 0 };
     this.react = -1;          // eased reactivity (-1 = not started; snaps to the setting on the first frame)
     this.prof = profileAt(1, {});
     this.band = { level: 0, bass: 0, mid: 0, high: 0 };   // extra-smoothed bands
@@ -171,7 +173,11 @@ export class ShowControl {
 
     // ---- pass the rest through (frozen copies while freeze is on are handled by the caller)
     o.rmsDb = a.rmsDb; o.rmsDbSmooth = a.rmsDbSmooth; o.raw = a.raw; o.gain = a.gain;
-    o.bpm = this.tempo.bpm; o.beatPhase = this.tempo.bpm ? this.tempo.phase : 0; o.bar = this.tempo.count & 3;
+    // tempo: tap tempo wins; otherwise the conductor's estimate (0 = unknown)
+    if (this.tempo.bpm) { o.bpm = this.tempo.bpm; o.beatPhase = this.tempo.phase; o.bar = this.tempo.count & 3; }
+    else { o.bpm = a.autoBpm || 0; o.beatPhase = o.bpm ? a.autoPhase : 0; o.bar = o.bpm ? a.autoBar : 0; }
+    // the conductor's song shape (neutral when it is off)
+    o.section = a.section || ''; o.build = a.build || 0; o.drop = !!a.drop; o.songTime = a.songTime || 0;
     if (this.holdBlend > 0.01 && !playing) {
       // held but the room is quiet: give the styles a gentle synthetic pulse to react to
       const t = this.time, w = this.holdBlend;

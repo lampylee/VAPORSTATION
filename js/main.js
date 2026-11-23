@@ -13,6 +13,7 @@ import { Bench } from './bench.js';
 import { SetlistStore, SetlistPlayer, styleKey, looksLikeSetlist } from './setlist/setlist.js';
 import { SetlistUI } from './setlist/ui.js';
 import { ShowControl } from './show/control.js';
+import { Conductor } from './show/conductor.js';
 import { Midi } from './show/midi.js';
 import { ShowUI, MidiUI, EnvBrowser } from './show/ui.js';
 import { Governor } from './safety/governor.js';
@@ -148,6 +149,7 @@ syncPool();   // look (palette + style) is already restored from settings; just 
 // ---------------- show control + MIDI ----------------
 // Panic states (hold / freeze / blackout) deliberately don't persist across reloads.
 const show = new ShowControl();
+const conductor = new Conductor();
 function showAction(id, v) {
   switch (id) {
     case 'hold': show.hold = !show.hold; break;
@@ -156,6 +158,8 @@ function showAction(id, v) {
     case 'flash': show.bigMoment(); break;
     case 'tap': show.tap(); break;
     case 'tempoLock': s.tempoLock = !s.tempoLock; break;
+    case 'conductor': s.conductor = !s.conductor; break;
+    case 'dropSwitch': s.dropSwitch = !s.dropSwitch; break;
     case 'holdLevel': s.holdLevel = Math.round(v * 20) / 20; break;
     case 'reactivity': s.reactivity = v == null ? (s.reactivity >= 0.75 ? 0 : Math.round(s.reactivity * 2) / 2 + 0.5) : Math.round(v * 20) / 20; break;
     case 'nextSong': stepSong(1); break;
@@ -166,7 +170,7 @@ function showAction(id, v) {
     case 'prevPalette': stepPalette(-1); break;
     default: return;
   }
-  if (id === 'tempoLock' || id === 'holdLevel' || id === 'reactivity') { showUI.refresh(); saveSettings(s); }
+  if (id === 'tempoLock' || id === 'holdLevel' || id === 'reactivity' || id === 'conductor' || id === 'dropSwitch') { showUI.refresh(); saveSettings(s); }
   showUI.update();
   ui.refresh();
 }
@@ -457,6 +461,8 @@ function frame(now) {
       const cued = setlist.cued;
       setlist.update(playing);
       if (setlist.cued !== cued) setlistUI.tick();
+      k = conductor.process(audio, k, playing, dt, s);   // intensity follows the song's shape
+      if (conductor.worldChange) styles.goNext();         // "Change world on drops" (off by default)
       ({ audio, k, playing } = show.process(audio, k, playing, dt, s));
     }
     lastIn = { audio, k, playing };
@@ -509,7 +515,7 @@ function frame(now) {
       audio, fps, intensity: k, playing, state: bench && !bench.done ? bench.label : state.label, thresholdDb: s.thresholdDb,
       res: `${renderer.width}x${renderer.height}`, draws: renderer.stats.draws, tris: renderer.stats.tris,
       style: styles.name(styles.cur), transition: styles.transitioning ? styles.name(styles.next) : '',
-      autoSwitch: s.autoSwitch, idle: styles.idleTime, setlist: setlist.label, show: show.label, safety: `${governor.label} · ${watchdog.label}`,
+      autoSwitch: s.autoSwitch, idle: styles.idleTime, setlist: setlist.label, show: show.label, song: s.conductor === false ? 'song: follow off' : conductor.label, safety: `${governor.label} · ${watchdog.label}`,
       source: engine.mode === 'live' ? `live: ${engine.deviceLabel || 'default'}` : engine.mode === 'file' ? 'file playback' : 'no input',
     });
   }
@@ -517,4 +523,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for poking at things from the console
-window.viz = { s, engine, analyser, state, styles, renderer, store, selectPalette, paletteUI, setlists, setlist, setlistUI, show, showUI, midi, midiUI, envBrowser, showAction, governor, watchdog };
+window.viz = { s, engine, analyser, state, conductor, styles, renderer, store, selectPalette, paletteUI, setlists, setlist, setlistUI, show, showUI, midi, midiUI, envBrowser, showAction, governor, watchdog };

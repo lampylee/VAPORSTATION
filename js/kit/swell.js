@@ -24,6 +24,8 @@ export function drive(audio, k) {
     accent: audio.accent ?? 1,   // reactivity scales for hand-rolled beat reactions (see feel)
     motion: audio.motion ?? 1,
     decay: audio.decay ?? 1,     // multiply hand-rolled flash decay times by this
+    build: (audio.build ?? 0) * k,   // Conductor: 0..1 anticipation during a build-up
+    drop: !!audio.drop && k > 0.05,  // Conductor: true on the frame a drop lands
   };
 }
 
