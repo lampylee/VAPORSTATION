@@ -78,6 +78,25 @@ untouched styles are unchanged. Screenshots before and after for the user.
   light 3 m above where they land. Huts and the radar hut subdivided, hangar arches split along their length. 13.5–15.6k tris.
 - Checked: idle and full intensity, Glacier and Blood Moon palettes, dispose + re-init, all 40 styles clean and in budget.
 
+## Second tier (2026-11-23, same day)
+
+The user asked for the second tier too. Same helper, no new kit:
+- **Ashfall Town:** the street lamps (pale, turning red with the swell, failing ones dim, highs flicker) light the shop
+  fronts; strength had to go up (4×) to read through the heavy fog. 9 draws, 3–4.3k tris.
+- **Quiet House:** the street lamp and the lit ground-floor windows; lawn, path, pavement and the road near the house
+  subdivided (they were single quads). Kept gentle: the least reactive scene. 4.2k tris.
+- **Arcade After Hours:** screen glow per aisle segment (atmosphere colour), the centre ceiling tubes (accent) and the dance
+  floors (secondary, on the bass) spill onto carpet, cabinets and ceiling. 32 draws, 14.2–15.2k tris.
+- **Station Deck:** each section's ceiling lamps light as it powers up; in low power and on the alarm a red light glows low
+  in the corridor. The shell tiles map the atlas per quad, so they were not subdivided (it would change the texture
+  scale); light reads along the corridor, less up the walls.
+- **Back Road Lights:** hovering lights wash the field and a lowered beam lights where it lands. The gain is small: what
+  they can reach is 50 m+ out in a 7 m-cell field. Kept (no tri cost).
+- **Under the Hull:** the street lamps light posts, house fronts and street as the hull darkens the town; terrain 40 → 60
+  cells. Clearest gain of the batch. 10.8k tris.
+- Checked: compare on / off at mid or full intensity, Glacier and Blood Moon, dispose + re-init, all 40 styles clean and
+  within budget.
+
 ## Left to the builder
 
 Light colours (from palette roles / ramps), radii and strengths, exact subdivision, which secondary sources in each style get

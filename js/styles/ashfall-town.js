@@ -12,6 +12,8 @@
 //   turns sickly red and the ash thickens.
 // Reactions: beats = siren-red pulse + camera nudge; highs = lamp flicker;
 //   bass = ash speed + a subtle ground tremor.
+// Light (Kit v7): the street lamps are point lights (K.LightSet, best 4 ahead), pale at idle,
+//   red with the swell, failing ones dim, flickering with the highs.
 import { lerp, damp } from '../gfx/math.js';
 import { scaleColor, mixColor } from '../gfx/color.js';
 import { GeoBuilder } from '../gfx/geometry.js';
@@ -306,11 +308,12 @@ export class AshfallTown {
     this.ash = new K.Particles(r, 'ash', { count: 900, area: [26, 14, 26] });
     this.siren = new K.Envelope(0.38);
     this.time = 0; this.k = 0; this.a = null; this.rust = 0; this.tremor = 0;
-    this.col = { fog: [0, 0, 0], tint: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], emis: [0, 0, 0], tmp: [0, 0, 0], pale: [0, 0, 0], red: [0, 0, 0] };
+    this.col = { fog: [0, 0, 0], tint: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], emis: [0, 0, 0], tmp: [0, 0, 0], pale: [0, 0, 0], red: [0, 0, 0], lamp: [0, 0, 0], focus: [0, 0, 0] };
+    this.lights = new K.LightSet({ reach: 8 });
   }
 
   update(a, k, dt) {
-    this.a = a; this.k = k; this.time += dt;
+    this.a = a; this.k = k; this.time += dt; this.dt = dt;
     const d = K.drive(a, k);
     this.cam.update(a, k, dt);
     // ground tremor from the bass (offsets only; the rig recomputes eye each frame)
@@ -385,6 +388,15 @@ export class AshfallTown {
     col.tint[0] = col.tint[1] = col.tint[2] = dim;
     scaleColor(col.emis, P.role('flash'), siren * 0.1);
 
+    // lamp light on the street, sidewalks and shop fronts
+    const [i0, i1] = this.segRange, L = this.lights, eye = this.cam.eye;
+    mixColor(col.lamp, P.color(R(3, 3)), P.color(R(2, 2)), red * 0.85);
+    scaleColor(col.lamp, col.lamp, 4 + siren * 1.5);
+    L.begin();
+    for (let i = i0; i <= i1; i++) L.add(i, LAMP_HEAD[0], LAMP_HEAD[1] - 0.4, -i * SEG + LAMP_HEAD[2], col.lamp, 10, this._lampB(i, t, d, k));
+    col.focus[0] = 0; col.focus[1] = 1.6; col.focus[2] = eye[2] - 9;
+    L.apply(r, col.focus, this.dt || 1 / 60);
+
     const solid = { texture: this.atlasTex, tint: col.tint, emissive: col.emis };
     r.drawInstanced(this.segMesh, this.segInst, solid);
     this.bMesh.forEach((m, v) => r.drawInstanced(m, this.bInst[v], solid));
@@ -393,13 +405,10 @@ export class AshfallTown {
     this.ash.draw(r, { brightness: dim * 0.85 });
 
     // lamps: dim at idle, brighter when playing, flickering with the highs; red takes over with the swell
-    const [i0, i1] = this.segRange;
     let n = 0;
     for (let i = i0; i <= i1; i++, n++) {
       const z = -i * SEG + LAMP_HEAD[2];
-      const fl = (0.5 + 0.5 * Math.sin(t * 37 + i * 5.1)) * (0.5 + 0.5 * Math.sin(t * 23.3 + i * 2.7));
-      const dead = K.rand2(i, 9, 31) < 0.2 ? 0.35 : 1; // some lamps are failing
-      const b = lerp(0.35, 0.9, k) * dead * (1 - d.high * 0.85 * fl) * (0.93 + 0.07 * Math.sin(t * 1.3 + i));
+      const b = this._lampB(i, t, d, k);
       this.paleInst.set(n, LAMP_HEAD[0], LAMP_HEAD[1], z, 1.5 + d.pulse * 0.4, 0, b * (1 - red * 0.85), 0, 1);
       this.redInst.set(n, LAMP_HEAD[0], LAMP_HEAD[1], z, 1.7 + siren * 0.6, 0, b * red * (1.4 + siren * 0.8) + siren * 0.35 * k, 0, 1);
       this.poolInst.set(n, LAMP_HEAD[0] - 0.3, 0.2, z, 2.2, 0, b * 0.35, 0, 1);
@@ -408,6 +417,13 @@ export class AshfallTown {
     r.drawInstanced(this.pool, this.poolInst, { texture: this.paleTex, unlit: true, additive: true });
     r.drawInstanced(this.quad, this.paleInst, { texture: this.paleTex, billboard: 2, unlit: true, additive: true });
     r.drawInstanced(this.quad, this.redInst, { texture: this.redTex, billboard: 2, unlit: true, additive: true });
+  }
+
+  /** Lamp i brightness: dim at idle, brighter when playing; some are failing; highs flicker them. */
+  _lampB(i, t, d, k) {
+    const fl = (0.5 + 0.5 * Math.sin(t * 37 + i * 5.1)) * (0.5 + 0.5 * Math.sin(t * 23.3 + i * 2.7));
+    const dead = K.rand2(i, 9, 31) < 0.2 ? 0.35 : 1; // some lamps are failing
+    return lerp(0.35, 0.9, k) * dead * (1 - d.high * 0.85 * fl) * (0.93 + 0.07 * Math.sin(t * 1.3 + i));
   }
 
   dispose(r) {

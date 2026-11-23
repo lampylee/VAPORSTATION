@@ -24,9 +24,9 @@ Draws / tris measured at idle → full intensity (320×240, stepped with synthet
 
 | # | Style | # | Style | # | Style |
 |---|---|---|---|---|---|
-| 0 | Pipeline test *(hidden)* 15 / 0.2k | 13 | Dream Journal 20–21 / 5.5–5.9k | 26 | Under the Hull 14 / 7k |
+| 0 | Pipeline test *(hidden)* 15 / 0.2k | 13 | Dream Journal 20–21 / 5.5–5.9k | 26 | Under the Hull 14 / 10.8k |
 | 1 | Fogway 52–87 / 0.8–1.1k | 14 | Graveyard Hill 14–18 / 16.2–16.8k | 27 | Still Pool 14–16 / 13.4k |
-| 2 | Monoliths 45–77 / 5–5.2k | 15 | Arcade After Hours 26–32 / 14.2–15.1k | 28 | Underriver 10 / 7.6–7.8k |
+| 2 | Monoliths 45–77 / 5–5.2k | 15 | Arcade After Hours 32 / 14.2–15.2k | 28 | Underriver 10 / 7.6–7.8k |
 | 3 | Relic 45 / 2.3k | 16 | Aurora Field 12–17 / 8.9–11.3k | 29 | Before Dawn 17–22 / 9.8–10.4k |
 | 4 | Kit demo *(hidden)* 31–37 / 11.2–11.4k | 17 | Kit calm *(hidden)* 25–29 / 11.8–12.4k | 30 | Salt Flat 9–13 / 14.6–15.6k |
 | 5 | Ashfall Town 9 / 3–4.3k | 18 | Lantern River 35–36 / 15.9–16.2k | 31 | Searchlight Town 8 / 12.8k |
@@ -35,7 +35,7 @@ Draws / tris measured at idle → full intensity (320×240, stepped with synthet
 | 8 | Night Manor 25–29 / 16–17.6k | 21 | Petal Steps 14–15 / 8.6–9.1k | 34 | Newsprint 8–9 / 5.6–6.2k |
 | 9 | Drowned Ruins 13–16 / 10–12.3k | 22 | Moonlit Shallows 23–25 / 15–15.1k | 35 | Right Place 8–9 / 6.1–6.4k |
 | 10 | Route 9 16–17 / 7.1–7.5k | 23 | Greenhouse at Dusk 28–30 / 7–7.3k | 36 | Colour from the Well 38–44 / 6.4–7.4k |
-| 11 | Cold Base 23–24 / 13.5–15.6k | 24 | Quiet House 19 / 3.9k | 37 | The Backrooms 14 / 13.6–15k |
+| 11 | Cold Base 23–24 / 13.5–15.6k | 24 | Quiet House 19 / 4.2k | 37 | The Backrooms 14 / 13.6–15k |
 | 12 | Station Deck 14–16 / 6.5–6.8k | 25 | Moth Lamp 13 / 5–5.4k | 38 | Fog Harbour 46–52 / 13.3–14k |
 |  |  |  |  | 39 | Ember Vigil 48–50 / 17.3–18.3k |
 
@@ -88,7 +88,8 @@ Number keys reach 0–9; the rest via N / Shift+N, the dropdown, auto-switch, a 
   v3 `K.tex` surfaces, caustics / streaks / pulses / ripples, fish & bird schools, `Breath`, screen-door `opacity`, planar reflections;
   v4 `twoSided`, GPU `wave`, `setJitterBoost`, searchlights, `BarClock` / `Stager` / `Follow3`, gabled house, `Wobble`;
   v7 (2026-11-23, relight) `K.LightSet`: many light sources, the best 4 kept in sticky slots that fade (no pops); used by
-  Night Manor, Fog Harbour, The Backrooms, Cold Base (Before Dawn and Moth Lamp set one light directly). Spec
+  Night Manor, Fog Harbour, The Backrooms, Cold Base, then Ashfall Town, Quiet House, Arcade After Hours, Station Deck,
+  Back Road Lights, Under the Hull (Before Dawn and Moth Lamp set one light directly). 12 styles relit in all. Spec
   `docs/superpowers/specs/2026-11-23-relight-design.md`;
   v6 (2026-11-22, Ember Vigil) **pipeline point lights** (`r.setPointLights`, 4 per scene, per vertex), `gothicPier`, `keep`,
   `knight`, `wallWithHole`, `roseWindow`, `Fire` / `Candles` / `Lightning` (`js/kit/fantasy.js`), `tex.flagstones/ashlar/

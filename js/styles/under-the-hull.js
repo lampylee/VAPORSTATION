@@ -15,6 +15,8 @@
 // so it never jumps), the sky closes, the fog darkens under it, and windows and
 // lamps come on street by street as its shadow edge passes. Beats: one faint
 // pulse of light runs the length of the underside, front to back.
+// Light (Kit v7): the street lamps are point lights (K.LightSet, best 4 near the view), so as the
+// hull darkens the town, each lamp that comes on lights the street and house fronts round it.
 import { mat4, lerp, clamp, damp } from '../gfx/math.js';
 import { scaleColor, mixColor } from '../gfx/color.js';
 import { GeoBuilder, box, merge } from '../gfx/geometry.js';
@@ -138,7 +140,7 @@ export class UnderTheHull {
   static palette = ALBUM_PALETTES.amsp;
 
   init(r) {
-    this.ground = new K.Terrain(r, { size: 230, cells: 40, height: (x, z) => (Math.abs(x) < STREET_HW + 2 ? 0 : K.fbm(x * 0.04, z * 0.04, { octaves: 2, seed: 3 }) * 0.25), uvScale: 0.22 });
+    this.ground = new K.Terrain(r, { size: 230, cells: 60, height: (x, z) => (Math.abs(x) < STREET_HW + 2 ? 0 : K.fbm(x * 0.04, z * 0.04, { octaves: 2, seed: 3 }) * 0.25), uvScale: 0.22 });
     this.groundTex = r.texture(paving());
     this.sky = new K.Sky(r, { stars: 60, clouds: 5 });
 
@@ -229,13 +231,14 @@ export class UnderTheHull {
     this.breath = new K.Breath({ beats: 16, period: 14 });
     this.time = 0; this.k = 0; this.hp = 0; this.hv = 0; this.cover = 0; this.edge = HULL_FAR + HULL_L / 2;
     this.hullM = mat4.create(); this.m = mat4.create();
-    this.col = { fog: [0, 0, 0], a: [0, 0, 0], b: [0, 0, 0], zen: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], tint: [1, 1, 1], hull: [0, 0, 0], glow: [1, 1, 1], pool: [0, 0, 0] };
+    this.col = { fog: [0, 0, 0], a: [0, 0, 0], b: [0, 0, 0], zen: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], tint: [1, 1, 1], hull: [0, 0, 0], glow: [1, 1, 1], pool: [0, 0, 0], lamp: [0, 0, 0], focus: [0, 0, 0] };
+    this.lights = new K.LightSet({ reach: 12 });
     this._updateHull(0);
     this._updateLights(0, 0);
   }
 
   update(a, k, dt) {
-    this.a = a; this.k = k; this.time += dt;
+    this.a = a; this.k = k; this.time += dt; this.dt = dt;
     const d = K.drive(a, k), t = this.time;
     const b = this.breath.update(a, dt);
 
@@ -331,6 +334,13 @@ export class UnderTheHull {
 
     // the town
     r.setLight([0.35, -0.8, 0.45], scaleColor(col.light, P.role('light'), lerp(0.7, 0.18, c)), scaleColor(col.amb, P.role('ambient'), lerp(0.55, 0.32, c)));
+    const L = this.lights, eye = this.cam.eye, tg = this.cam.target;
+    scaleColor(col.lamp, P.role('glow'), 2.6);
+    L.begin();
+    this.lamps.forEach((lp, i) => L.add(i, lp.hx, lp.hy - 0.3, lp.z, col.lamp, 9, lp.level));
+    const fx = tg[0] - eye[0], fz = tg[2] - eye[2], fn = Math.hypot(fx, fz) || 1;
+    col.focus[0] = eye[0] + (fx / fn) * 12; col.focus[1] = 2; col.focus[2] = eye[2] + (fz / fn) * 12;
+    L.apply(r, col.focus, this.dt || 1 / 60);
     this.ground.draw(r, { texture: this.groundTex });
     r.draw(this.wallMesh, mat4.identity(this.m), { texture: this.wallTex });
     r.draw(this.roofMesh, this.m, { texture: this.roofTex });
