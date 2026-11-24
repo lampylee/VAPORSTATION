@@ -48,6 +48,7 @@ export class MyStyle {
   update(audio, intensity, dt) {}     // audio: level bass mid high (0..1), beat, beatPulse, beatCount
   render(r) {}                        // clear, camera, fog, light, draw
   dispose(r) {}
+  enter() {}                          // optional: coming on screen; own K.Moods / rigs are snapped by the manager first
 }
 ```
 Register it in `js/styles/index.js`. Verify idle (intensity 0) and full intensity in the browser, plus `?bench`.

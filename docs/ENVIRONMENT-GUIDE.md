@@ -17,6 +17,7 @@ export class AshfallTown {
   update(audio, intensity, dt) {}  // advance state only, no drawing
   render(r) {}                     // clear, camera, sky, fog, light, draws
   dispose(r) {}                    // free every mesh, texture, instance buffer
+  enter() {}                       // optional: coming on screen mid-song, see "Moods" below
 }
 ```
 
@@ -43,7 +44,7 @@ Register it in `js/styles/index.js` (append to `STYLES`; the index is its number
 - Gate beat values at the **source**, before they enter a kit object: a fire `burst`, particle `gust`, `Ripples.spawn`, `Pendulum` pump. Gating the drawn result afterwards leaves the object's own spring or ripple still moving. The ripple-gate snippet is copy-pasted in about five styles; a kit helper would be a good cleanup.
 - Once-a-bar events (a lightning bolt, a lantern ripple, a formation change) use `K.BarClock` at Gentle rather than every beat.
 - Drive positions from smoothed values (eased 0.4 s or more) or `energy`, not raw `d.bass` / `d.high`.
-- Camera rigs: `sway` (bar-phrased roll, rad) and `swayLift` (bar-phrased lift) replace beat kicks and scale with `k`; `shapeAmount` (default 1, 0 = off) scales how far the section's `close` and per-phrase `reframe` move the rig (`close` narrows / widens FOV about 10 % and moves the eye along a safe axis: orbit radius, dolly height, drift reach; sweep, path and grid rigs change FOV only), so lower it where framing would clip. Travel follows `energy`, not `bass`. A style that blends two rigs or calls `setCamera` itself must lerp the rigs' `camParams()` rather than read internals, or it loses sway and framing. Run `motionCheck` (see HANDOFF) at Gentle; the target is `maxAccel` <= 0.01 and `maxFovStep` <= 0.3.
+- Camera rigs: `sway` (bar-phrased roll, rad; on `DriftRig`, `sway` is its lateral sway in units and the roll is `rig.swayRoll`) and `swayLift` (bar-phrased lift) replace beat kicks and scale with `k`; `shapeAmount` (default 1, 0 = off) scales how far the section's `close` and per-phrase `reframe` move the rig (`close` narrows / widens FOV about 10 % and moves the eye along a safe axis: orbit radius, dolly height, drift reach; sweep, path and grid rigs change FOV only), so lower it where framing would clip. Travel follows `energy`, not `bass`. A style that blends two rigs or calls `setCamera` itself must lerp the rigs' `camParams()` rather than read internals, or it loses sway and framing. Run `motionCheck` (see HANDOFF) at Gentle; the target is `maxAccel` <= 0.01 and `maxFovStep` <= 0.3.
 
 ## Palette ramps
 
@@ -124,6 +125,7 @@ this.moods = new K.Moods({
 Default map: intro / outro / breakdown to `still`, groove (and Conductor off) to `base`, build to `gather`, drop to `full`. A missing state or key falls back to `base`. Rules:
 - Numbers only, so any pair blends. `base` **must define every key** (only `base`'s keys and the target's keys are eased) and must equal the world's look from before moods, so Conductor off or a long groove is unchanged.
 - Camera keys go in `slow`: they never ease faster than 6 s, even on a drop. Give them one extra `damp(v, target, 2, dt)` in the style, and snap them on the first frame so a style never starts mid-glide.
+- Coming on screen mid-song: when the style manager starts showing a world (any crossfade, plus bench / selftest) it calls `snap()` on every `K.Moods` and `snapShape()` on every camera rig that is an own property of the style, so their next update jumps to the current section (mood, `close`, phrase `reframe`, speed) instead of easing there on top of the crossfade. Then it calls the style's optional `enter()`: reset there anything else you ease from the mood, usually the first-frame sentinels of the extra camera damp (`enter() { this.camD = null; }`). Thumbnails never call it. Rigs or moods kept in arrays or nested objects need their own `snap()` / `snapShape()` in `enter()`.
 - Gates multiply the `k` fed into `stage(k, ...)`, then clamp (`stage(Math.min(1, k * m.gate), a, b)`); do not multiply `stage()`'s output. `k` stays the ceiling and k = 0 stays calm.
 - Light or motion a mood adds is also multiplied by `k`.
 - When a fast-settling `k` effect (a melt, a wave, a flock) has a mood-added share, give that share its own slower settle (6 s or more) so it doesn't flap on a section guess.
