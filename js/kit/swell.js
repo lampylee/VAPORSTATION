@@ -115,15 +115,18 @@ export const fadeIn = (d, near, far) => smoothstep(clamp((d - near) / Math.max(1
  *   update: const b = this.breath.update(audio, dt);   // camera rise, glow swell, mist density…
  */
 export class Breath {
-  constructor({ beats = 8, period = 10 } = {}) { this.beats = beats; this.period = period; this.phase = 0; this.v = 0; this._bar = 0; }
+  constructor({ beats = 8, period = 10 } = {}) { this.beats = beats; this.period = period; this.phase = 0; this.v = 0; this._bar = 0; this._owed = 0; this._rate = 0; }
   update(audio, dt) {
     const bpm = audio?.bpm || 0;
-    this.phase += dt * (bpm > 0 ? bpm / 60 / this.beats : 1 / this.period);
     if (bpm > 0 && audio.bar === 0 && this._bar !== 0 && this.beats % 4 === 0) {
-      // on each downbeat, ease the phase toward the nearest bar boundary
-      const step = 4 / this.beats, target = Math.round(this.phase / step) * step;
-      this.phase += (target - this.phase) * 0.15;
+      // on each downbeat, owe the phase a part of the way to the nearest bar boundary...
+      const step = 4 / this.beats, target = Math.round((this.phase - this._owed) / step) * step;
+      this._owed = (target - this.phase) * 0.15 + this._owed;
     }
+    // ...and pay it off through an eased rate, so the breath never steps (no camera jolt on the downbeat)
+    this._rate = this._rate + (this._owed / 2 - this._rate) * (1 - Math.exp(-dt / 0.7));
+    this._owed -= this._rate * dt;
+    this.phase += dt * (bpm > 0 ? bpm / 60 / this.beats : 1 / this.period) + this._rate * dt;
     this._bar = audio?.bar ?? 0;
     this.phase -= Math.floor(this.phase);
     this.v = 0.5 - 0.5 * Math.cos(this.phase * Math.PI * 2);
