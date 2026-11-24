@@ -178,7 +178,7 @@ Shown instead of the picture on the laptop. Readable from ~2 m: large type, few 
 
 - Module layout (suggest `js/show/output.js` for the sink / window logic, `js/show/operator.js` for the view).
 - Exact operator-view proportions and type sizes within the sketch.
-- The fullscreen and kiosk spikes named above.
+- ~~The fullscreen and kiosk spikes named above.~~ Done, see below.
 - How the fog cover during context loss reaches the current sink.
 
 **Decided (Task 4, 2026-11-23):**
@@ -199,5 +199,19 @@ Shown instead of the picture on the laptop. Readable from ~2 m: large type, few 
   reloading page loads (measured ~0.8 s blocked).
 - **W / MIDI `output` only open or reopen; the Show card button also turns the projector off** (back to single mode).
   A stray pedal press can't close the projector mid-show.
+- **Kiosk spike (Task 6, Chrome 157, Windows, one 1920x1080 display, real Chrome driven over CDP, throwaway profile):**
+  (a) with `--kiosk` + `--disable-popup-blocking`, `window.open(..., 'popup,...')` from the page opens a normal window
+  (bounds 616x473, `windowState: normal`), **not** fullscreen; `--kiosk` does not carry over to popups. (b) Pre-granting
+  works: a profile `Preferences` entry `profile.content_settings.exceptions.window_placement["http://localhost:PORT,*"] = {setting: 1}`
+  (written before launch) makes `permissions.query({name:'window-management'})` return `granted`. The key must be
+  `window_placement` (tried alone, enough). No flag or policy needed. `kiosk.bat dual` writes it for the kiosk profile
+  through `tools/grant-window-management.js` (needs node, which the launcher already uses; if Chrome is already running
+  with that profile it overwrites the file and the one-time prompt appears instead). (c) `--disable-popup-blocking` kept
+  (this profile only) so W / MIDI reopen works with no click. **Result:** double-click `kiosk.bat dual` → click "Open
+  projector output" → click the projector once. That is two clicks, one over the "at most one beyond single kiosk" goal,
+  because the fullscreen click has to be inside the projector window. Auto-opening the projector on load in dual kiosk
+  would make it one click; not done (untestable here without a second screen and it would double-open on reload).
+  **Not verified:** that the pre-granted permission puts the window on the second screen and that its fullscreen click
+  lands there (one display only).
 - **Screen removed** (`screenschange`): the projector window is also closed, so Windows doesn't drop it onto the laptop
   screen over the picture.

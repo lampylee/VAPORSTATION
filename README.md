@@ -34,6 +34,17 @@ Chrome (or Edge) fullscreen in its own profile, with audio running without a cli
 automatically (that profile only), no panel and no cursor. **H** shows the panel, **Alt+F4** quits. Open
 `http://localhost:8080/?kiosk` in any browser for the same mode without the launcher.
 
+**With a projector (Windows):** double-click `kiosk.bat dual`. The laptop shows the **operator view** (what is on the
+projector, state, input, next up, big Hold / Freeze / Blackout / Big moment / Next buttons) and the cursor stays visible.
+Click **Open projector output** (or press **W**, or the MIDI `output` action once mapped), then **click the projector
+window once**: Chrome only allows fullscreen from a click inside that window. The window goes to the other screen by
+itself (this profile has the window-management permission pre-granted, popups allowed). The projector shows only the
+picture; "Click to go fullscreen" is on it until you do. A red **PROJECTOR LOST** badge on the laptop means the window or
+screen went away: the picture is back on the laptop, press **W** to reopen. Reloading the laptop page reconnects the
+projector by itself. W only opens or reopens; the Show card button turns the projector off again. Plain `kiosk.bat`
+is unchanged (one screen). Outside the launcher: open the app normally, press **W** and allow window management once.
+Design: `docs/superpowers/specs/2026-11-23-projector-output-design.md`.
+
 **Offline / safety:** after the first visit a service worker caches the whole app (including the demo track), so a
 reload still works if the server window is closed, or with no network at all. The screen is kept awake in fullscreen
 and kiosk. If the GPU driver resets, the picture fades to fog and comes back by itself. If an environment crashes, it

@@ -87,6 +87,17 @@ export class SelfTest {
       add(names.length ? 'ok' : 'warn', 'MIDI', names.length ? names.join(', ') : 'Enabled but no MIDI device connected.');
     }
 
+    // ---- projector: screens + window-management permission (never prompts: getScreenDetails only if already granted)
+    {
+      let perm = 'unsupported', n = null;
+      try { perm = (await navigator.permissions.query({ name: 'window-management' })).state; } catch (e) { /* unknown name */ }
+      try {
+        if (perm === 'granted' && typeof window.getScreenDetails === 'function') n = (await window.getScreenDetails()).screens.length;
+        else if (typeof screen.isExtended === 'boolean') n = screen.isExtended ? '2+' : 1;
+      } catch (e) { /* ignore */ }
+      add('info', 'Projector', `${n == null ? 'screens unknown' : `${n} screen${n === 1 ? '' : 's'}`}, window-management permission: ${perm}${perm === 'prompt' ? ' (asked when you first open the projector)' : ''}.`);
+    }
+
     // ---- venue robustness
     let cached = 0;
     try { cached = (await (await caches.open('vaporstation-v1')).keys()).length; } catch (e) { /* no cache API */ }

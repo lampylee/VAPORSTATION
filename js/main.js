@@ -520,6 +520,7 @@ const kiosk = params.has('kiosk');
 if (kiosk) {
   setUiVisible(false);
   document.body.classList.add('kiosk');
+  if (params.has('dual')) { s.output = 'dual'; syncOperator(); }   // kiosk.bat dual: operator view + "Open projector output" up front (this session only, not saved)
   if (!(s.deviceLabel || s.deviceId)) { liveWanted = true; refreshDevices().then(startLive); }   // otherwise the saved device opens below
 }
 
