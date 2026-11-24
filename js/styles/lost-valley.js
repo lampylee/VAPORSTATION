@@ -347,7 +347,7 @@ export class LostValley {
     this.stomp = new K.Envelope(0.3);
     this.shake = new K.Envelope(0.22);
     this.ripple = new K.History(48);
-    this.stompAt = [0, 0]; this.bassS = 0; this.fallT = 0; this.levelS = 0;
+    this.stompAt = [0, 0]; this.bassS = 0; this.fallT = 0; this.levelS = 0; this.highS = 0; this.midS = 0;
 
     this.time = 0; this.k = 0; this.a = SILENT;
     this.col = { fog: [0, 0, 0], zen: [0, 0, 0], tint: [1, 1, 1], light: [0, 0, 0], amb: [0, 0, 0], beast: [0, 0, 0], bird: [0, 0, 0], mist: [0, 0, 0], fall: [0, 0, 0], tmp: [0, 0, 0] };
@@ -380,14 +380,16 @@ export class LostValley {
     }
     this.bassS = damp(this.bassS, d.bass, 0.5, dt);
     this.levelS = damp(this.levelS, d.level, 0.5, dt);
+    this.highS = damp(this.highS, d.high, 0.5, dt); this.midS = damp(this.midS, d.mid, 0.5, dt);
+    const bm = d.beatMotion;
     this.fallT += dt * (0.9 + this.levelS * 0.6); // integrated: the waterfall never jumps when the level moves
     this.stomp.update(dt); this.shake.update(dt);
     this.ripple.push(this.stomp.v);
 
     const ground = this.ground.heightAt(eye[0], eye[2]);
-    this.flies.update(dt, [eye[0], ground + 2, eye[2]], { amount: K.stage(k, 0.3, 0.8), speed: 1 + d.high * 2 });
-    this.pollen.update(dt, eye, { amount: K.swell(k, 0.5, 0.9), speed: 1 + d.mid });
-    for (const m of this.mists) m.fx.update(dt, m.center, { amount: 1, speed: 1 + d.level });
+    this.flies.update(dt, [eye[0], ground + 2, eye[2]], { amount: K.stage(k, 0.3, 0.8), speed: 1 + lerp(this.highS, d.high, bm) * 2 });
+    this.pollen.update(dt, eye, { amount: K.swell(k, 0.5, 0.9), speed: 1 + lerp(this.midS, d.mid, bm) });
+    for (const m of this.mists) m.fx.update(dt, m.center, { amount: 1, speed: 1 + lerp(this.levelS, d.level, bm) });
     this._scatter();
     this._birds(d);
     this._mistBanks();

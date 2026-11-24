@@ -427,7 +427,7 @@ export class NeonCircuit {
     this.lineInst.upload(LINES);
 
     const sc = this._e; this._camPoint(this.cam.s + 6, sc, 0.3);
-    this.sparks.update(dt, sc, { amount: K.stage(k, 0.2, 0.6) * Math.min(1, 0.15 + a.high * 1.8), speed: 1 + d.bass * 1.5, wind: [-f[0] * this.cam.speed * 0.6, -f[2] * this.cam.speed * 0.6] });
+    this.sparks.update(dt, sc, { amount: K.stage(k, 0.2, 0.6) * Math.min(1, 0.15 + a.high * 1.8), speed: 1 + this.bassM * 1.5, wind: [-f[0] * this.cam.speed * 0.6, -f[2] * this.cam.speed * 0.6] });
   }
 
   /** Strobe level at track position s from the beat pulses running ahead of the camera. */

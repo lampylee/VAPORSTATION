@@ -36,7 +36,7 @@ export class Fogway {
     })).sort((x, y) => x.order - y.order);
     this.hist = new Float32Array(SEG_COUNT + 2);
     this.s = 0; this.time = 0; this.speed = 2; this.twist = 0;
-    this.flash = 0; this.roll = 0; this.rollVel = 0; this.bassS = 0; this.highS = 0;
+    this.flash = 0; this.roll = 0; this.rollVel = 0; this.bassS = 0; this.highS = 0; this.midS = 0;
     this.k = 0; this.a = null;
     this.m = mat4.create();
     this.v = { p0: [0, 0, 0], p1: [0, 0, 0], eye: [0, 0, 0], tgt: [0, 0, 0] };
@@ -53,7 +53,8 @@ export class Fogway {
     const bassM = lerp(this.bassS, a.bass * k, bm);
     this.speed = damp(this.speed, lerp(2.2, 7, k) + bassM * 9, lerp(0.5, 0.25, bm), dt);
     this.s += this.speed * dt;
-    this.twist += dt * (0.12 + a.mid * k * 0.7);
+    this.midS = damp(this.midS, a.mid * k, 0.5, dt);
+    this.twist += dt * (0.12 + lerp(this.midS, a.mid * k, bm) * 0.7);
     this.hist.copyWithin(1, 0); this.hist[0] = bassM;
     if (a.beat) {
       this.flash = Math.max(this.flash, k * (a.accent ?? 1));

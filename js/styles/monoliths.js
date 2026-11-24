@@ -37,7 +37,7 @@ export class Monoliths {
     }));
     this.hist = new Float32Array(64);
     this.time = 0; this.z = 0; this.speed = 1; this.flash = 0; this.beatCount = 0;
-    this.nudge = 0; this.nudgeVel = 0; this.bassS = 0; this.midS = 0; this.k = 0; this.a = null;
+    this.nudge = 0; this.nudgeVel = 0; this.bassS = 0; this.midS = 0; this.crystT = 0; this.spinT = 0; this.k = 0; this.a = null;
     this.m = mat4.create();
     this.eye = [0, 0, 0]; this.tgt = [0, 0, 0];
     this.col = { fog: [0, 0, 0], tint: [0, 0, 0], emi: [0, 0, 0], t2: [0, 0, 0], shard: [0, 0, 0], sun: [0, 0, 0], ground: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0] };
@@ -51,6 +51,9 @@ export class Monoliths {
     this.bassS = damp(this.bassS, a.bass * k, 0.5, dt);
     this.midS = damp(this.midS, a.mid * k, 0.5, dt);
     const bassM = lerp(this.bassS, a.bass * k, bm);
+    const midM = lerp(this.midS, a.mid * k, bm);
+    this.midM = midM;
+    this.crystT += dt * (0.5 + midM); this.spinT += dt * (0.3 + midM * 1.5); // integrated phases: no jump when mid changes
     this.speed = damp(this.speed, lerp(1.0, 4.5, k) + bassM * 4, 0.4, dt);
     this.z += this.speed * dt;
     this.hist.copyWithin(1, 0); this.hist[0] = bassM;
@@ -85,7 +88,7 @@ export class Monoliths {
     r.draw(this.ground, mat4.trs(m, gx, 0, gz), { texture: this.tex.ground, tint: col.ground, unlit: true });
 
     // field of monoliths (deterministic per grid cell -> infinite)
-    const midM = lerp(this.midS, a.mid * k, a.beatMotion ?? 1);
+
     const dim = lerp(0.55, 1, k);
     col.tint[0] = col.tint[1] = col.tint[2] = dim;
     const cx = Math.floor(eye[0] / CELL), cz = Math.floor(eye[2] / CELL);
@@ -106,8 +109,8 @@ export class Monoliths {
         r.draw(this.slab, m, { texture: this.tex.stone, tint: col.t2, emissive: col.emi });
       } else {
         const ph = h * 20;
-        const y = 3.4 + Math.sin(t * (0.5 + midM) + ph) * (0.5 + midM * 0.8) + this.nudge * fl * 0.5;
-        const spin = t * (0.3 + midM * 1.5) + ph;
+        const y = 3.4 + Math.sin(this.crystT + ph) * (0.5 + this.midM * 0.8) + this.nudge * fl * 0.5;
+        const spin = this.spinT + ph;
         mat4.trs(m, x, y, z, spin * 0.5, spin, 0, pulse);
         r.draw(type < 0.85 ? this.crystal : this.tetra, m, { texture: this.tex.crystal, tint: col.t2, emissive: col.emi });
       }
