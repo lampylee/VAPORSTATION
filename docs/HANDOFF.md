@@ -210,16 +210,23 @@ errors), governor tiers + the saturation cap with synthetic frame times, every s
 - Optional second window (`output.html`, W key / Show card / MIDI `output`) with only the picture; laptop shows the operator
   view. Code: `js/show/output.js` (sink / window), `output-logic.js` (frame guard, health, screen pick; `node tools/test-output.mjs`),
   `operator.js`, `output-page.js`. Spec + plan: `docs/superpowers/specs/2026-11-23-projector-output-design.md`.
-- `kiosk.bat dual` → `?kiosk&dual` (operator view + "Open projector output", cursor visible, not saved), `--disable-popup-blocking`,
+- `kiosk.bat dual` → `?kiosk&dual` (operator view + "Open projector output", cursor visible; the output mode is saved with the settings, but kiosk sets it
+  from the URL on every launch, so plain `kiosk.bat` stays single), `--disable-popup-blocking`,
   and `tools/grant-window-management.js` pre-grants window-management in the kiosk profile. Plain `kiosk.bat` unchanged.
   The projector opens by itself 1.5 s after load (only with `&dual`; skipped if an existing projector reattached, so a
   reload never reloads it; blocked -> the big button). The operator's one click is on the projector for fullscreen (Chrome
   refuses it from the opener; `--kiosk` does not make the popup fullscreen). Details in the spec.
 - Self-test has an INFO "Projector" line (screens, window-management permission; never prompts).
 - Either window's rAF drives the frame (guard), reload reconnects automatically, "no input" turns red only after 3 s gone.
-  Single-mode CPU +0.03-0.09 ms/frame vs before, fps unchanged.
+  Single-mode CPU +0.025-0.065 ms/frame vs before, fps unchanged; the operator view with the projector open about +0.085 ms.
+- Final review fixes: attach always syncs the watchdog cover (a reload under it left the projector fogged), the frame guard
+  hands the lead back to the projector after a hitch the laptop covered, operator view above the laptop fog cover,
+  projector cursor hidden only in fullscreen, grant script never overwrites an unreadable Preferences file.
 - Verified (pane + real Chrome, one 1080p display): single mode, ?kiosk&dual operator view, popup opens / is guarded,
-  pre-grant makes the permission state "granted", kiosk.bat command lines (dry run), auto-open on fresh start, reload reattach without a second window. **Not verified:** true fullscreen
+  pre-grant makes the permission state "granted", kiosk.bat command lines (dry run), auto-open on fresh start, reload reattach without a second window, reload while the cover is on (context lost, no
+  restore, watchdog reload: projector reattaches and the fog clears; also cover(false) missed while marked lost),
+  operator view + red "graphics reset" above the laptop fog. Projector hitch, then hand-back: node test only (both windows
+  share one thread, so a projector-only hitch can't be made in Chrome). **Not verified:** true fullscreen
   and placement on a real second screen, pulling the HDMI cable, real MIDI opening the projector, the input-gone red
   with a real interface, operator view readability from 2 m, `?selftest` and `?bench` on the gig laptop with dual on.
 
