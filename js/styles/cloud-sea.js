@@ -13,7 +13,7 @@
 // Idle: pre-dawn, faint stars, the sun just under the cloud line, clouds dim and almost still.
 // Swell: the sun rises and grows, the sky and clouds warm into the accent ramp (dither blend),
 // more birds join, sky lanterns drift up. Intensity raises light, not speed.
-import { mat4, lerp, clamp, smoothstep } from '../gfx/math.js';
+import { mat4, lerp, damp, clamp, smoothstep } from '../gfx/math.js';
 import { scaleColor, mixColor } from '../gfx/color.js';
 import { GeoBuilder } from '../gfx/geometry.js';
 import { R, fromKeys } from '../palette/palette.js';
@@ -95,7 +95,7 @@ export class CloudSea {
     this.cam = new K.PathRig((s, out) => { out[0] = pathX(s); out[1] = CAM_Y + Math.sin(s * 0.011) * 1.5; out[2] = -s; return out; },
       { lookAhead: 40, idleSpeed: 1.1, activeSpeed: 1.45, bassBoost: 0, fovPunch: 0, nudge: 0.03, rollKick: 0, fov: 60, far: 400 });
     this.breath = new K.Breath({ beats: 8, period: 12 });
-    this.time = 0; this.k = 0; this.sunUp = 0;
+    this.time = 0; this.k = 0; this.sunUp = 0; this.bassS = 0;
     this.sunDir = [0, 0, -1];
     this.m = mat4.create();
     this.col = { fog: [0, 0, 0], zen: [0, 0, 0], tint: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], tmp: [0, 0, 0] };
@@ -117,7 +117,10 @@ export class CloudSea {
     this.sky.moonDir = sd;
 
     // clouds scroll towards the camera; bass pushes them (pre-multiplied by k)
-    for (const L of this.layers) L.drift += dt * (0.0022 + d.bass * 0.016) * L.speed;
+    // (eased at Gentle, raw at Punchy; the drift itself is an integrated offset)
+    this.bassS = damp(this.bassS, d.bass, 0.5, dt);
+    const bassM = lerp(this.bassS, d.bass, d.beatMotion);
+    for (const L of this.layers) L.drift += dt * (0.0022 + bassM * 0.016) * L.speed;
 
     // beat: a soft brightening wave from the sun side across the cloud tops
     if (d.beat) this.beatEnv.trigger(0.5 + 0.5 * k);

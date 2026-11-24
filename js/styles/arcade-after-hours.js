@@ -278,7 +278,7 @@ export class ArcadeAfterHours {
     this.dust = new K.Particles(r, 'dust', { area: [14, 4, 20], count: 160 });
 
     this.flash = new K.Envelope(0.16);
-    this.bob = 0; this.bobPhase = 0;
+    this.bob = 0; this.bobPhase = 0; this.bobS = 0;
     this.areas = [];
     this.m = mat4.create();
     this.time = 0; this.k = 0; this.a = null;
@@ -291,7 +291,9 @@ export class ArcadeAfterHours {
     const d = K.drive(a, k);
     this.cam.update(a, k, dt);
     // bass: a soft dip plus a footstep bob that grows with the beat
-    this.bob = damp(this.bob, d.bass, 0.15, dt);
+    // (bass drives the eye directly only at Punchy; at Gentle it is eased, 0.5 s)
+    this.bobS = damp(this.bobS, d.bass, 0.5, dt);
+    this.bob = damp(this.bob, lerp(this.bobS, d.bass, d.beatMotion), lerp(0.4, 0.15, d.beatMotion), dt);
     this.bobPhase += dt * (2.2 + this.cam.speed * 0.8);
     this.cam.eye[1] += -this.bob * 0.12 + Math.sin(this.bobPhase * 2) * (0.012 + this.bob * 0.05);
     this.cam.target[0] += Math.sin(this.time * 0.11) * 1.4; // glance at the cabinets now and then
@@ -315,7 +317,7 @@ export class ArcadeAfterHours {
     this._updateTiles(k, dt, chase);
     if (this.danceClock > 1 / 30) { this.danceClock = 0; this._drawTiles(); }
 
-    this.dust.update(dt, this.cam.eye, { amount: K.swell(k, 0.35, 0.7), speed: 1 + d.level * 0.5 });
+    this.dust.update(dt, this.cam.eye, { amount: K.swell(k, 0.35, 0.7), speed: 1 + d.energy * 0.5 });
     this._place(d, k);
   }
 
@@ -415,7 +417,7 @@ export class ArcadeAfterHours {
         const night = n === 1 && ((i % 4) + 4) % 4 === 0 ? 0.35 : 0; // a few night lights stay on at idle
         const b = Math.max(night, on * fl2) * (1 + d.pulse * 0.25) * (1 - d.high * 0.15 * K.rand2(i, Math.floor(t * 24), n));
         this.longInst.set(cnt.long++, x, TUBE_Y, zc, 1, 0, 0.08 + b * 0.92);
-        this.glowInst.set(cnt.glow++, x, TUBE_Y - 0.15, zc, 1.6 + d.pulse * 0.5, 0, b * 0.4);
+        this.glowInst.set(cnt.glow++, x, TUBE_Y - 0.15, zc, 1.6 + lerp(d.groove, d.pulse, d.beatMotion) * 0.5, 0, b * 0.4);
         if (n === 1 && i % 2 === 0) cand(i * 4 + 1, 0, TUBE_Y - 0.5, zc, 1, b);
       });
       if (i % 2 === 0) {

@@ -16,7 +16,7 @@
 // Swell: lanterns light up one by one (nearest first, the front travelling upstream),
 // fireflies and pollen come out on the banks, the cottage windows warm up.
 // Nothing flashes and the camera never gets faster than a gentle drift.
-import { mat4, lerp, clamp } from '../gfx/math.js';
+import { mat4, lerp, damp, clamp } from '../gfx/math.js';
 import { scaleColor } from '../gfx/color.js';
 import { plane, box, merge } from '../gfx/geometry.js';
 import { R, fromKeys } from '../palette/palette.js';
@@ -130,7 +130,7 @@ export class LanternRiver {
     this.cam = new K.PathRig((s, out) => { out[0] = centre(s) + Math.sin(s * 0.05) * 1.1; out[1] = 1.5; out[2] = -s; return out; },
       { lookAhead: 12, idleSpeed: 0.6, activeSpeed: 0.9, bassBoost: 0, fovPunch: 0.4, nudge: 0.03, rollKick: 0.003, fov: 60, far: 220 });
     this.breath = new K.Breath({ beats: 8, period: 12 });
-    this.time = 0; this.k = 0; this.a = null; this.nextIdleRipple = 3;
+    this.time = 0; this.k = 0; this.a = null; this.nextIdleRipple = 3; this.midS = 0; this.midM = 0;
     this.m = mat4.create();
     this.col = { fog: [0, 0, 0], tint: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], glow: [0, 0, 0], water: [0, 0, 0], refl: [0, 0, 0], fly: [0, 0, 0], mist: [0, 0, 0] };
     this._rippleBusy = 0;
@@ -140,6 +140,8 @@ export class LanternRiver {
     this.a = a; this.k = k; this.time += dt;
     const d = K.drive(a, k), t = this.time;
     const b = this.breath.update(a, dt);
+    // mids shape sway only at Punchy; at Gentle they are eased (0.5 s)
+    this.midS = damp(this.midS, d.mid, 0.5, dt); this.midM = lerp(this.midS, d.mid, d.beatMotion);
     this.cam.update(a, k, dt);
     const camS = this.cam.s;
     this.cam.eye[1] += b * 0.35;                      // the view breathes up and down, slowly
@@ -168,7 +170,8 @@ export class LanternRiver {
     // ---- beats: a ripple under the nearest lantern, a soft pulse running up the lantern line ----
     if (d.beat && nearest) {
       this.pulses.trigger(camS + 3, 0.5 + k * 0.4, 12);
-      this.ripples.spawn(nearest.x, WATER, nearest.z, 2.6 + k * 2);
+      // the ring under the nearest lantern: every beat at Punchy, once a bar at Gentle
+      if (d.beatMotion > 0.5 || (a.beatCount || 0) % 4 === 0) this.ripples.spawn(nearest.x, WATER, nearest.z, 2.6 + k * 2);
     }
     // idle life: now and then a fish rises somewhere ahead
     if ((this.nextIdleRipple -= dt) <= 0) {
@@ -258,7 +261,7 @@ export class LanternRiver {
     }
     this.mist.upload(N_MIST);
 
-    this.pollen.update(dt, this.cam.eye, { amount: K.swell(k, 0.1, 0.8), speed: 0.5 + d.high });
+    this.pollen.update(dt, this.cam.eye, { amount: K.swell(k, 0.1, 0.8), speed: 0.5 + d.energy });
   }
 
   /** Everything that stands above the water (drawn twice: reflected, then normally). */
@@ -274,7 +277,7 @@ export class LanternRiver {
       mat4.trs(this.m, br.x, 0, br.z, 0, br.ry, 0, 1, 1, 1);
       r.draw(this.bridgeMesh, this.m, { texture: this.stoneTex, tint: col.tint });
     }
-    const sway = 0.015 + this.breath.v * 0.02 + K.drive(this.a, k).mid * 0.06;
+    const sway = 0.015 + this.breath.v * 0.02 + this.midM * 0.06;
     r.drawInstanced(this.quad, this.trees, { texture: this.leafTex, billboard: 1, sway: sway * 0.5, tint: col.tint });
     r.drawInstanced(this.quad, this.willows, { texture: this.willowTex, billboard: 1, sway, tint: col.tint });
     r.drawInstanced(this.quad, this.reeds, { texture: this.reedTex, billboard: 1, sway: sway * 1.5, tint: col.tint });
