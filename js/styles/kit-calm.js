@@ -133,7 +133,7 @@ export class KitCalm {
       const lit = Math.max(L.idle ? 0.55 : 0.08, K.stage(k, L.on, L.on + 0.15));
       const pl = this.pulses.at(i) * 0.8;
       L.level = lit * (0.75 + 0.25 * b) + pl;
-      const lvSize = L.level - pl * (1 - d.beatMotion);   // the pulse brightens; it only swells the halo at Punchy
+      const lvSize = L.level - pl * (1 - d.beatMotion) + (1 - d.beatMotion) * d.groove * 0.12;   // the pulse brightens; it only swells the halo at Punchy
       const y = WATER + 0.35 + Math.sin(t * 0.8 + L.ph) * 0.06;
       this.lanterns.set(i, L.x, y, L.z, 0.75, 0, 0.6 + L.level * 0.6, 0, 1.5);
       this.glows.set(i, L.x, y + 0.5, L.z, 1.2 + lvSize * 0.9, 0, L.level, 0, 1);

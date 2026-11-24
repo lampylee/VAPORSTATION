@@ -176,7 +176,7 @@ export class MoonlitShallows {
       const lit = Math.max(D.idle ? 0.35 : 0.05, K.stage(k, D.on, D.on + 0.2));
       const pl = this.pulses.at(i) * 0.5;
       D.level = lit * (0.75 + 0.25 * b) + pl;
-      const size = 1.1 + (D.level - pl * (1 - d.beatMotion)) * 1.3, y = W + 0.25 + size * 0.55 + Math.sin(t * 0.55 + D.ph) * 0.12;   // centre above the waterline so the clip never cuts the glow
+      const size = 1.1 + (D.level - pl * (1 - d.beatMotion) + (1 - d.beatMotion) * d.groove * 0.12) * 1.3, y = W + 0.25 + size * 0.55 + Math.sin(t * 0.55 + D.ph) * 0.12;   // centre above the waterline so the clip never cuts the glow
       this.glows.set(i, D.x, y, D.z, size, 0, D.level, 0, 1);
     });
     this.glows.upload(N_DRIFT);

@@ -302,8 +302,8 @@ export class EmberVigil {
     this.eclipse = damp(this.eclipse, K.stage(k, 0.32, 0.85), 4, dt);
     this.rise = damp(this.rise, K.stage(k, 0.74, 1), 5, dt);
     // fire: breathes at idle, roars with the song; beats throw ember bursts
-    const burst = audio.beat && k > 0.05 ? (0.35 + 0.65 * k) * (audio.accent ?? 1) : 0;
-    this.fire.update(dt, { level: lerp(0.72, 1.3, Math.max(k * 0.7, this.energy)) + lerp(a.energy, a.bass, a.beatMotion) * 0.15, burst });
+    const burst = audio.beat && k > 0.05 ? (0.35 + 0.65 * k) * (audio.accent ?? 1) * a.beatMotion : 0;   // flame scale + ember gust are beat motion
+    this.fire.update(dt, { level: lerp(0.72, 1.3, Math.max(k * 0.7, this.energy)) + lerp(a.energy, a.bass, a.beatMotion) * 0.15 + (1 - a.beatMotion) * a.groove * 0.06, burst });
     // candles: cluster 0 always lit, the rest in order down the nave
     this.candleStage.update(k, dt);
     this.clusters.forEach(([s, e], g) => {
@@ -349,7 +349,7 @@ export class EmberVigil {
     this.colossusEyes.set(1, W * 0.08, eyeY, COLOSSUS_Z + 1, 7 * eyeL, 0, 1);
     this.colossusEyes.upload(2);
     // cape stirs in the fire's updraft, more as the song builds
-    const gust = 0.04 + k * 0.08 + this.fire.burst * 0.05 * a.beatMotion, t = this.t, V = this.capeV;
+    const gust = 0.04 + k * 0.08 + this.fire.burst * 0.05, t = this.t, V = this.capeV;
     this.cape.update((x, y, z, out, i) => {
       const v = V[i * 2 + 1], w = v * v * gust;
       out[0] = x + Math.sin(t * 1.3 + v * 4 + x * 3) * w;

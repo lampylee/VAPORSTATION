@@ -118,7 +118,7 @@ export class PetalSteps {
       const on = 0.12 + clamp(dist / 90) * 0.62;
       const base = pi % 4 === 0 ? 0.55 : 0.05;
       const pl = this.pulses.at(pi) * 0.8, lv0 = Math.max(base, K.stage(k, on, on + 0.18)) * (0.78 + 0.22 * b);
-      const level = (lv0 + pl) * K.fadeOut(dist, 70, 96), lvSize = (lv0 + pl * d.beatMotion) * K.fadeOut(dist, 70, 96);   // the pulse brightens; it only swells the halo at Punchy
+      const level = (lv0 + pl) * K.fadeOut(dist, 70, 96), lvSize = (lv0 + pl * d.beatMotion + (1 - d.beatMotion) * d.groove * 0.12) * K.fadeOut(dist, 70, 96);   // the pulse brightens; it only swells the halo at Punchy
       const gl = lerp(0.3, 1, K.fadeIn(dist, 3, 20));   // near glows stay soft: they sit right beside the lens
       const yaw = Math.atan(pathDX(z)), cy = Math.cos(yaw), sy = Math.sin(yaw);
       for (const side of [-1, 1]) {

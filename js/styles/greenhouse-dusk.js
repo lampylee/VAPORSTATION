@@ -344,7 +344,7 @@ export class GreenhouseDusk {
     this.bulb.forEach((B, i) => {
       const lit = Math.max(B.idle ? 0.8 : 0.03, K.stage(k, B.on, B.on + 0.16));
       const lv0 = lit * (0.82 + 0.18 * b + 0.04 * Math.sin(t * 1.3 + B.ph)), pl = this.pulses.at(B.s) * (0.25 + lit * 0.6);
-      const lvl = lv0 + pl, lvSize = lv0 + pl * d.beatMotion;   // the pulse brightens; it only swells the halo at Punchy
+      const lvl = lv0 + pl, lvSize = lv0 + pl * d.beatMotion + (1 - d.beatMotion) * d.groove * 0.1;   // the pulse brightens; it only swells the halo at Punchy
       this.bulbs.set(i, B.x, B.y - 0.17, B.z, 0.15, 0, 0.3 + lvl * 0.85, 0, 1.4);
       // glows right over the lens fade out, so a passing swag never fills the screen
       const near = K.fadeIn(Math.hypot(B.x - eye[0], B.y - eye[1], B.z - eye[2]), 2.2, 5.5);
