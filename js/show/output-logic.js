@@ -4,12 +4,15 @@
  * Shared rAF gate: the laptop and projector windows call tick(now, source) from their own
  * rAF loops (arbitrary phase offsets); only one call per display frame returns true.
  * One source is "preferred" (the last accepted); the other is accepted only if the
- * preferred source has stalled (no call for > 1.5 x its interval).
+ * preferred source has stalled (no call for > 1.5 x its interval). The source given to
+ * prefer() is "home": after a stall it takes the lead back with its next frame that doesn't
+ * double up with the one the other source just ran.
  */
 export class FrameGuard {
   constructor() {
     this._src = new Map();      // source -> { interval, prev }
     this._pref = null;
+    this._home = null;          // set by prefer(): takes the lead back after a stall
     this._lastAccepted = -Infinity;
     this._lastSrc = null;       // source accepted last
   }
@@ -19,6 +22,7 @@ export class FrameGuard {
     if (!st) this._src.set(source, { interval: 16.7, prev: undefined });
     else st.prev = undefined;   // a reattached window must not start from a stale gap
     this._pref = source;
+    this._home = source;
   }
   get interval() { return this._pref ? this._src.get(this._pref).interval : 16.7; }
   tick(now, source = 'default') {
@@ -34,8 +38,9 @@ export class FrameGuard {
     // the source accepted last keeps going: one rAF chain fires at most once per display frame,
     // so a normal frame right after a hitch (GC, hidden tab) is never dropped
     else if (source === this._pref && source === this._lastSrc) ok = true;
-    // newly preferred (prefer()): don't double up with the frame the other source just ran
-    else if (source === this._pref) ok = now - this._lastAccepted >= 0.6 * st.interval;
+    // newly preferred (prefer()), or home back after a stall the other source covered:
+    // don't double up with the frame the other source just ran
+    else if (source === this._pref || source === this._home) ok = now - this._lastAccepted >= 0.6 * st.interval;
     else {
       const p = this._src.get(this._pref);
       ok = p.prev === undefined || now - p.prev > 1.5 * p.interval;   // preferred never ticked: don't wait on it
