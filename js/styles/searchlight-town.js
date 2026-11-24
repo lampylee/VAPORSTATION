@@ -198,6 +198,8 @@ export class SearchlightTown {
     this.m = mat4.create();
     this.time = 0; this.k = 0; this.a = null;
     this.en = 0;            // smoothed energy
+    this.midS = 0;          // eased mid (tree sway at Gentle)
+    this.bar = new K.BarClock({ minGap: 1 });   // Gentle: the beams swing on once per bar, not per beat
     this.melt = 0;          // eased peak distortion 0..1
     this.amp = 0;
     this.col = { fog: [0, 0, 0], tint: [1, 1, 1], light: [0, 0, 0], amb: [0, 0, 0], one: [1, 1, 1] };
@@ -213,6 +215,8 @@ export class SearchlightTown {
     this.a = a; this.k = k; this.time += dt;
     const d = K.drive(a, k), t = this.time;
     this.en = damp(this.en, d.energy, 0.8, dt);
+    this.midS = damp(this.midS, d.mid, 0.5, dt);
+    const bm = d.beatMotion, barFire = this.bar.update(a, dt);
     this.cam.update(a, k, dt);
 
     // peak distortion: eased in slowly, settles back a little faster
@@ -229,10 +233,11 @@ export class SearchlightTown {
       if (i > 0) L.wake = K.stage(k, 0.12 + (i - 1) * 0.17, 0.3 + (i - 1) * 0.17);
       L.phT += dt * sp * L.rate;
       if (d.beat && L.wake > 0.05) {
-        L.phT += (0.35 + 0.35 * k) * d.motion;          // the beam snaps ahead along its sweep
-        L.flare.trigger(k * L.wake);
+        L.phT += (0.35 + 0.35 * k) * d.motion * bm;     // Punchy: the beam snaps ahead along its sweep
+        L.flare.trigger(k * L.wake);                    // light flare stays at every Feel
       }
-      L.ph = damp(L.ph, L.phT, 0.08, dt);
+      if (barFire && bm < 1 && L.wake > 0.05) L.phT += (0.35 + 0.35 * k) * d.motion * (1 - bm);   // Gentle: one slow swing per bar
+      L.ph = damp(L.ph, L.phT, lerp(0.6, 0.08, bm), dt);   // Gentle: the beam turns, never snaps
       L.flare.update(dt);
       let ax = Math.sin(L.ph + i * 1.3) * sweepR, az = Math.sin(L.ph * 0.71 + i * 2.1) * sweepR * 0.9;
       const ox = Math.cos(L.ph * 1.9 + i) * 5, oz = Math.sin(L.ph * 1.9 + i) * 5;
@@ -320,7 +325,7 @@ export class SearchlightTown {
     const melt = this.amp;
     r.drawInstanced(this.houseMesh, this.houseInst, { texture: this.houseTex, sway: melt * 0.2 });
     r.drawInstanced(this.winMesh, this.winInst, { texture: this.winTex, unlit: true, sway: melt * 0.2 });
-    r.drawInstanced(this.quad, this.treeInst, { texture: this.pineTex, billboard: 1, sway: 0.015 + d.mid * 0.03 + melt * 0.12 });
+    r.drawInstanced(this.quad, this.treeInst, { texture: this.pineTex, billboard: 1, sway: 0.015 + lerp(this.midS, d.mid, d.beatMotion) * 0.03 + melt * 0.12 });
     r.drawInstanced(this.towerMesh, this.towerInst, { texture: this.metalTex, sway: melt * 0.03 });
 
     // additive light last: pools and cones ignore fog but fade with distance, so they never pop

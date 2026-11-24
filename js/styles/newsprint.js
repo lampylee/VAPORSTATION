@@ -232,6 +232,8 @@ export class Newsprint {
     this.cam = new K.OrbitRig({ center: CENTER.slice(), radius: ORBIT, height: 3, bob: 0.7, pushIn: 0, idleSpeed: 0.025, activeSpeed: 0.09, bassBoost: 0, fov: 62, fovPunch: 1.5, nudge: 0.1, rollKick: 0.015, shapeAmount: 0.5 });   // half: close framing would pull the orbit into the inner stacks
     this.cam.angle = 0.6;
     this.towerPush = new K.Spring(1.6);   // beat gusts lean every tower, then they settle
+    this.bar = new K.BarClock({ minGap: 1 });   // Gentle: one soft gust per bar
+    this.lean = 0;   // eased groove lean (Gentle payback for the beat shove)
     this.eS = 0; this.swayAmt = 0; this.windA = 0.4; this.windTo = 0.4;
     this.m = mat4.create();
     this.time = 0; this.k = 0; this.a = SILENT;
@@ -252,11 +254,17 @@ export class Newsprint {
 
     // gust on the beat: velocity impulse through the storm + a shove on the towers
     let gust = 0;
-    if (d.beat) {
-      gust = d.accent * (0.8 + 4.2 * storm) * k;
-      this.towerPush.kick(d.accent * 0.5 * storm);
-      this.windTo += (K.rand2(a.beatCount || 0, 1, 3) - 0.5) * 0.6 * storm;   // gusts veer the wind a little
+    const bm = d.beatMotion, barFire = this.bar.update(a, dt);
+    if (d.beat && bm > 0.01) {
+      gust = d.accent * (0.8 + 4.2 * storm) * k * bm;
+      this.towerPush.kick(d.accent * 0.5 * storm * bm);
+      this.windTo += (K.rand2(a.beatCount || 0, 1, 3) - 0.5) * 0.6 * storm * bm;   // gusts veer the wind a little
     }
+    if (barFire && bm < 1 && k > 0.05) {      // Gentle: a softer gust once per bar
+      gust += d.accent * (0.8 + 4.2 * storm) * k * 0.3 * (1 - bm);
+      this.windTo += (K.rand2(a.beatCount || 0, 2, 3) - 0.5) * 0.4 * storm * (1 - bm);
+    }
+    this.lean = damp(this.lean, d.groove * (1 - bm) * 0.3 * storm, 0.6, dt);   // groove leans the towers slowly
     this.towerPush.update(dt);
     this.windA = damp(this.windA, this.windTo, 1.5, dt);   // eased, so the towers' lean turns, never jumps
     this.swayAmt = damp(this.swayAmt, big, 1.5, dt);
@@ -289,7 +297,7 @@ export class Newsprint {
 
   /** Stack every bundle on a bending curve: offset grows with height², tilt follows the slope. */
   _towers(t) {
-    const n = [0, 0], A = this.swayAmt, push = this.towerPush.x, wa = this.windA;
+    const n = [0, 0], A = this.swayAmt, push = this.towerPush.x + this.lean, wa = this.windA;
     const wx = Math.cos(wa), wz = Math.sin(wa);
     for (const tw of this.towers) {
       const H = Math.max(1, tw.H);

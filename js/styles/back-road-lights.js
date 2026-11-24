@@ -286,6 +286,7 @@ export class BackRoadLights {
     // camera: standing in the verge, looking across the road and field, barely drifting
     this.cam = new K.SweepRig({ position: [CAM[0], height(CAM[0], CAM[2]) + 3.4, CAM[2]], yaw: -0.07, yawRange: 0.05, pitch: 0.035, distance: 30, idleSpeed: 0.035, activeSpeed: 0.06, bassBoost: 0, fovPunch: 0, nudge: 0.04, rollKick: 0, fov: 56, far: 280 });
     this.breath = new K.Breath({ beats: 8, period: 12 });
+    this.bar = new K.BarClock({ minGap: 1 });   // Gentle: a beam comes down once per bar, not per beat
     this.time = 0; this.k = 0; this.energy = 0; this.mid = 0; this.purpose = 0; this.rot = 0; this.spin = 0;
     this.mode = 0; this.modeClock = 0; this.porchLevel = 0; this.beamSum = 0;
     this.m = mat4.create(); this.mI = mat4.create(); this.mRotor = mat4.create();
@@ -363,7 +364,8 @@ export class BackRoadLights {
 
     // ---- beat: one light lowers a pale beam onto the grass
     this.beamGap -= dt;
-    if (d.beat && this.beamGap <= 0) {
+    const bm = d.beatMotion, barFire = this.bar.update(a, dt);
+    if (((d.beat && Math.random() < bm) || (barFire && bm < 1 && k > 0.05)) && this.beamGap <= 0) {
       const slot = this.beams.find((b) => b.light < 0);
       if (slot) {
         const used = new Set(this.beams.map((b) => b.light));

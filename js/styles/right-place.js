@@ -299,7 +299,7 @@ export class RightPlace {
     this.cam.roll = Math.sin(t * 0.03) * 0.015;
     this.ground.follow(e[0], e[2]);
 
-    this.snow.update(dt, [e[0], e[1], e[2] - 12], { amount: K.swell(k, 0.3, 0.5), speed: 0.7 + d.level * 0.6, wind: 0.3 + this.mid });
+    this.snow.update(dt, [e[0], e[1], e[2] - 12], { amount: K.swell(k, 0.3, 0.5), speed: 0.7 + lerp(d.energy, d.level, d.beatMotion) * 0.6, wind: 0.3 + this.mid });
     this.streaks.forEach((sk) => { sk.scroll += dt * sk.speed * (1 + k * 2.5 + this.energy * 2); });
   }
 

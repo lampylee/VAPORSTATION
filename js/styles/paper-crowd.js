@@ -167,6 +167,7 @@ export class PaperCrowd {
     }
     this.rise = new Float32Array(ROWS);
     this.ripple = new K.Pulses({ width: 2.2, decay: 0.9 });
+    this.bar = new K.BarClock({ minGap: 1 });   // Gentle: a slow wave through the crowd once per bar
     this.breath = new K.Breath({ beats: 8, period: 9 });
 
     // ---- microphone on a stand (pivot at the floor, origin)
@@ -219,7 +220,9 @@ export class PaperCrowd {
     }
 
     // one soft ripple per beat, from the front row backwards
-    if (d.beat) { this.ripple.trigger(-2, k * d.accent, 9); this.micPulse.trigger(0.6 * k); }
+    const bm = d.beatMotion, barFire = this.bar.update(a, dt);
+    if (d.beat) { if (bm > 0.01) this.ripple.trigger(-2, k * d.accent * bm, 9); this.micPulse.trigger(0.6 * k); }   // the crowd's bow follows Feel; the mic light stays
+    if (barFire && bm < 1 && k > 0.05) this.ripple.trigger(-2, k * d.accent * 0.5 * (1 - bm), 3.5);       // Gentle: slower, smaller wave once per bar
     this.ripple.update(dt);
     this.micPulse.update(dt);
 

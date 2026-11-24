@@ -154,6 +154,7 @@ export class SaltFlat {
     this.ringTex = r.texture(K.ringSprite({ index: R(0, 2) }));
     this.rings = [];
     this.puff = new K.Envelope(0.6);
+    this.bar = new K.BarClock({ minGap: 1 });   // Gentle: one dust ring per bar instead of per beat
 
     this.m = mat4.create();
     this.time = 0; this.k = 0; this.en = 0; this.shimmer = 0.12; this.yaw = 0; this.mirU = 0;
@@ -176,20 +177,21 @@ export class SaltFlat {
     this.mirU += dt * (0.02 + this.shimmer * 0.06);              // accumulate, so a changing rate never jumps
     this._wobble();
 
-    // beat: a soft ring of dust kicked up somewhere ahead, scaled by accent
-    if (d.beat) {
+    // beat: a soft ring of dust kicked up somewhere ahead, scaled by accent. Gentle: one per bar
+    const bm = d.beatMotion, barFire = this.bar.update(a, dt);
+    if (d.beat) this.puff.trigger(k);                             // light only
+    if ((d.beat && Math.random() < bm) || (barFire && bm < 1 && k > 0.05)) {
       const fx = -Math.sin(this.yaw), fz = -Math.cos(this.yaw), dist = 11 + Math.random() * 8, side = (Math.random() - 0.5) * 10;
       const x = e[0] + fx * dist - fz * side, z = e[2] + fz * dist + fx * side;
       this.rings.push({ x, y: height(x, z), z, size: (7 + Math.random() * 5) * (0.55 + 0.45 * d.accent) * (0.6 + 0.4 * k), amp: (0.35 + 0.65 * d.accent) * k, t: 0 });
       if (this.rings.length > 6) this.rings.shift();
-      this.puff.trigger(k);
     }
     this.rings = this.rings.filter((g) => (g.t += dt / (2.6 * d.decay)) < 1);
     this.puff.update(dt);
 
     const gust = K.stage(k, 0.05, 0.85);
     const wind = 0.2 + gust * 4.5 + this.en * 2;
-    this.salt.update(dt, e, { amount: lerp(0.08, 1, gust), speed: 1 + d.level * 0.5, wind: [wind, wind * 0.18] });
+    this.salt.update(dt, e, { amount: lerp(0.08, 1, gust), speed: 1 + lerp(d.energy, d.level, bm) * 0.5, wind: [wind, wind * 0.18] });
     this._scatter();
   }
 
