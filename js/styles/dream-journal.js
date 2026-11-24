@@ -280,7 +280,7 @@ export class DreamJournal {
     this.sparkle = new K.Particles(r, 'dust', { color: R(2, 3), area: [26, 12, 26] });
 
     this.time = 0; this.k = 0; this.a = null;
-    this.warp = 0; this.spin = 0; this.breath = 0; this.hs = 0;
+    this.warp = 0; this.spin = 0; this.breath = 0; this.hs = 0; this.lvlS = 0;
     this.flip = new Float32Array(16); this.flipTarget = new Float32Array(16); this.flipNext = 0;
     this.beatEnv = new K.Envelope(0.35);
     this.cam = new K.PathRig((s, out) => { out[0] = pathX(s); out[1] = 3 + Math.sin(s * 0.045) * 1.2; out[2] = -s; },
@@ -312,12 +312,15 @@ export class DreamJournal {
     this.a = a; this.k = k; this.time += dt;
     const d = K.drive(a, k);
     this.warp = damp(this.warp, K.stage(k, 0.08, 0.85), 0.6, dt);
-    this.breath = damp(this.breath, d.bass, 0.18, dt);
+    const bm = d.beatMotion;
+    this.breath = damp(this.breath, d.bass, lerp(0.5, 0.18, bm), dt);   // islands / floor swell with the bass: slower at Gentle
     this.hs = damp(this.hs, d.high, 0.2, dt);
+    this.lvlS = damp(this.lvlS, d.level, 0.5, dt);
     this.spin += dt * 0.14 * this.warp;
     if (d.beat) this.beatEnv.trigger(k);
     this.beatEnv.update(dt);
-    this.ripple.push(this.breath * 0.55 + this.beatEnv.v * 0.5);
+    // floor ripple: the beat shove is Punchy only; Gentle sends a soft groove swing down the floor
+    this.ripple.push(this.breath * 0.55 + lerp(d.groove * 0.3, this.beatEnv.v * 0.5, bm));
     this.cam.update(a, k, dt);
 
     // beat: flip the next island ahead to its alternate wallpaper (and back next time)
@@ -333,7 +336,7 @@ export class DreamJournal {
     this._floor();
     this._debris(dt);
     const eye = this.cam.eye;
-    this.sparkle.update(dt, eye, { amount: 0.08 + this.hs * 0.9, speed: 0.6 + d.level });
+    this.sparkle.update(dt, eye, { amount: 0.08 + this.hs * 0.9, speed: 0.6 + lerp(this.lvlS, d.level, bm) });
   }
 
   _floor() {

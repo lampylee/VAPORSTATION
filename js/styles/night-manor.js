@@ -17,7 +17,7 @@
 // pools of candlelight read.
 // Colours: base = stone, secondary = carpet/wax-red, accent = flames/gilt,
 // atmosphere = fog/moonlight/glass.
-import { mat4, lerp, clamp, hash } from '../gfx/math.js';
+import { mat4, lerp, damp, clamp, hash } from '../gfx/math.js';
 import { scaleColor, addColor, mixColor } from '../gfx/color.js';
 import { GeoBuilder, box, merge } from '../gfx/geometry.js';
 import { bricks, blotch, CLEAR } from '../gfx/textures.js';
@@ -353,7 +353,7 @@ export class NightManor {
     this.flash = new K.Envelope(0.1); this.after = new K.Envelope(0.35);
     this.strike2 = -1; this.strike2Amt = 0;
     this.flare = new K.Envelope(0.25);
-    this.time = 0; this.k = 0; this.a = null; this.d = null;
+    this.time = 0; this.k = 0; this.a = null; this.d = null; this.bassS = 0; this.lvlS = 0;
     this.m = mat4.create();
     this.col = { fog: [0, 0, 0], tint: [0, 0, 0], dim: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], warm: [0, 0, 0], focus: [0, 0, 0], win: [0, 0, 0], winE: [0, 0, 0], beam: [0, 0, 0], one: [1, 1, 1], tmp: [0, 0, 0] };
   }
@@ -376,12 +376,15 @@ export class NightManor {
 
     // chandeliers: bass pumps the swing in phase with its motion (resonance), so it builds up
     const sx = this.swingX, sz = this.swingZ;
-    sx.push((sx.v >= 0 ? 1 : -1) * d.bass * 0.07 * dt + (d.beat ? (sx.v >= 0 ? 1 : -1) * 0.03 * k : 0));
-    sz.push((sz.v >= 0 ? 1 : -1) * d.bass * 0.04 * dt);
+    // Gentle: no beat kick, bass reaches the swing only eased; the smooth groove swing keeps the hall rocking
+    this.bassS = damp(this.bassS, d.bass, 0.5, dt);
+    const bm = d.beatMotion, bass = lerp(this.bassS, d.bass, bm);
+    sx.push((sx.v >= 0 ? 1 : -1) * (bass * 0.07 + d.groove * (1 - bm) * 0.04) * dt + (d.beat ? (sx.v >= 0 ? 1 : -1) * 0.03 * k * bm : 0));
+    sz.push((sz.v >= 0 ? 1 : -1) * (bass * 0.04 + d.groove * (1 - bm) * 0.025) * dt);
     sx.update(dt); sz.update(dt);
     this.histX.push(sx.x); this.histZ.push(sz.x);
 
-    this.dust.update(dt, this.cam.eye, { amount: K.swell(k, 0.3, 1), speed: 0.6 + d.level * 1.2, wind: [0, -0.15] });
+    this.dust.update(dt, this.cam.eye, { amount: K.swell(k, 0.3, 1), speed: 0.6 + lerp(this.lvlS = damp(this.lvlS, d.level, 0.5, dt), d.level, bm) * 1.2, wind: [0, -0.15] });
   }
 
   render(r) {

@@ -172,7 +172,7 @@ export class ColdBase {
     // ---- weather
     this.snow = new K.Particles(r, 'snow', { count: 600 });
     this.storm = new K.Particles(r, 'snow', { count: 700, size: 0.09, area: [24, 14, 24], vel: [0, -2.4, 0], wobble: 1.6 });
-    this.gust = 0; this.wind = [0, 0];
+    this.gust = 0; this.wind = [0, 0]; this.bassS = 0; this.cloudT = 0;
 
     this.flash = new K.Envelope(0.22);
     this.snapEnv = new K.Envelope(0.55); this.snap = 0;
@@ -335,22 +335,27 @@ export class ColdBase {
   update(a, k, dt) {
     this.a = a; this.k = k; this.time += dt; this.dt = dt;
     const d = K.drive(a, k), t = this.time;
+    const bm = d.beatMotion;
+    this.cloudT += dt * (0.004 + k * 0.01);   // integrated: cloud drift rate follows k without the phase jumping
     if (d.beat) { this.flash.trigger(k); this.snapEnv.trigger(1); }
     this.flash.update(dt); this.snapEnv.update(dt);
-    this.snap = damp(this.snap, this.snapEnv.v, 0.07, dt);
+    // searchlight snap toward the camera: Gentle leans them in slowly with the groove swing instead of snapping on beats
+    this.snap = damp(this.snap, lerp(d.groove * 0.3, this.snapEnv.v, bm), lerp(0.6, 0.07, bm), dt);
+    this.bassS = damp(this.bassS, d.bass, 0.5, dt);
+    const bassM = lerp(this.bassS, d.bass, bm);
 
     this._updateCamera(a, k, dt);
     const eye = this.eye;
     this.ground.follow(eye[0], eye[2]);
 
     // wind: a steady breeze that builds into a storm, with bass gusts
-    this.gust = damp(this.gust, d.bass * 9, d.bass * 9 > this.gust ? 0.12 : 0.6, dt);
+    this.gust = damp(this.gust, d.bass * 9, d.bass * 9 > this.gust ? lerp(0.5, 0.12, bm) : 0.6, dt);
     const w = lerp(0.4, 5.5, k) + this.gust, wa = 0.35 + Math.sin(t * 0.05) * 0.3;
     this.wind[0] = Math.cos(wa) * w; this.wind[1] = Math.sin(wa) * w;
     this.snow.update(dt, eye, { amount: K.swell(k, 0.4, 1), speed: 1 + k * 0.6, wind: this.wind });
     this.storm.update(dt, eye, { amount: K.stage(k, 0.25, 0.95), speed: 1 + k * 0.5 + this.gust * 0.05, wind: this.wind });
 
-    this.radarYaw += dt * (0.28 + k * 0.9 + d.bass * 1.4);
+    this.radarYaw += dt * (0.28 + k * 0.9 + bassM * 1.4);
 
     // searchlights: lazy sweeps, waking one by one; beats snap them toward the camera
     const snapW = this.snap * 0.8 * k;
@@ -376,7 +381,7 @@ export class ColdBase {
 
     this.beacons.forEach((b, i) => {
       b.on = K.stage(k, 0.3 + i * 0.08, 0.45 + i * 0.08);
-      b.a += dt * b.on * (3.2 + d.bass * 3);
+      b.a += dt * b.on * (3.2 + bassM * 3);
     });
     this._scatterPines();
   }
@@ -443,7 +448,7 @@ export class ColdBase {
     r.setCamera(e2, this.tgt, { fov: lerp(ps.fov, pd.fov, cw), near: 0.1, far: 220, roll: lerp(ps.roll, pd.roll, cw) });
 
     const storm = K.stage(k, 0.15, 0.85);
-    this.sky.draw(r, eye, { horizon: col.fog, zenith: P.color(R(3, 0)), brightness: dim, starLevel: 0.4 * (1 - storm) + d.high * 0.15, moonScale: 1, cloudDrift: t * (0.004 + k * 0.01) });
+    this.sky.draw(r, eye, { horizon: col.fog, zenith: P.color(R(3, 0)), brightness: dim, starLevel: 0.4 * (1 - storm) + d.high * 0.15, moonScale: 1, cloudDrift: this.cloudT });
 
     r.setLight([0.35, -0.75, 0.55], scaleColor(col.light, P.role('light'), lerp(0.55, 0.75, k)), scaleColor(col.amb, P.role('ambient'), lerp(0.62, 0.72, k)));
     col.tint[0] = col.tint[1] = col.tint[2] = dim;
