@@ -36,7 +36,7 @@ export class Fogway {
     })).sort((x, y) => x.order - y.order);
     this.hist = new Float32Array(SEG_COUNT + 2);
     this.s = 0; this.time = 0; this.speed = 2; this.twist = 0;
-    this.flash = 0; this.roll = 0; this.rollVel = 0;
+    this.flash = 0; this.roll = 0; this.rollVel = 0; this.bassS = 0; this.highS = 0;
     this.k = 0; this.a = null;
     this.m = mat4.create();
     this.v = { p0: [0, 0, 0], p1: [0, 0, 0], eye: [0, 0, 0], tgt: [0, 0, 0] };
@@ -46,13 +46,18 @@ export class Fogway {
   update(a, k, dt) {
     this.a = a; this.k = k;
     this.time += dt;
-    this.speed = damp(this.speed, lerp(2.2, 7, k) + a.bass * k * 9, 0.25, dt);
+    // bass shapes motion directly only at Punchy; at Gentle it is eased (no per-beat jumps)
+    const bm = a.beatMotion ?? 1;
+    this.bassS = damp(this.bassS, a.bass * k, 0.5, dt);
+    this.highS = damp(this.highS, a.high * k, 0.5, dt);
+    const bassM = lerp(this.bassS, a.bass * k, bm);
+    this.speed = damp(this.speed, lerp(2.2, 7, k) + bassM * 9, lerp(0.5, 0.25, bm), dt);
     this.s += this.speed * dt;
     this.twist += dt * (0.12 + a.mid * k * 0.7);
-    this.hist.copyWithin(1, 0); this.hist[0] = a.bass * k;
+    this.hist.copyWithin(1, 0); this.hist[0] = bassM;
     if (a.beat) {
       this.flash = Math.max(this.flash, k * (a.accent ?? 1));
-      this.rollVel += (Math.random() < 0.5 ? -1 : 1) * 1.4 * k * (a.motion ?? 1);
+      this.rollVel += (Math.random() < 0.5 ? -1 : 1) * 1.4 * k * (a.motion ?? 1) * bm;
     }
     this.flash *= Math.exp(-dt / (0.22 * (a.decay ?? 1)));
     const w = 5; // critically damped spring back to 0 roll
@@ -67,7 +72,7 @@ export class Fogway {
     r.clear(col.fog);
 
     path(this.s, v.eye); path(this.s + 6, v.tgt);
-    r.setCamera(v.eye, v.tgt, { fov: 68 + a.bass * k * 10 * (0.3 + 0.7 * (a.motion ?? 1)), near: 0.1, far: 150, roll: this.roll + Math.sin(this.time * 0.2) * 0.1 });
+    r.setCamera(v.eye, v.tgt, { fov: 68 + lerp(this.bassS, a.bass * k, a.beatMotion ?? 1) * 10 * (0.3 + 0.7 * (a.motion ?? 1)), near: 0.1, far: 150, roll: this.roll + Math.sin(this.time * 0.2) * 0.1 });
     r.setFog(col.fog, 2, lerp(26, 52, k));
     const fx = v.tgt[0] - v.eye[0], fy = v.tgt[1] - v.eye[1] - 2, fz = v.tgt[2] - v.eye[2];
     r.setLight([fx + Math.sin(this.time * 0.3) * 4, fy, fz], scaleColor(col.light, P.role('light'), lerp(0.55, 0.95, k)), scaleColor(col.amb, P.role('ambient'), 0.45));
@@ -99,7 +104,7 @@ export class Fogway {
       path(this.s + 1 + rel, v.p0);
       const ang = sp.a + this.twist * 0.5;
       mat4.trs(m, v.p0[0] + Math.cos(ang) * sp.rr * RADIUS, v.p0[1] + Math.sin(ang) * sp.rr * RADIUS, v.p0[2],
-        this.time * sp.spin, this.time * sp.spin * 0.7, 0, 1 + a.high * k);
+        this.time * sp.spin, this.time * sp.spin * 0.7, 0, 1 + lerp(this.highS, a.high * k, a.beatMotion ?? 1));
       r.draw(this.spark, m, { tint: [0, 0, 0], emissive: col.spark, unlit: true, additive: true });
     }
   }

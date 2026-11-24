@@ -183,7 +183,7 @@ export class NeonCircuit {
     this.padFlash = new K.Envelope(0.22);
     this.pulses = [];
     this.scroll = 0; this.time = 0; this.k = 0; this.a = null;
-    this.fov = 66;
+    this.fov = 66; this.bassS = 0;
     this.m = mat4.create();
     this._e = v3(); this._f = v3();
     this.col = { fog: v3(), tint: v3(), light: v3(), amb: v3(), sky: v3(), w: [1, 1, 1], strip: v3(), c1: v3(), c2: v3() };
@@ -385,10 +385,13 @@ export class NeonCircuit {
     this.lateral = Math.sin(t * 0.23) * lerp(1.3, 0.7, k) + Math.sin(t * 0.61) * 0.3;
     this.cam.update(a, k, dt);
     this.cam.target[1] -= 1.6; // look slightly down so the city shows past the barriers
-    this.fov = damp(this.fov, lerp(64, 72, k) + d.bass * 12 * (0.3 + 0.7 * d.motion), 0.15, dt);
+    const bm = d.beatMotion;
+    this.bassS = damp(this.bassS, d.bass, 0.5, dt);
+    this.bassM = lerp(this.bassS, d.bass, bm); // bass reaches positions and scale directly only at Punchy
+    this.fov = damp(this.fov, lerp(64, 72, k) + this.bassM * 12 * (0.3 + 0.7 * d.motion), lerp(0.5, 0.15, bm), dt);
     this.cam.fov = this.fov;
     this.cam.roll = this._rollAt(this.cam.s) * 0.85;
-    this.scroll += dt * (0.15 + k * 0.6 + d.bass * 2.6);
+    this.scroll += dt * (0.15 + k * 0.6 + this.bassM * 2.6);
 
     if (d.beat) {
       this.padFlash.trigger(k);
@@ -406,7 +409,7 @@ export class NeonCircuit {
     this.gantries.forEach((g, i) => {
       const on = K.stage(k, 0.15 + (i / ng) * 0.5, 0.3 + (i / ng) * 0.5);
       const b = 0.18 + on * 0.6 * (0.9 + 0.1 * Math.sin(t * 11 + i)) + this._strobe(g.s) * 1.2;
-      g.lamps.forEach((p, q) => this.lampInst.set(i * 3 + q, p[0], p[1] - 0.6, p[2], 1.4 + d.pulse * 0.6, 0, b, 0, 1));
+      g.lamps.forEach((p, q) => this.lampInst.set(i * 3 + q, p[0], p[1] - 0.6, p[2], 1.4 + lerp(d.groove, d.pulse, d.beatMotion) * 0.6, 0, b, 0, 1));
     });
     this.lampInst.upload(ng * 3);
 
@@ -419,7 +422,7 @@ export class NeonCircuit {
       if (l.z < -8) l.z += 75;
       const fade = clamp((l.z + 8) / 8) * clamp((67 - l.z) / 20);
       const x = e[0] + f[0] * l.z + rt[0] * l.lat + up[0] * l.up, y = e[1] + f[1] * l.z + rt[1] * l.lat + up[1] * l.up, z = e[2] + f[2] * l.z + rt[2] * l.lat + up[2] * l.up;
-      this.lineInst.set(i, x, y, z, l.len * (1 + d.bass), yaw, amount * fade, 0, 1);
+      this.lineInst.set(i, x, y, z, l.len * (1 + this.bassM), yaw, amount * fade, 0, 1);
     });
     this.lineInst.upload(LINES);
 

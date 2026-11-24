@@ -11,7 +11,7 @@
 // visible. Playing = fog thins and warms, faster flight, birds take off,
 // fireflies + pollen. Beat = a beast's footstep (camera tremor, ripple through
 // the trees, the beast dips). Bass = foliage sway. Highs = sparkle.
-import { mat4, lerp, clamp, smoothstep } from '../gfx/math.js';
+import { mat4, lerp, damp, clamp, smoothstep } from '../gfx/math.js';
 import { scaleColor, mixColor } from '../gfx/color.js';
 import { CLEAR, grain } from '../gfx/textures.js';
 import { box, merge, GeoBuilder } from '../gfx/geometry.js';
@@ -347,7 +347,7 @@ export class LostValley {
     this.stomp = new K.Envelope(0.3);
     this.shake = new K.Envelope(0.22);
     this.ripple = new K.History(48);
-    this.stompAt = [0, 0];
+    this.stompAt = [0, 0]; this.bassS = 0; this.fallT = 0; this.levelS = 0;
 
     this.time = 0; this.k = 0; this.a = SILENT;
     this.col = { fog: [0, 0, 0], zen: [0, 0, 0], tint: [1, 1, 1], light: [0, 0, 0], amb: [0, 0, 0], beast: [0, 0, 0], bird: [0, 0, 0], mist: [0, 0, 0], fall: [0, 0, 0], tmp: [0, 0, 0] };
@@ -375,9 +375,12 @@ export class LostValley {
 
     // beat = the nearest beast's footstep: tremor, ripple through the trees, body dip
     if (d.beat) {
-      this.stomp.trigger(k); this.shake.trigger(k);
-      if (near) { near.dip.trigger(k); this.stompAt[0] = near.x; this.stompAt[1] = near.z; }
+      this.stomp.trigger(k * d.beatMotion); this.shake.trigger(k * d.beatMotion); // no footstep tremor or tree ripple at Gentle
+      if (near) { near.dip.trigger(k * d.beatMotion); this.stompAt[0] = near.x; this.stompAt[1] = near.z; }
     }
+    this.bassS = damp(this.bassS, d.bass, 0.5, dt);
+    this.levelS = damp(this.levelS, d.level, 0.5, dt);
+    this.fallT += dt * (0.9 + this.levelS * 0.6); // integrated: the waterfall never jumps when the level moves
     this.stomp.update(dt); this.shake.update(dt);
     this.ripple.push(this.stomp.v);
 
@@ -481,7 +484,7 @@ export class LostValley {
     cam.apply(r);
     eye[0] -= ox; eye[1] -= oy; cam.target[1] -= oy * 1.5;
 
-    this.sky.draw(r, eye, { horizon: col.fog, zenith: col.zen, brightness: dim, starLevel: 0, moonScale: 1 + d.pulse * 0.08, cloudDrift: this.time * 0.006 });
+    this.sky.draw(r, eye, { horizon: col.fog, zenith: col.zen, brightness: dim, starLevel: 0, moonScale: 1 + lerp(d.groove, d.pulse, d.beatMotion) * 0.08, cloudDrift: this.time * 0.006 });
 
     const fogNear = lerp(3, 14, k), fogFar = lerp(42, 125, k);
     r.setFog(col.fog, fogNear, fogFar);
@@ -496,11 +499,11 @@ export class LostValley {
     r.draw(this.carvedMesh, this.m, { texture: this.carvedTex, tint: col.tint });
     r.draw(this.cliffMesh, this.m, { texture: this.cliffTex, tint: col.tint });
     scaleColor(col.fall, P.color(R(3, 3)), 0.08 + d.high * 0.12);
-    r.draw(this.fallMesh, this.m, { texture: this.fallTex, tint: col.tint, emissive: col.fall, uvOffset: [0, -this.time * (0.9 + d.level * 0.6)] });
+    r.draw(this.fallMesh, this.m, { texture: this.fallTex, tint: col.tint, emissive: col.fall, uvOffset: [0, -this.fallT] });
     r.draw(this.poolMesh, this.m, { texture: this.poolTex, tint: col.tint, emissive: col.fall, uvOffset: [this.time * 0.03, this.time * 0.05] });
 
     // jungle
-    const sway = 0.015 + d.bass * 0.09 + this.stomp.v * 0.025;
+    const sway = 0.015 + lerp(this.bassS, d.bass, d.beatMotion) * 0.09 + this.stomp.v * 0.025 + d.groove * (1 - d.beatMotion) * 0.02;
     r.drawInstanced(this.quad, this.leafA, { texture: this.leafTexA, billboard: 1, sway, tint: col.tint });
     r.drawInstanced(this.quad, this.leafB, { texture: this.leafTexB, billboard: 1, sway, tint: col.tint });
     r.drawInstanced(this.quad, this.pines, { texture: this.pineTex, billboard: 1, sway: sway * 0.7, tint: col.tint });

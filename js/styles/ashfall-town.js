@@ -307,7 +307,7 @@ export class AshfallTown {
 
     this.ash = new K.Particles(r, 'ash', { count: 900, area: [26, 14, 26] });
     this.siren = new K.Envelope(0.38);
-    this.time = 0; this.k = 0; this.a = null; this.rust = 0; this.tremor = 0;
+    this.time = 0; this.k = 0; this.a = null; this.rust = 0; this.tremor = 0; this.bassS = 0; this.levelS = 0;
     this.col = { fog: [0, 0, 0], tint: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], emis: [0, 0, 0], tmp: [0, 0, 0], pale: [0, 0, 0], red: [0, 0, 0], lamp: [0, 0, 0], focus: [0, 0, 0] };
     this.lights = new K.LightSet({ reach: 8 });
   }
@@ -317,7 +317,8 @@ export class AshfallTown {
     const d = K.drive(a, k);
     this.cam.update(a, k, dt);
     // ground tremor from the bass (offsets only; the rig recomputes eye each frame)
-    const t = this.time, tr = d.bass * 0.05;
+    const t = this.time, bm = d.beatMotion, tr = d.bass * 0.05 * bm; // no bass tremor at Gentle
+    this.bassS = damp(this.bassS, d.bass, 0.5, dt); this.levelS = damp(this.levelS, d.level, 0.5, dt);
     const ty = (Math.sin(t * 47) + Math.sin(t * 31.7)) * 0.5 * tr, tx = Math.sin(t * 39.3) * tr * 0.5;
     this.cam.eye[0] += tx; this.cam.eye[1] += ty; this.cam.target[1] += ty * 0.6;
 
@@ -325,7 +326,7 @@ export class AshfallTown {
     this.siren.update(dt);
 
     const eye = this.cam.eye;
-    this.ash.update(dt, eye, { amount: K.swell(k, 0.3, 1), speed: 1 + k * 0.4 + d.bass * 2.5, wind: [0.15 + d.level * 0.8, -0.1] });
+    this.ash.update(dt, eye, { amount: K.swell(k, 0.3, 1), speed: 1 + k * 0.4 + lerp(this.bassS, d.bass, bm) * 2.5, wind: [0.15 + lerp(this.levelS, d.level, bm) * 0.8, -0.1] });
 
     // the town rusts over: dither-dissolve the rusted atlas in
     this.rust = damp(this.rust, K.stage(k, 0.12, 0.95), 0.8, dt);
@@ -409,8 +410,8 @@ export class AshfallTown {
     for (let i = i0; i <= i1; i++, n++) {
       const z = -i * SEG + LAMP_HEAD[2];
       const b = this._lampB(i, t, d, k);
-      this.paleInst.set(n, LAMP_HEAD[0], LAMP_HEAD[1], z, 1.5 + d.pulse * 0.4, 0, b * (1 - red * 0.85), 0, 1);
-      this.redInst.set(n, LAMP_HEAD[0], LAMP_HEAD[1], z, 1.7 + siren * 0.6, 0, b * red * (1.4 + siren * 0.8) + siren * 0.35 * k, 0, 1);
+      this.paleInst.set(n, LAMP_HEAD[0], LAMP_HEAD[1], z, 1.5 + lerp(d.groove, d.pulse, d.beatMotion) * 0.4, 0, b * (1 - red * 0.85), 0, 1);
+      this.redInst.set(n, LAMP_HEAD[0], LAMP_HEAD[1], z, 1.7 + siren * 0.6 * d.beatMotion, 0, b * red * (1.4 + siren * 0.8) + siren * 0.35 * k, 0, 1);
       this.poolInst.set(n, LAMP_HEAD[0] - 0.3, 0.2, z, 2.2, 0, b * 0.35, 0, 1);
     }
     this.paleInst.upload(n); this.redInst.upload(n); this.poolInst.upload(n);
