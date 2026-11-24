@@ -210,7 +210,7 @@ export class ColourWell {
   update(a, k, dt) {
     this.a = a; this.k = k; this.time += dt;
     const d = K.drive(a, k), bm = d.beatMotion;
-    const mid = lerp(d.energy, d.mid, bm), high = lerp(d.energy, d.high, bm), lvl = lerp(d.energy, d.level, bm);   // Gentle: slow energy, Punchy: the raw bands
+    const midA = lerp(d.energy, d.mid, bm), highA = lerp(d.energy, d.high, bm), lvlA = lerp(d.energy, d.level, bm);   // Gentle: slow energy, Punchy: the raw bands
 
     // the blight front glides with intensity (never jumps), and sinks back when it falls
     const target = lerp(FRONT_IDLE, FRONT_FULL, K.stage(k, 0.05, 0.95));
@@ -247,7 +247,7 @@ export class ColourWell {
       b.blend = K.stage(F, b.lo - 2, Math.min(b.hi, 60) + 4) * 0.92;
       const touched = K.stage(F, b.lo, mid + 3);
       b.glow = touched * (0.25 + 0.35 * k + 0.25 * this.breath.v * k) + this.ripples.at(mid, 0, 5) * 0.9;
-      b.sway = 0.004 + touched * (0.012 + mid * 0.07) * a.motion;
+      b.sway = 0.004 + touched * (0.012 + midA * 0.07) * a.motion;
       b.trees.forEach((t, i) => {
         // trees nearest the front (and the passing beat ring) glow hardest
         const g = b.glow * (0.6 + 0.4 * K.stage(F - t.d, -3, 8)) + this.ripples.at(t.x, t.z, 5) * 0.7;
@@ -260,8 +260,8 @@ export class ColourWell {
     // motes rise over the blighted ground; sparks pour up the shaft
     this.center[1] = 0;
     this.motes.p.flickerRate = 1.4 + d.high * 6;
-    this.motes.update(dt, this.center, { amount: 0.05 + 0.9 * K.stage(k, 0.08, 0.8), speed: 0.6 + lvl * 0.8 });
-    this.sparks.update(dt, this.center, { amount: 0.04 + 0.9 * this.shaft, speed: 0.5 + this.shaft * 0.8 + high * 0.4 });
+    this.motes.update(dt, this.center, { amount: 0.05 + 0.9 * K.stage(k, 0.08, 0.8), speed: 0.6 + lvlA * 0.8 });
+    this.sparks.update(dt, this.center, { amount: 0.04 + 0.9 * this.shaft, speed: 0.5 + this.shaft * 0.8 + highA * 0.4 });
   }
 
   render(r) {
