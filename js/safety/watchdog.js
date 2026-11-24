@@ -21,6 +21,7 @@ export class Watchdog {
     this.restoreTimer = 0;
     this.retryIn = 0; this.backoff = 0.5; this.reopening = false;
     this.zeroFor = 0; this.probeT = 0; this.probeBuf = null;
+    this.deadStream = false;   // reopened for digital silence and still no sample since
     this.resumeT = 0;
     this.log = [];
     this._cover();
@@ -29,6 +30,11 @@ export class Watchdog {
   }
 
   _note(msg) { this.log.push(`${new Date().toLocaleTimeString()} ${msg}`); if (this.log.length > 30) this.log.shift(); console.warn('[watchdog] ' + msg); }
+
+  /** Live input wanted but gone: not open, being reopened, or a dead stream (exact zeros). Quiet is not gone. */
+  get inputGone() {
+    return !!this.wantLive() && (this.engine.mode !== 'live' || this.reopening || this.deadStream);
+  }
 
   get label() { return this.renderer.lost ? 'GL lost, waiting for restore' : this.reopening ? 'reopening input' : 'ok'; }
 
@@ -102,7 +108,7 @@ export class Watchdog {
       eng.ctx.resume().catch(() => {});
     }
 
-    if (!this.wantLive()) { this.backoff = 0.5; this.retryIn = 0; this.zeroFor = 0; return; }
+    if (!this.wantLive()) { this.backoff = 0.5; this.retryIn = 0; this.zeroFor = 0; this.deadStream = false; return; }
 
     // live input wanted but not open: reopen with backoff
     if (eng.mode !== 'live') {
@@ -122,7 +128,8 @@ export class Watchdog {
       let peak = 0;
       for (let i = 0; i < this.probeBuf.length; i++) peak = Math.max(peak, Math.abs(this.probeBuf[i]));
       this.zeroFor = peak === 0 ? this.zeroFor + 0.5 : 0;
-      if (this.zeroFor >= DEAD_SILENCE) { this.zeroFor = 0; this._reopen('input delivering digital silence'); }
+      if (peak !== 0) this.deadStream = false;
+      if (this.zeroFor >= DEAD_SILENCE) { this.zeroFor = 0; this.deadStream = true; this._reopen('input delivering digital silence'); }
     }
   }
 

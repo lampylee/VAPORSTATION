@@ -436,7 +436,7 @@ const operator = new OperatorView(document.getElementById('operator'), {
   onOpenOutput: () => openOutput(),
   onSingle() { s.output = 'single'; saveSettings(s); syncOperator(); },   // rehearsal without a projector
 });
-let opTimer = 1, opThumb = -1, lastSignalAt = performance.now();   // grace while the input opens
+let opTimer = 1, opThumb = -1, inputOkAt = performance.now();   // grace while the input opens
 function syncOperator() {
   const want = output.state === 'open' ||
     (output.state === 'none' && s.output === 'dual' && !params.has('bench') && !params.has('selftest'));
@@ -461,7 +461,7 @@ function nextInfo() {
 }
 function currentHealth() {
   return health({
-    wantLive: liveWanted, inputSignal: performance.now() - lastSignalAt < 8000, ctxLost: renderer.lost,
+    wantLive: watchdog.wantLive(), inputSignal: performance.now() - inputOkAt < 3000, ctxLost: renderer.lost,
     projector: output.state, governorTier: governor.tier, broken: styles.broken.size, audioSuspended: engine.needsResume,
   });
 }
@@ -625,7 +625,9 @@ function frame(now) {
   } catch (e) { frameError('render', e); }
   markEnvs();
   if (uiVisible) showUI.update();
-  if (audio.rmsDbSmooth > -70) lastSignalAt = performance.now();   // health: input signal seen in the last 8 s
+  // health: red "no input signal" only when the input is gone (not open / reopening / dead stream) for 3 s;
+  // quiet passages, gaps between songs and silent line inputs raise nothing
+  if (!watchdog.inputGone) inputOkAt = performance.now();
   if ((opTimer += dt) >= 0.1) { opTimer = 0; try { updateOperator(audio, k, playing); } catch (e) { frameError('operator', e); } }
   if (bench && !bench.done) {
     bench.record(dt, performance.now() - cpuStart);

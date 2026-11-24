@@ -266,7 +266,7 @@ body.kiosk.ui-hidden, body.kiosk.ui-hidden * { cursor: none; }   /* H shows the 
 #operator button { cursor: pointer; }
 .op-main { flex: 1; min-width: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: clamp(10px, 2.4vh, 32px); }
 .op-main[hidden], .op-open[hidden] { display: none; }
-.op-label { color: var(--dim); font-size: 0.9em; letter-spacing: 3px; }
+.op-label { color: var(--mid); font-size: 1.1em; letter-spacing: 3px; }
 
 .op-top { display: flex; align-items: center; gap: 0.8em; font-size: clamp(24px, 5vh, 60px); line-height: 1.15; }
 .op-songline { flex: 1; min-width: 0; display: flex; gap: 0.5em; align-items: baseline; }
@@ -283,10 +283,10 @@ body.kiosk.ui-hidden, body.kiosk.ui-hidden * { cursor: none; }   /* H shows the 
 .op-preview { display: block; width: 100%; height: 100%; object-fit: contain; object-position: center top; image-rendering: pixelated; }
 .op-next { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 0.4em; }
 .op-nsong { font-size: 1.7em; font-weight: 600; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: none; }
-.op-nsong.cued { color: var(--hot); }
+.op-nsong.cued { color: var(--acc); }
 .op-nthumb { flex: 0 1 auto; min-height: 0; width: 100%; max-width: 100%; aspect-ratio: 4 / 3; object-fit: contain; object-position: left top;
   image-rendering: pixelated; background: #000; align-self: flex-start; }
-.op-nsub { color: var(--mid); font-size: 1.15em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: none; }
+.op-nsub { color: var(--mid); font-size: 1.4em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: none; }
 .op-status { min-width: 0; display: flex; flex-direction: column; gap: 0.4em; }
 .op-meter { position: relative; height: clamp(18px, 3.4vh, 40px); background: var(--sunk); border: 1px solid var(--line2); flex: none; }
 .op-meter .fill { display: block; height: 100%; width: 0; background: var(--dim); }
