@@ -78,28 +78,40 @@ for (const off of [3, 8, 12]) {
   }
   check('projector stops -> laptop takes over', first >= 0 && first <= 1 && after >= 118, `first=${first} accepts=${after}`);
 }
-// (h) 144 Hz projector (home) + 60 Hz laptop: one 30 ms projector hitch -> the laptop covers the
-//     gap, then the projector drives again within 2 of its frames; no display frame runs twice
-for (const lapOff of [1, 4, 7, 11, 15]) {
+// (h) projector (home) + laptop at various rates: one 30 ms projector hitch -> the projector drives
+//     again within 3 of its frames, the laptop adds nothing after that (and nothing before the hitch),
+//     and once it has settled no two accepts are closer than half a projector frame
+function hitchRun(projHz, lapHz, lapOff) {
   const g = new FrameGuard();
-  const D = 1000 / 144;
+  const D = 1000 / projHz, L = 1000 / lapHz;
   g.prefer('projector');
   const acc = [];
-  let nextLap = 1000 + lapOff, tp = 1000, lapGap = 0, lapAfter = 0, back = -1;
-  for (let i = 0; i < 600; i++) {
-    if (i === 300) tp += 30;   // the projector's rAF comes 30 ms late once
+  let nextLap = 1000 + lapOff, tp = 1000, lapBefore = 0, lapGap = 0, lapAfter = 0, back = -1;
+  const N = Math.round(projHz * 4), H = Math.round(projHz * 2);   // 4 s, hitch at 2 s
+  for (let i = 0; i < N; i++) {
+    if (i === H) tp += 30;   // the projector's rAF comes 30 ms late once
     while (nextLap <= tp) {
-      if (g.tick(nextLap, 'laptop')) { acc.push(nextLap); if (i >= 300) { if (back < 0) lapGap++; else lapAfter++; } }
-      nextLap += F;
+      if (g.tick(nextLap, 'laptop')) {
+        if (i < H) { if (i >= projHz) lapBefore++; } else if (back < 0) lapGap++; else { lapAfter++; acc.push(nextLap); }
+      }
+      nextLap += L;
     }
-    if (g.tick(tp, 'projector')) { acc.push(tp); if (i >= 300 && back < 0) back = i - 300; }
+    if (g.tick(tp, 'projector') && i >= H) { if (back < 0) back = i - H; acc.push(tp); }
     tp += D;
   }
   let minGap = Infinity;
   for (let k = 1; k < acc.length; k++) minGap = Math.min(minGap, acc[k] - acc[k - 1]);
-  check(`hitch, laptop offset ${lapOff}: laptop covers, projector drives again within 2 frames`,
-    lapGap >= 1 && back >= 0 && back <= 1 && lapAfter === 0, `laptopInGap=${lapGap} back=${back} laptopAfter=${lapAfter}`);
-  check(`hitch, laptop offset ${lapOff}: no display frame runs twice`, minGap >= D * 0.6, `minGap=${minGap.toFixed(2)} ms`);
+  return { D, back, lapBefore, lapGap, lapAfter, minGap };
+}
+for (const [p, l] of [[60, 120], [60, 144], [60, 90], [75, 120], [60, 60], [144, 60], [120, 144]]) {
+  for (const off of [0, 3, 5, 9, 12]) {
+    const r = hitchRun(p, l, off);
+    check(`hitch ${p}p/${l}l offset ${off}: projector drives again within 3 frames, laptop adds nothing`,
+      r.back >= 0 && r.back <= 2 && r.lapAfter === 0 && r.lapBefore === 0,
+      `back=${r.back} laptopInGap=${r.lapGap} laptopBefore=${r.lapBefore} laptopAfter=${r.lapAfter}`);
+    check(`hitch ${p}p/${l}l offset ${off}: no two accepts closer than half a projector frame after`,
+      r.minGap >= 0.5 * r.D, `minGap=${r.minGap.toFixed(2)} ms`);
+  }
 }
 // (g) single source: a 100 ms hitch, then steady 60 Hz -> every steady tick accepted
 {

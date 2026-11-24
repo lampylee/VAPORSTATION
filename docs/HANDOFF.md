@@ -220,12 +220,13 @@ errors), governor tiers + the saturation cap with synthetic frame times, every s
 - Either window's rAF drives the frame (guard), reload reconnects automatically, "no input" turns red only after 3 s gone.
   Single-mode CPU +0.025-0.065 ms/frame vs before, fps unchanged; the operator view with the projector open about +0.085 ms.
 - Final review fixes: attach always syncs the watchdog cover (a reload under it left the projector fogged), the frame guard
-  hands the lead back to the projector after a hitch the laptop covered, operator view above the laptop fog cover,
+  hands the lead back to the projector after a hitch the laptop covered (also when the laptop runs faster: one
+  skipped projector frame per hitch), operator view above the laptop fog cover,
   projector cursor hidden only in fullscreen, grant script never overwrites an unreadable Preferences file.
 - Verified (pane + real Chrome, one 1080p display): single mode, ?kiosk&dual operator view, popup opens / is guarded,
   pre-grant makes the permission state "granted", kiosk.bat command lines (dry run), auto-open on fresh start, reload reattach without a second window, reload while the cover is on (context lost, no
   restore, watchdog reload: projector reattaches and the fog clears; also cover(false) missed while marked lost),
-  operator view + red "graphics reset" above the laptop fog. Projector hitch, then hand-back: node test only (both windows
+  operator view + red "graphics reset" above the laptop fog. Projector hitch, then hand-back: node test only (7 rate pairs x 5 phase offsets) (both windows
   share one thread, so a projector-only hitch can't be made in Chrome). **Not verified:** true fullscreen
   and placement on a real second screen, pulling the HDMI cable, real MIDI opening the projector, the input-gone red
   with a real interface, operator view readability from 2 m, `?selftest` and `?bench` on the gig laptop with dual on.

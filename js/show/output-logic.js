@@ -5,8 +5,8 @@
  * rAF loops (arbitrary phase offsets); only one call per display frame returns true.
  * One source is "preferred" (the last accepted); the other is accepted only if the
  * preferred source has stalled (no call for > 1.5 x its interval). The source given to
- * prefer() is "home": after a stall it takes the lead back with its next frame that doesn't
- * double up with the one the other source just ran.
+ * prefer() is "home": once it ticks steadily again after a stall the other source covered,
+ * it takes the lead back (skipping that one tick) and drives from its next frame.
  */
 export class FrameGuard {
   constructor() {
@@ -28,6 +28,8 @@ export class FrameGuard {
   tick(now, source = 'default') {
     let st = this._src.get(source);
     if (!st) this._src.set(source, st = { interval: 16.7, prev: undefined });
+    // this tick on time for its own chain (not itself the end of a stall)?
+    const steady = st.prev !== undefined && now - st.prev <= 1.5 * st.interval;
     if (st.prev !== undefined) {
       const gap = Math.min(100, Math.max(4, now - st.prev));
       st.interval += (gap - st.interval) * 0.2;
@@ -38,9 +40,16 @@ export class FrameGuard {
     // the source accepted last keeps going: one rAF chain fires at most once per display frame,
     // so a normal frame right after a hitch (GC, hidden tab) is never dropped
     else if (source === this._pref && source === this._lastSrc) ok = true;
-    // newly preferred (prefer()), or home back after a stall the other source covered:
-    // don't double up with the frame the other source just ran
-    else if (source === this._pref || source === this._home) ok = now - this._lastAccepted >= 0.6 * st.interval;
+    // newly preferred (prefer() or a hand-back): don't double up with the frame the other source just ran
+    else if (source === this._pref) ok = now - this._lastAccepted >= 0.6 * st.interval;
+    // home ticking steadily again while the other source covers its stall: hand the lead back
+    // without running this tick (the other source may run at a higher rate and have just
+    // accepted); from now on the other source fails the stall test below, and home's next tick
+    // passes the check above. Costs at most one skipped frame per hitch.
+    else if (source === this._home) {
+      if (steady) this._pref = source;
+      return false;
+    }
     else {
       const p = this._src.get(this._pref);
       ok = p.prev === undefined || now - p.prev > 1.5 * p.interval;   // preferred never ticked: don't wait on it
