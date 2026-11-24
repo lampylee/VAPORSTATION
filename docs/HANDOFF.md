@@ -1,4 +1,4 @@
-# Handoff — state as of 2026-11-22
+# Handoff — state as of 2026-11-24
 
 Read this first when picking the project back up. Also read `CLAUDE.md` (rules), `ROADMAP.md` (plan)
 and `docs/ENVIRONMENT-GUIDE.md` (how environments are built, full kit reference).
@@ -59,6 +59,7 @@ Number keys reach 0–9; the rest via N / Shift+N, the dropdown, auto-switch, a 
   3. **The gig laptop** (perf, fullscreen, sleep settings), plus thumbnail cost there (one extra style render every 0.4 s while the panel is open).
   4. **Real MIDI hardware** and a **USB footswitch** (check which key it sends; add it in `main.js` if needed).
   5. How the **Feel** setting feels with real songs in a visible window.
+  6. Song shape (2026-11-24): the **feel with real band songs in a visible window**, true fps / `?bench` for the changed styles, and Gentle-vs-Punchy screenshots for most Phase 2 styles (the hidden pane couldn't take them; those were checked by reading the code).
 
 ## Open items (priority)
 
@@ -69,8 +70,7 @@ Number keys reach 0–9; the rest via N / Shift+N, the dropdown, auto-switch, a 
 4. **The Conductor** (2026-11-23): built. Intensity follows the song's shape, sections, auto tempo, optional world change on
    drops (off). Left: try it with real songs in a visible window (thresholds were tuned on synthetic songs and the demo track).
    Design + build notes: `docs/superpowers/specs/2026-11-23-conductor-design.md`. Test: `node tools/test-conductor.mjs`.
-5. Optional: teach a few styles to use `audio.build` / `audio.drop` / `audio.bar` (now filled by auto tempo too) for their own
-   moves; today only the kit camera rigs do.
+5. **Song shape** (2026-11-24): landed on branch `claude/song-shape`, **not merged**. See "Landed (2026-11-24): song shape" below for status, what was and wasn't verified, and the open items for you to decide or check.
 6. Moonshot, not scheduled: a crossfaded **PS2 mode** toggle (640×448, perspective-correct, filtered textures, feedback
    haze, ~100k-tri budget, kit detail scaling). Needs the user's sign-off on a scoped hard-rule exemption first.
    Design: `docs/superpowers/specs/2026-11-23-ps2-mode-design.md`.
@@ -109,6 +109,27 @@ Number keys reach 0–9; the rest via N / Shift+N, the dropdown, auto-switch, a 
   `softMist`, `Walkers`, `OrbitFocusRig` / `DriftRig` / `GridWanderRig`; also fixed Ripples' solid mode (it had been pasted into `Streaks.draw`).
   Environments keep the local copies they were built with; only Colour from the Well and Fog Harbour were moved onto Kit v5
   (pixel-diffed: visually identical).
+
+## Landed (2026-11-24): song shape
+
+Branch `claude/song-shape` (not merged; `git log --oneline 1737617..HEAD`). Spec: `docs/superpowers/specs/2026-11-24-song-shape-design.md`. Three phases:
+1. **Calm motion + shape.** `beatMotion` column in `PROFILES` (Gentle 0 / Medium 0.4 / Punchy 1; `feel.beatMotion`, `audio.beatMotion`); `K.drive` also gives `groove` and `beatMotion`. `js/show/shape.js` (`SongShape`) eases `audio.shape` (close / pace / fog / weather / phrase) from the section; `node tools/test-shape.mjs`. Kit camera rigs lost their beat kicks at Gentle, travel by energy, and gained bar sway, section framing (`close`, per-phrase `reframe`) and `camParams()`; `renderer.fogScale` and the particle amount follow the shape; the debug overlay has a `shape:` line. `K.Breath` pays downbeat corrections back through an eased rate.
+2. **Bouncing pass.** Every style (and kit demo / calm) scales beat movement by `beatMotion` and light by `accent`, with Punchy kept as before. Rules for new environments: `docs/ENVIRONMENT-GUIDE.md` ("Song-shape rules").
+3. **Moods** (`js/kit/moods.js`, `K.Moods`) for the 12 Radiohead-set worlds (24-35): 2-4 section-crossfaded states each; see the guide's "Moods" section. The other 24 worlds only get the shared shape (framing, fog, weather) for now.
+
+Rulings worth knowing: `motionCheck` builds its own audio (SongShape + a real ShowControl); with `audioPushesLook` on, the combined fog scale can pass ±25 % (the shape factor alone is clamped); drop FOV punch is 0.3 s but scaled by Feel, so it's ~0 at Gentle; Ember Vigil's once-a-bar bell camera kick is off at Gentle; mood gates multiply the `k` fed into `stage()` rather than its output; reframe ticks even at k = 0 or Conductor off (calm is not still); integrating phases (monoliths, Cold Base cloudDrift, Station Deck uvOffset) changes Punchy very slightly and removes a phase-jump bug.
+
+- **Verified (pane):** all node tests, `motionCheck` numbers (Gentle `maxAccel` ≤ 0.01 for the styles except those listed below), draw / triangle budgets, Conductor-off identity (shape neutral, moods `base`), and the demo track's sections driving moods and shape.
+- **Not verified:** feel with real band songs in a visible window; true fps / `?bench`; Gentle-vs-Punchy screenshots for most Phase 2 styles (hidden pane, so checked by reading the code). Run `motionCheck` with the loop idle (it advances `P.time` and doesn't restore `styles.cur`).
+
+Open items for you to decide or check:
+- **Neon Circuit:** its camera path's own kinks give a Gentle `maxAccel` of about 0.045 at 30 u/s, not caused by beats (0.0023 at k = 0). Smoothing the track would change its look.
+- **Kit demo (hidden):** a one-off 0.069 DollyRig spike. Check whether close framing (which lowers `heightOffset`) and the hard ground clamp interact.
+- **Before Dawn** needs about 24 s to reach the field (its own speed limit), so a short drop gets only just outside.
+- **Still Pool's** existing sub-surface dip now happens only in groove (still / gather / full stay above).
+- **Dream Journal's** wallpaper still flips per beat at Gentle: it's a dither crossfade of a texture, so it was left.
+- The **ripple-gate snippet** is copy-pasted in about 5 styles: a candidate for a kit helper.
+- Smaller deferred notes: Medium is probabilistic in salt-flat / back-road-lights (`random() < beatMotion` per beat); Backrooms and Route Nine show small `motionCheck` blips from their own grid turns / world wrap; Moth Lamp's extra camera damp lags its flood pull-in even with the Conductor off.
 
 ## Verification tips for agents
 
