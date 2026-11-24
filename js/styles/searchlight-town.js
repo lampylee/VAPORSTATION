@@ -15,6 +15,10 @@
 //        and flares (K.Envelope, so audio.accent / decay apply).
 // Peak:  above ~0.75 intensity the town melts: a travelling wave lifts the
 //        ground, houses tilt, sag and bend; it eases in and settles back out.
+// Song sections (K.Moods, Conductor on): intro / breakdown / outro keep one slow beam over a
+// dimmer town, the camera high and wide; a build wakes more lights and draws the beams together
+// and the camera a little in; the drop lets the melt / wobble peak arrive sooner (it still eases
+// in and settles back when the section moves on). Conductor off = base.
 import { mat4, lerp, clamp, damp } from '../gfx/math.js';
 import { scaleColor } from '../gfx/color.js';
 import { GeoBuilder, box, plane, merge } from '../gfx/geometry.js';
@@ -201,8 +205,20 @@ export class SearchlightTown {
     this.midS = 0;          // eased mid (tree sway at Gentle)
     this.bar = new K.BarClock({ minGap: 1 });   // Gentle: the beams swing on once per bar, not per beat
     this.melt = 0;          // eased peak distortion 0..1
-    this.amp = 0;
+    this.amp = 0; this.bm = 1;
     this.col = { fog: [0, 0, 0], tint: [1, 1, 1], light: [0, 0, 0], amb: [0, 0, 0], one: [1, 1, 1] };
+
+    // song sections: gates multiply the k fed into today's stage() curves (clamped 0..1) — the lights
+    // waking one by one, the sweep tightening, the beams converging, the windows, the melt; sweep
+    // scales the active part of the sweep speed. camR / camH (orbit radius / height offsets) are
+    // camera positions: slow, eased twice.
+    this.moods = new K.Moods({
+      still:  { wakeGate: 0,   tightGate: 0.5, convGate: 0.3, winGate: 0.6, meltGate: 0.8,  sweep: 0.55, camR: 8,  camH: 7 },
+      base:   { wakeGate: 1,   tightGate: 1,   convGate: 1,   winGate: 1,   meltGate: 1,    sweep: 1,    camR: 0,  camH: 0 },
+      gather: { wakeGate: 1.6, tightGate: 1.4, convGate: 2,   winGate: 1.3, meltGate: 1,    sweep: 1.15, camR: -3, camH: -2 },
+      full:   { wakeGate: 1.7, tightGate: 1.3, convGate: 1.6, winGate: 1.5, meltGate: 1.45, sweep: 1.2,  camR: -2, camH: -1 },
+    }, { dropEase: 4, slow: ['camR', 'camH'] });
+    this.camR = null; this.camH = 0; this.kw = 0;
   }
 
   /** Melt wave height at (x, z): a ripple running out from the middle plus a slow diagonal roll. */
@@ -213,24 +229,31 @@ export class SearchlightTown {
 
   update(a, k, dt) {
     this.a = a; this.k = k; this.time += dt;
+    const m = this.moods.update(a, dt);
     const d = K.drive(a, k), t = this.time;
     this.en = damp(this.en, d.energy, 0.8, dt);
     this.midS = damp(this.midS, d.mid, 0.5, dt);
     const bm = d.beatMotion, barFire = this.bar.update(a, dt);
+    // camera: orbit radius / height, eased a second time so a section change starts softly
+    if (this.camR === null) { this.camR = m.camR; this.camH = m.camH; }
+    this.camR = damp(this.camR, m.camR, 2, dt); this.camH = damp(this.camH, m.camH, 2, dt);
+    this.cam.radius = 38 + this.camR; this.cam.height = 29 + this.camH;
     this.cam.update(a, k, dt);
+    this.kw = clamp(k * m.winGate);
 
     // peak distortion: eased in slowly, settles back a little faster
-    const mt = K.stage(k, 0.74, 0.98);
+    const mt = K.stage(clamp(k * m.meltGate), 0.74, 0.98);
     this.melt = damp(this.melt, mt, mt > this.melt ? 1.6 : 1.1, dt);
     this.amp = this.melt * (0.6 + 0.4 * this.en);
     this.cam.roll = Math.sin(t * 0.55) * 0.05 * this.melt;
 
     // ---- searchlights
-    const tight = K.stage(k, 0.15, 1), conv = K.stage(k, 0.45, 1) * 0.35;
-    const sweepR = lerp(30, 21, tight), sp = lerp(0.09, 0.3, k) + this.en * 0.12;
+    const tight = K.stage(clamp(k * m.tightGate), 0.15, 1), conv = K.stage(clamp(k * m.convGate), 0.45, 1) * 0.35;
+    const kWake = clamp(k * m.wakeGate);
+    const sweepR = lerp(30, 21, tight), sp = 0.09 + (0.21 * k + this.en * 0.12) * m.sweep;   // (0.09 = the idle sweep, unchanged)
     const fx = Math.sin(t * 0.11) * 14, fz = Math.cos(t * 0.083) * 14;   // wandering focus the beams converge on
     this.lights.forEach((L, i) => {
-      if (i > 0) L.wake = K.stage(k, 0.12 + (i - 1) * 0.17, 0.3 + (i - 1) * 0.17);
+      if (i > 0) L.wake = K.stage(kWake, 0.12 + (i - 1) * 0.17, 0.3 + (i - 1) * 0.17);
       L.phT += dt * sp * L.rate;
       if (d.beat && L.wake > 0.05) {
         L.phT += (0.35 + 0.35 * k) * d.motion * bm;     // Punchy: the beam snaps ahead along its sweep
@@ -243,18 +266,19 @@ export class SearchlightTown {
       const ox = Math.cos(L.ph * 1.9 + i) * 5, oz = Math.sin(L.ph * 1.9 + i) * 5;
       ax = lerp(ax, fx + ox, conv); az = lerp(az, fz + oz, conv);
       L.ax = ax; L.az = az; L.ay = this._wave(ax, az);
-      L.w = lerp(9, 5.2, tight) * (1 + L.flare.v * 0.3);
+      L.w = lerp(9, 5.2, tight) * (1 + L.flare.v * 0.3 * bm);   // the flare's width swell is a beat movement; its light stays
       L.b = L.wake * (0.55 + k * 0.3 + L.flare.v * 0.9);
     });
 
     // thumbnails call update before the first render: keep update self-contained
+    this.bm = bm;
     this._layout(d);
   }
 
   /** Per-frame instance data: houses brighten under the pools; the melt lifts, tilts and sags everything. */
   _layout(d) {
     const t = this.time, k = this.k, amp = this.amp, dim = lerp(0.72, 1, k), lights = this.lights;
-    const winOn = lerp(0.24, 0.72, K.stage(k, 0.05, 0.9));
+    const winOn = lerp(0.24, 0.72, K.stage(this.kw, 0.05, 0.9));
     this.houses.forEach((h, i) => {
       const y = this._wave(h.x, h.z);
       let boost = 0;
@@ -289,7 +313,7 @@ export class SearchlightTown {
       const s = L.w;
       this.beams.set(i, L.hx, L.hy, L.hz, s, L.yaw, L.b * 0.32, 0, len / s, Math.PI / 2 + L.dip);
       this.pools.set(i, L.ax, L.ay + 0.3, L.az, s * 1.15, L.yaw, L.b * 0.85, 0, Math.min(2.4, 1 / Math.max(0.3, Math.sin(L.dip))), Math.PI / 2);
-      this.glows.set(i, L.hx, L.hy, L.hz, (2.2 + L.flare.v * 3) * L.sc, 0, L.wake * (0.7 + L.flare.v * 0.8 + d.high * 0.2), 0, 1);
+      this.glows.set(i, L.hx, L.hy, L.hz, (2.2 + L.flare.v * 3 * this.bm) * L.sc, 0, L.wake * (0.7 + L.flare.v * 0.8 + d.high * 0.2), 0, 1);
     });
     const nl = lights.length;
     [this.towerInst, this.beams, this.pools, this.glows].forEach((x) => x.upload(nl));

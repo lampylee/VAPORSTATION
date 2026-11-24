@@ -23,6 +23,11 @@
 //       light conforming to the ground. Scaled by Feel through K.Envelope (accent,
 //       attack, decay) and the extension speed by audio.motion. While a beam is
 //       down the farmhouse windows waver faintly.
+// Song sections (K.Moods, Conductor on): intro / breakdown / outro leave one light far off (the
+// second idle light glides away into the fog) with the camera low in the grass by the fence; a
+// build brings more lights in and gathers them in a slow ring over the farmhouse; the drop takes
+// them low over the field and lowers held beams onto it, one after another (a steady rate, not on
+// beats, in two extra beam slots the beat beams never use). Conductor off = base.
 import { mat4, lerp, clamp, damp } from '../gfx/math.js';
 import { scaleColor } from '../gfx/color.js';
 import { GeoBuilder, merge, octahedron } from '../gfx/geometry.js';
@@ -34,7 +39,7 @@ const TAU = Math.PI * 2;
 const ROAD_Z = 24, FENCE_Z = 17, POLE_Z = 20.6;
 const CAM = [4, 0, 38];
 const HOUSE = [-20, -30], BARN = [16, -44], MILL = [34, -20];
-const N_LIGHTS = 9, MAX_BEAMS = 2, POOL_SEGS = 6;
+const N_LIGHTS = 9, MAX_BEAMS = 2, HELD_BEAMS = 2, POOL_SEGS = 6;   // beat beams use the first MAX_BEAMS slots
 const GATE = [-22, -16.5];   // gap in the fence: the farm lane
 
 const ease = (t) => { t = clamp(t); return t * t * (3 - 2 * t); };
@@ -275,8 +280,8 @@ export class BackRoadLights {
     // ---- beams: one cone billboard + one ground-conforming pool per slot
     this.beamTex = r.texture(beamTex());
     this.poolTex = r.texture(poolTex());
-    this.beams = Array.from({ length: MAX_BEAMS }, () => ({
-      light: -1, env: new K.Envelope(0.95), ext: 0, v: 0, inst: r.createInstances(1),
+    this.beams = Array.from({ length: MAX_BEAMS + HELD_BEAMS }, (_, j) => ({
+      light: -1, env: new K.Envelope(0.95), ext: 0, v: 0, held: j >= MAX_BEAMS, hold: 0, hl: 0, hv: 0, inst: r.createInstances(1),
       pool: r.createMesh(this._poolGeo(0, 0, 1, 0), true),
     }));
     this.nextBeam = 0; this.beamRR = 0; this.beamGap = 0;
@@ -292,6 +297,19 @@ export class BackRoadLights {
     this.m = mat4.create(); this.mI = mat4.create(); this.mRotor = mat4.create();
     this.col = { fog: [0, 0, 0], zen: [0, 0, 0], tint: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], one: [1, 1, 1], beam: [0, 0, 0], pool: [0, 0, 0], hover: [0, 0, 0], land: [0, 0, 0], focus: [0, 0, 0] };
     this.plights = new K.LightSet({ reach: 30, fade: 0.6 });
+
+    // song sections: gates multiply the k fed into today's stage() curves (clamped 0..1) — lights
+    // arriving one by one, purpose, windows; twin keeps the second idle light (0 = it glides off into
+    // the fog); house / low pull the formation over the farmhouse / down over the field (mood-only;
+    // they act through purpose, which is × k); held = the drop's rate of held beams (× k).
+    // camZ (+ = back from the fence) and camY are camera positions: slow, eased twice.
+    this.moods = new K.Moods({
+      still:  { lightGate: 0.1, purposeGate: 0.5, winGate: 0.6, twin: 0, house: 0, low: 0, held: 0, camZ: -11, camY: -1.9 },
+      base:   { lightGate: 1,   purposeGate: 1,   winGate: 1,   twin: 1, house: 0, low: 0, held: 0, camZ: 0,   camY: 0 },
+      gather: { lightGate: 1.5, purposeGate: 1.4, winGate: 1.3, twin: 1, house: 1, low: 0, held: 0, camZ: 0,   camY: 0 },
+      full:   { lightGate: 1.6, purposeGate: 1.4, winGate: 1.4, twin: 1, house: 0, low: 1, held: 1, camZ: 0,   camY: 0 },
+    }, { dropEase: 4, slow: ['camZ', 'camY'] });
+    this.camZ = null; this.camY = 0; this.house = 0; this.low = 0; this.heldClock = 0.5;
   }
 
   /** Subdivided disc-ish square lying on the terrain (POOL_SEGS x POOL_SEGS). */
@@ -322,21 +340,38 @@ export class BackRoadLights {
     } else {                   // a chevron drifting side to side
       out[0] = u * 6.5 + Math.sin(rot * 0.4) * 18; out[1] = 21 - Math.abs(u) * 1.4; out[2] = -36 + Math.abs(u) * 4.5 + Math.sin(rot * 0.6) * 8;
     }
+    // build: gathered in a slow ring over the farmhouse; drop: low over the field
+    const hs = this.house;
+    if (hs > 0.001) {
+      const a = rot * 0.8 + (i / N_LIGHTS) * TAU;
+      out[0] = lerp(out[0], HOUSE[0] + Math.cos(a) * 10, hs);
+      out[1] = lerp(out[1], 16 + Math.sin(a * 2 + rot) * 1.2, hs);
+      out[2] = lerp(out[2], HOUSE[1] + Math.sin(a) * 7, hs);
+    }
+    out[1] -= this.low * (out[1] - 8) * 0.45;
     return out;
   }
 
   update(a, k, dt) {
     dt = Math.min(dt, 0.1);
     this.a = a; this.k = k; this.time += dt; this.dt = dt;
+    const m = this.moods.update(a, dt);
     const d = K.drive(a, k), t = this.time;
     const br = this.breath.update(a, dt);
+    // camera: toward the fence and down into the grass, eased a second time so a section change starts softly
+    if (this.camZ === null) { this.camZ = m.camZ; this.camY = m.camY; }
+    this.camZ = damp(this.camZ, m.camZ, 2, dt); this.camY = damp(this.camY, m.camY, 2, dt);
+    const cp = this.cam.position, cz = CAM[2] + this.camZ;
+    cp[2] = cz; cp[1] = height(CAM[0], cz) + 3.4 + this.camY;
+    this.house = m.house; this.low = m.low;
+    const kL = clamp(k * m.lightGate), kWin = clamp(k * m.winGate);
     this.cam.update(a, k, dt);
     this.cam.eye[1] += br * 0.05;
 
     // slow, continuous things follow energy and smoothed bands, never the kick
     this.energy = damp(this.energy, (a.energy ?? a.level ?? 0) * k, 1.5, dt);
     this.mid = damp(this.mid, d.mid, 0.4, dt);
-    this.purpose = damp(this.purpose, K.stage(k, 0.3, 0.85), 2.5, dt);
+    this.purpose = damp(this.purpose, K.stage(clamp(k * m.purposeGate), 0.3, 0.85), 2.5, dt);
     this.rot += dt * (0.05 + 0.16 * this.energy + 0.04 * k);
     this.spin += dt * (0.25 + 1.6 * this.energy);
     this.porchLevel = damp(this.porchLevel, K.stage(k, 0.4, 0.6), 1.2, dt);
@@ -349,7 +384,7 @@ export class BackRoadLights {
     const H = [0, 0, 0], F = [0, 0, 0], T = [0, 0, 0];
     const w0 = 0.45 + 0.35 * k;
     this.lights.forEach((L, i) => {
-      const tp = L.on < 0 ? 1 : K.stage(k, L.on, L.on + 0.12);
+      const tp = L.on < 0 ? (i === 1 ? Math.max(m.twin, K.stage(kL, 0.08, 0.2)) : 1) : K.stage(kL, L.on, L.on + 0.12);
       L.pres = damp(L.pres, tp, 2.5, dt);
       const ph = L.ph;
       H[0] = L.B[0] + Math.sin(t * 0.13 + ph) * 4; H[1] = L.B[1] + Math.sin(t * 0.21 + ph * 2) * 1.2; H[2] = L.B[2] + Math.cos(t * 0.11 + ph) * 3;
@@ -366,7 +401,7 @@ export class BackRoadLights {
     this.beamGap -= dt;
     const bm = d.beatMotion, barFire = this.bar.update(a, dt);
     if (((d.beat && Math.random() < bm) || (barFire && bm < 1 && k > 0.05)) && this.beamGap <= 0) {
-      const slot = this.beams.find((b) => b.light < 0);
+      const slot = this.beams.find((b) => !b.held && b.light < 0);
       if (slot) {
         const used = new Set(this.beams.map((b) => b.light));
         for (let n = 0; n < N_LIGHTS; n++) {
@@ -379,15 +414,36 @@ export class BackRoadLights {
         }
       }
     }
+    // drop: held beams lowered onto the field at a steady rate (never on beats), each down for a few seconds
+    const hr = m.held * k;
+    if (hr > 0.02 && (this.heldClock -= dt * hr) <= 0) {
+      this.heldClock = 1.6 + Math.random() * 1.4;
+      const slot = this.beams.find((b) => b.held && b.light < 0);
+      if (slot) {
+        const used = new Set(this.beams.map((b) => b.light));
+        for (let n = 0; n < N_LIGHTS; n++) {
+          const i = (this.beamRR + n) % N_LIGHTS, L = this.lights[i];
+          if (used.has(i) || L.pres < 0.7 || L.pos[2] > FENCE_Z - 3 || CAM[2] - L.pos[2] > 125 || L.pos[1] > 26) continue;
+          slot.light = i; slot.ext = 0; slot.hold = 3 + Math.random() * 2.5; slot.hl = 0.5 + 0.4 * k; slot.hv = 0;
+          this.beamRR = i + 1;
+          break;
+        }
+      }
+    }
     let sum = 0;
     for (const b of this.beams) {
-      const v = b.env.update(dt);
+      let v = b.env.update(dt);
+      if (b.held) {
+        b.hold -= dt;
+        b.hv = damp(b.hv, b.hold > 0 ? b.hl : 0, 0.5, dt);
+        v = Math.max(v, b.hv);
+      }
       if (b.light < 0) { b.v = 0; continue; }
       const L = this.lights[b.light];
       b.ext = damp(b.ext, v > 0.06 ? 1 : 0, 0.22 + 0.45 * (1 - d.motion), dt);
       b.v = v * ease(b.ext * 1.4) * L.pres;
       L.dip = Math.max(L.dip, b.ext * (0.6 + 1.2 * d.motion));
-      if (v < 0.02 && b.ext < 0.03) { b.light = -1; b.ext = 0; b.v = 0; continue; }
+      if (v < 0.02 && b.ext < 0.03 && b.hold <= 0) { b.light = -1; b.ext = 0; b.v = 0; b.hv = 0; continue; }
       sum += b.v;
     }
     this.beamSum = sum;
@@ -395,7 +451,7 @@ export class BackRoadLights {
 
     // ---- farmhouse windows: one or two warm at idle, more with the swell; waver under a beam
     for (const w of this.win) {
-      const target = Math.max(w.idle, K.stage(k, w.on, w.on + 0.15) * 0.9);
+      const target = Math.max(w.idle, K.stage(kWin, w.on, w.on + 0.15) * 0.9);
       w.base = damp(w.base, target, 0.8, dt);
       const waver = 1 - Math.min(0.25, sum * 0.18 * d.accent) * (0.5 + 0.5 * Math.sin(t * 7 + w.n * 2.3));
       w.level = w.base * (0.94 + 0.06 * br) * waver;
