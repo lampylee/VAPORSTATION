@@ -82,6 +82,8 @@ export class ShowUI {
       el('div', { className: 'seg-row' }, el('span', { textContent: 'Hold at' }), el('div', { className: 'seg' }, ...this.segs)),
       el('div', { className: 'tempo' }, this.tapBtn, this.lockBtn),
       this.outputBtn,
+      this.healthLine = el('div', { className: 'health-line', title: 'Health: input signal, graphics, projector, detail level, skipped environments, audio' },
+        el('i'), this.healthText = el('span', { textContent: 'OK' })),
       this.rows.conductor, this.rows.dropSwitch,
       fold('Fine-tune: flash, fade, tempo',
         this.rows.strobeSafe, this.rows.flashAmount, this.rows.blackoutTime,
@@ -93,6 +95,12 @@ export class ShowUI {
   }
 
   refresh() { for (const [k, r] of Object.entries(this.rows)) r.set(this.s[k]); this.update(); }
+
+  /** Health light (the operator view's, for when the panel is up). hl: { level: 'ok' | 'amber' | 'red', text } */
+  setHealth(hl) {
+    if (this.healthLine.dataset.level !== hl.level) this.healthLine.dataset.level = hl.level;
+    if (this.healthText.textContent !== hl.text) this.healthText.textContent = hl.text;
+  }
 
   /** Projector output state: 'none' | 'open' | 'lost'. */
   setOutput(state) {
