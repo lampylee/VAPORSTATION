@@ -15,6 +15,9 @@
 // so it never jumps), the sky closes, the fog darkens under it, and windows and
 // lamps come on street by street as its shadow edge passes. Beats: one faint
 // pulse of light runs the length of the underside, front to back.
+// Song sections (K.Moods, Conductor on): intro / breakdown / outro hold the shape far off with the
+// sky open; a build lets it slide overhead; the drop keeps it overhead, puts every town light on and
+// darkens the fog. The hull's own speed limit means a wrong guess is only ever a slow drift.
 // Light (Kit v7): the street lamps are point lights (K.LightSet, best 4 near the view), so as the
 // hull darkens the town, each lamp that comes on lights the street and house fronts round it.
 import { mat4, lerp, clamp, damp } from '../gfx/math.js';
@@ -229,21 +232,34 @@ export class UnderTheHull {
 
     this.cam = new DriftRig({ fov: 62, far: 720, idleSpeed: 0.011, activeSpeed: 0.016, bassBoost: 0, fovPunch: 0.6, nudge: 0.03, rollKick: 0.004 });
     this.breath = new K.Breath({ beats: 16, period: 14 });
-    this.time = 0; this.k = 0; this.hp = 0; this.hv = 0; this.cover = 0; this.edge = HULL_FAR + HULL_L / 2;
+    this.highE = 0; this.highS = 0; this.bm = 1; this.time = 0; this.k = 0; this.hp = 0; this.hv = 0; this.cover = 0; this.edge = HULL_FAR + HULL_L / 2;
     this.hullM = mat4.create(); this.m = mat4.create();
     this.col = { fog: [0, 0, 0], a: [0, 0, 0], b: [0, 0, 0], zen: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], tint: [1, 1, 1], hull: [0, 0, 0], glow: [1, 1, 1], pool: [0, 0, 0], lamp: [0, 0, 0], focus: [0, 0, 0] };
     this.lights = new K.LightSet({ reach: 12 });
+    // song sections: hullGate multiplies the hull's approach drive (clamped 0..1); allOn lights the whole
+    // town one by one (× k); fogDark darkens the air further (no light added)
+    this.moods = new K.Moods({
+      still:  { hullGate: 0.25, allOn: 0, fogDark: 0 },
+      base:   { hullGate: 1,    allOn: 0, fogDark: 0 },
+      gather: { hullGate: 1.5,  allOn: 0, fogDark: 0.25 },
+      full:   { hullGate: 1.8,  allOn: 1, fogDark: 1 },
+    }, { dropEase: 4 });
+    this.allOn = 0; this.fogDark = 0;
+    this.wins.forEach((W) => { W.rank = K.rand2(W.seed, 4, 13) * 0.8; });
+    this.lamps.forEach((L, i) => { L.rank = K.rand2(i, 2, 17) * 0.6; });
     this._updateHull(0);
     this._updateLights(0, 0);
   }
 
   update(a, k, dt) {
     this.a = a; this.k = k; this.time += dt; this.dt = dt;
+    const m = this.moods.update(a, dt);
+    this.allOn = m.allOn; this.fogDark = m.fogDark;
     const d = K.drive(a, k), t = this.time;
     const b = this.breath.update(a, dt);
 
-    // the hull's approach: a smoothed, speed-limited follow of intensity + song energy
-    const target = clamp(k * 0.8 + d.energy * 0.35);
+    // the hull's approach: a smoothed, speed-limited follow of intensity + song energy (× the section's gate)
+    const target = clamp((k * 0.8 + d.energy * 0.35) * m.hullGate);
     const want = clamp((target - this.hp) / 5, -0.035, 0.035);
     this.hv = damp(this.hv, want, 2.5, dt);
     this.hp = clamp(this.hp + this.hv * dt);
@@ -259,11 +275,13 @@ export class UnderTheHull {
     if ((this.nextIdlePulse -= dt) <= 0) { this.nextIdlePulse = 10 + Math.random() * 6; this.pulses.trigger(-3, 0.3, 6); }
     this.pulses.update(dt);
 
+    this.bm = d.beatMotion;
     this._updateLights(t, b);
 
     const eye = this.cam.eye;
+    this.highE = damp(this.highE, d.high, 0.6, dt); this.highS = lerp(this.highE, d.high, d.beatMotion);
     this.mist.update(dt, [eye[0], 0.4, eye[2] - 30], { amount: K.swell(this.cover, 0.8, 1), speed: 0.35 });
-    this.dust.update(dt, eye, { amount: K.stage(this.cover, 0.3, 0.9) * 0.7, speed: 0.4 + d.high * 0.4, wind: [0.15, 0.05] });
+    this.dust.update(dt, eye, { amount: K.stage(this.cover, 0.3, 0.9) * 0.7, speed: 0.4 + this.highS * 0.4, wind: [0.15, 0.05] });
   }
 
   _updateHull(t) {
@@ -282,14 +300,14 @@ export class UnderTheHull {
     const k = this.k, edge = this.edge, eye = this.cam.eye;
     // windows: switch on as the shadow edge passes them (plus a per-house delay), never above k's reach
     this.wins.forEach((W, i) => {
-      const on = K.stage(edge - W.z - W.off, 0, 16) * K.stage(k, 0.05, 0.3);
+      const on = Math.max(K.stage(edge - W.z - W.off, 0, 16), K.stage(this.allOn, W.rank, W.rank + 0.2)) * K.stage(k, 0.05, 0.3);
       W.level = Math.max(W.idle ? 0.55 : 0.07, on * (0.85 + 0.15 * Math.sin(t * 0.3 + W.ph)));
       this.winInst.set(i, W.x, W.y, W.z, 1, W.ry, W.level);
     });
     this.winInst.upload(this.wins.length);
     // lamps: same, with a short sodium flicker while warming up
     this.lamps.forEach((L, i) => {
-      const s = K.stage(edge - L.z, -10, 14) * K.stage(k, 0.05, 0.25);
+      const s = Math.max(K.stage(edge - L.z, -10, 14), K.stage(this.allOn, L.rank, L.rank + 0.4)) * K.stage(k, 0.05, 0.25);
       const flick = s > 0.02 && s < 0.9 ? 0.75 + 0.25 * Math.sin(t * 23 + L.ph * 5) * Math.sin(t * 7.3 + L.ph) : 1;
       L.level = Math.max(L.idle ? 0.4 : 0, s * flick) * (0.92 + 0.08 * b);
       const near = K.fadeIn(Math.hypot(L.hx - eye[0], L.z - eye[2]), 4, 14);   // no giant glow right over the lens
@@ -300,8 +318,8 @@ export class UnderTheHull {
     // keel strip in hull-local space, far end (-z) is s = 0
     for (let i = 0; i < N_KEEL; i++) {
       const z = -HULL_L * 0.44 + (i / (N_KEEL - 1)) * HULL_L * 0.88;
-      const lv = 0.3 + 0.1 * b + Math.min(1.3, this.pulses.at(i) * 2.2);
-      this.keel.set(i, 0, -9, z, 4 + lv * 3, 0, lv);
+      const base = 0.3 + 0.1 * b, pl = Math.min(1.3, this.pulses.at(i) * 2.2);   // the pulse's light stays; its size swell is a beat movement
+      this.keel.set(i, 0, -9, z, 4 + (base + pl * this.bm) * 3, 0, base + pl);
     }
     this.keel.upload(N_KEEL);
     this.navLights.forEach(([x, y, z], i) => {
@@ -317,6 +335,7 @@ export class UnderTheHull {
     mixColor(col.a, P.role('fog'), P.color(R(3, 2)), 0.8);
     mixColor(col.b, P.color(R(3, 0)), P.role('fog'), 0.45);
     mixColor(col.fog, col.a, col.b, c);
+    mixColor(col.fog, col.fog, P.color(R(3, 0)), this.fogDark * 0.4);   // the drop: darker still (never black)
     r.clear(col.fog);
     this.cam.apply(r);
     mixColor(col.zen, P.color(R(3, 2)), P.color(R(1, 1)), 0.2);
@@ -324,7 +343,7 @@ export class UnderTheHull {
     this.sky.draw(r, this.cam.eye, { horizon: col.fog, zenith: col.zen, brightness: lerp(0.8, 0.6, c), starLevel: 0.12 * (1 - c), cloudDrift: this.time * 0.003 });
 
     // the hull: no fog (it is far beyond the town fog), but it melts into the haze with distance
-    r.setFog(col.fog, 12, lerp(105, 85, c));
+    r.setFog(col.fog, 12, lerp(105, 85, c) - this.fogDark * 15);
     col.hull[0] = col.hull[1] = col.hull[2] = lerp(1, 0.75, c);   // nothing lights its underside
     r.draw(this.hullMesh, this.hullM, { texture: this.hullTex, unlit: true, fog: false, fade: [260, 900], tint: col.hull });
     const kb = lerp(0.6, 1, Math.max(k, c));

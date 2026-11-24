@@ -177,6 +177,7 @@ export class ColourWell {
 
     this.breath = new K.Breath({ beats: 8, period: 9 });
     this.rimPulse = new K.Envelope(0.6);
+    this.bar = new K.BarClock({ minGap: 1 });   // Gentle: the colour's ring runs out once per bar, not per beat
     this.front = FRONT_IDLE; this.shaft = 0;
     this.time = 0; this.k = 0; this.a = null;
     this.col = { fog: [0, 0, 0], tint: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], glow: [0, 0, 0], zen: [0, 0, 0], win: [0, 0, 0], w: [1, 1, 1], tmp: [0, 0, 0], dim: [0, 0, 0], one: [1, 1, 1] };
@@ -208,7 +209,8 @@ export class ColourWell {
 
   update(a, k, dt) {
     this.a = a; this.k = k; this.time += dt;
-    const d = K.drive(a, k);
+    const d = K.drive(a, k), bm = d.beatMotion;
+    const midA = lerp(d.energy, d.mid, bm), highA = lerp(d.energy, d.high, bm), lvlA = lerp(d.energy, d.level, bm);   // Gentle: slow energy, Punchy: the raw bands
 
     // the blight front glides with intensity (never jumps), and sinks back when it falls
     const target = lerp(FRONT_IDLE, FRONT_FULL, K.stage(k, 0.05, 0.95));
@@ -220,7 +222,7 @@ export class ColourWell {
     const cam = this.cam;
     cam.update(a, k, dt);
     this.camPhase += cam.speed * dt;
-    this.camR = damp(this.camR, CAM_R - d.bass * 1.2, 0.6, dt);
+    this.camR = damp(this.camR, CAM_R - lerp(d.energy, d.bass, bm) * 1.2, 0.6, dt);
     this.camLift = damp(this.camLift, this.shaft, 1.2, dt);
     const ang = Math.sin(this.camPhase) * 0.95;
     cam.eye[0] = Math.sin(ang) * this.camR; cam.eye[2] = Math.cos(ang) * this.camR;
@@ -228,12 +230,13 @@ export class ColourWell {
     cam.target[0] = 0; cam.target[1] = 1.3 + this.camLift * 6.5; cam.target[2] = -2;
 
     // beat: a ring of the colour runs out across the field
-    if (d.beat) {
+    const barFire = this.bar.update(a, dt);
+    if (bm >= 0.5 ? d.beat : barFire && k > 0.05) {   // Punchy / Medium: every beat; Gentle: once per bar
       const amp = clamp(0.5 + 0.5 * k) * Math.min(1, d.accent);
       const size = lerp(18, 70, k);
       this.ripples.spawn(0, 0.14, 0, size, amp);
-      this.rimPulse.trigger(k);
     }
+    if (d.beat) this.rimPulse.trigger(k);   // the rim's brightness keeps pulsing on every beat
     this.rimPulse.update(dt);
     this.ripples.update(dt);
 
@@ -244,7 +247,7 @@ export class ColourWell {
       b.blend = K.stage(F, b.lo - 2, Math.min(b.hi, 60) + 4) * 0.92;
       const touched = K.stage(F, b.lo, mid + 3);
       b.glow = touched * (0.25 + 0.35 * k + 0.25 * this.breath.v * k) + this.ripples.at(mid, 0, 5) * 0.9;
-      b.sway = 0.004 + touched * (0.012 + d.mid * 0.07) * a.motion;
+      b.sway = 0.004 + touched * (0.012 + midA * 0.07) * a.motion;
       b.trees.forEach((t, i) => {
         // trees nearest the front (and the passing beat ring) glow hardest
         const g = b.glow * (0.6 + 0.4 * K.stage(F - t.d, -3, 8)) + this.ripples.at(t.x, t.z, 5) * 0.7;
@@ -257,8 +260,8 @@ export class ColourWell {
     // motes rise over the blighted ground; sparks pour up the shaft
     this.center[1] = 0;
     this.motes.p.flickerRate = 1.4 + d.high * 6;
-    this.motes.update(dt, this.center, { amount: 0.05 + 0.9 * K.stage(k, 0.08, 0.8), speed: 0.6 + d.level * 0.8 });
-    this.sparks.update(dt, this.center, { amount: 0.04 + 0.9 * this.shaft, speed: 0.5 + this.shaft * 0.8 + d.high * 0.4 });
+    this.motes.update(dt, this.center, { amount: 0.05 + 0.9 * K.stage(k, 0.08, 0.8), speed: 0.6 + lvlA * 0.8 });
+    this.sparks.update(dt, this.center, { amount: 0.04 + 0.9 * this.shaft, speed: 0.5 + this.shaft * 0.8 + highA * 0.4 });
   }
 
   render(r) {
@@ -329,10 +332,11 @@ export class ColourWell {
 
     // the colour in the well: rim glow, halo, then the shaft at the peak
     const rim = (0.3 + 0.25 * this.breath.v) * lerp(1, 1.6, k) + this.rimPulse.v * 0.6;
-    mat4.trs(this.rimM, 0, 0.9, 0, -Math.PI / 2, 0, 0, 2.3 + rim * 0.4, 2.3 + rim * 0.4, 1);
+    const rimS = rim - this.rimPulse.v * 0.6 * (1 - d.beatMotion);   // size follows Feel; brightness keeps the full beat pulse
+    mat4.trs(this.rimM, 0, 0.9, 0, -Math.PI / 2, 0, 0, 2.3 + rimS * 0.4, 2.3 + rimS * 0.4, 1);
     col.tmp[0] = col.tmp[1] = col.tmp[2] = Math.min(1.3, rim);
     r.draw(this.flat, this.rimM, { texture: this.glowTex, unlit: true, additive: true, depthWrite: false, fog: false, tint: col.tmp });
-    this.glowInst.set(0, 0, 1.4, 0, 1.6 + rim * 1.4 + sh * 3, 0, 0.35 + rim * 0.35, 0, 1);
+    this.glowInst.set(0, 0, 1.4, 0, 1.6 + rimS * 1.4 + sh * 3, 0, 0.35 + rim * 0.35, 0, 1);
     this.glowInst.upload(1);
     r.drawInstanced(this.flat, this.glowInst, { texture: this.glowTex, billboard: 2, unlit: true, additive: true, depthWrite: false, fog: false, tint: col.one });
     if (sh > 0.005) {

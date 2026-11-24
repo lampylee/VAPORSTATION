@@ -17,7 +17,7 @@ Plan: `ROADMAP.md`. **Current status, open items and next steps: `docs/HANDOFF.m
 - `test.html`: bare pipeline test scene.
 - `?kiosk` (what `kiosk.bat` opens): no panel / cursor, live input on. `sw.js` caches the app for offline use (network first, so edits still show; `?nosw` skips it). `?selftest`: pre-show check (short bench of every style + GPU / audio / MIDI / offline / power report; rewrites the heavy list).
 - Projector: **W** (or the Show card button) opens `output.html`, a second window with only the picture; the laptop then shows the operator view. `kiosk.bat dual` (`?kiosk&dual`) opens it by itself (pop-ups allowed, window management pre-granted). Click the projector window once for fullscreen.
-- Node tests: `node tools/test-output.mjs` (frame guard, health, screen pick), `tools/test-manager.mjs`, `tools/test-conductor.mjs`.
+- Node tests: `node tools/test-output.mjs` (frame guard, health, screen pick), `tools/test-manager.mjs`, `tools/test-conductor.mjs`, `tools/test-shape.mjs` (song shape, groove, beatMotion).
 - `http://localhost:8080/?bench`: cycles every style idle → active with synthetic audio, logs fps / CPU ms / draws / tris via `console.table` and `window.benchResults`.
 - The Claude browser pane blocks microphone access; test live input in real Chrome.
 
@@ -26,8 +26,8 @@ Plan: `ROADMAP.md`. **Current status, open items and next steps: `docs/HANDOFF.m
 - `js/gfx/ps1.js` — low-res FBOs, vertex snap, affine UVs, per-vertex fog/light, CLUT palette lookup, dissolve + dither composite, nearest upscale, CRT.
 - `js/gfx/textures.js` — procedural **indexed** textures (palette slot per pixel).
 - `js/palette/` — palette model (4 ramps × 4 shades + roles), live crossfading palettes, library, user store, editor UI.
-- `js/kit/` — world kit: sky, terrain, particles, sprites, props, camera rigs, swell helpers, GLB loader, fantasy lights (fire, candles, lightning). The pipeline has up to 4 per-vertex point lights (`r.setPointLights`).
-- `js/show/` — show control between audio and styles (hold, freeze, blackout, big-moment flash, strobe-safe beat limiter, tap tempo → `audio.bpm/beatPhase/bar`), the Conductor (`conductor.js`: intensity follows the song's shape, `audio.section/build/drop/songTime`, auto tempo; `node tools/test-conductor.mjs`), Web MIDI with learn, panel UI incl. environment browser thumbnails. Projector output: the renderer draws into an OffscreenCanvas and each frame goes to the current sink (`output.js`: laptop `#view` or the projector window, falls back to the laptop when it's lost); `output-logic.js` (frame guard: either window's rAF drives, health line, screen pick); `operator.js` (operator view); `output-page.js` (the projector page).
+- `js/kit/` — world kit: sky, terrain, particles, sprites, props, camera rigs, swell helpers, `moods.js` (`K.Moods`: section-crossfaded named states), GLB loader, fantasy lights (fire, candles, lightning). The pipeline has up to 4 per-vertex point lights (`r.setPointLights`).
+- `js/show/` — show control between audio and styles (hold, freeze, blackout, big-moment flash, strobe-safe beat limiter, tap tempo → `audio.bpm/beatPhase/bar`), the Conductor (`conductor.js`: intensity follows the song's shape, `audio.section/build/drop/songTime`, auto tempo; `node tools/test-conductor.mjs`), `shape.js` (song shape: section → eased `audio.shape` close / pace / fog / weather / phrase; `groove` and `beatMotion` come from the Feel `PROFILES` in `control.js`; at Gentle nothing moves per beat), Web MIDI with learn, panel UI incl. environment browser thumbnails. Projector output: the renderer draws into an OffscreenCanvas and each frame goes to the current sink (`output.js`: laptop `#view` or the projector window, falls back to the laptop when it's lost); `output-logic.js` (frame guard: either window's rAF drives, health line, screen pick); `operator.js` (operator view); `output-page.js` (the projector page).
 - `js/setlist/` — setlists (song → palette + environment pool), cue-until-silence stepping, panel + editor.
 - `js/safety/` — gig safety: performance governor (steps detail down, marks heavy styles) and watchdog (WebGL context loss/restore, audio resume + input reopen). The style manager skips any style that throws.
 - `js/styles/` — one file per environment + `index.js` registry + `manager.js` (crossfades, idle auto-switch, palettes).
@@ -48,6 +48,7 @@ export class MyStyle {
   update(audio, intensity, dt) {}     // audio: level bass mid high (0..1), beat, beatPulse, beatCount
   render(r) {}                        // clear, camera, fog, light, draw
   dispose(r) {}
+  enter() {}                          // optional: coming on screen; own K.Moods / rigs are snapped by the manager first
 }
 ```
 Register it in `js/styles/index.js`. Verify idle (intensity 0) and full intensity in the browser, plus `?bench`.

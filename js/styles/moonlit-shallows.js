@@ -155,7 +155,8 @@ export class MoonlitShallows {
     if (d.beat) {
       const i = Math.floor(K.rand2(a.beatCount || 0, t, 3) * N_DRIFT), D = this.dr[i];
       this.pulses.trigger(i, 0.5 + k * 0.4, 3);
-      this.ripples.spawn(D.x, W, D.z, 3 + k * 2.5);
+      // the ring: every beat at Punchy, once a bar at Gentle
+      if (d.beatMotion > 0.5 || ((a.bpm || 0) > 0 && Number.isFinite(a.bar) ? (a.bar | 0) === 0 : (a.beatCount || 0) % 4 === 0)) this.ripples.spawn(D.x, W, D.z, 3 + k * 2.5);
     }
     // idle life: a drifter dips now and then
     if ((this.nextIdle -= dt) <= 0) {
@@ -173,8 +174,9 @@ export class MoonlitShallows {
       const gx = Math.cos(D.ga + t * 0.03) * D.gr, gz = -2 + Math.sin(D.ga + t * 0.03) * D.gr * 0.45;
       D.x = lerp(D.hx + sway, gx, gather); D.z = lerp(D.hz + Math.cos(t * 0.11 + D.ph), gz, gather);
       const lit = Math.max(D.idle ? 0.35 : 0.05, K.stage(k, D.on, D.on + 0.2));
-      D.level = lit * (0.75 + 0.25 * b) + this.pulses.at(i) * 0.5;
-      const size = 1.1 + D.level * 1.3, y = W + 0.25 + size * 0.55 + Math.sin(t * 0.55 + D.ph) * 0.12;   // centre above the waterline so the clip never cuts the glow
+      const pl = this.pulses.at(i) * 0.5;
+      D.level = lit * (0.75 + 0.25 * b) + pl;
+      const size = 1.1 + (D.level - pl * (1 - d.beatMotion) + (1 - d.beatMotion) * d.groove * 0.12) * 1.3, y = W + 0.25 + size * 0.55 + Math.sin(t * 0.55 + D.ph) * 0.12;   // centre above the waterline so the clip never cuts the glow
       this.glows.set(i, D.x, y, D.z, size, 0, D.level, 0, 1);
     });
     this.glows.upload(N_DRIFT);

@@ -14,6 +14,9 @@
 // Peak (top of intensity, a big song): light floods the scene, the lamp and ground light
 // near max and the fog lifts toward the light atmosphere shade. All smooth, no cuts.
 // Beat: the swarm flutters outward (a spring, scaled by Feel) and settles back.
+// Song sections (K.Moods, Conductor on): intro / breakdown / outro = few moths, the lamp dim, the
+// camera drifting in close; a build tightens the swarm round the lamp; the drop floods the light
+// and lifts the fog. Conductor off = base (today's look).
 import { mat4, lerp, clamp, damp } from '../gfx/math.js';
 import { scaleColor, mixColor } from '../gfx/color.js';
 import { box, merge, GeoBuilder } from '../gfx/geometry.js';
@@ -171,33 +174,49 @@ export class MothLamp {
 
     this.cam = new K.OrbitRig({ center: [0, 2.1, 0], radius: CAM_R, height: 1.3, bob: 0.25, pushIn: 0, idleSpeed: 0.012, activeSpeed: 0.028, bassBoost: 0, fovPunch: 0.6, nudge: 0.03, rollKick: 0, fov: 52, far: 220 });
     this.breath = new K.Breath({ beats: 8, period: 12 });
-    this.scatter = new K.Spring(2.2);
+    this.scatter = new K.Spring(2.2); this.loose = 0; this.highE = 0; this.highS = 0;
     this.time = 0; this.k = 0; this.E = 0; this.flood = 0; this.count = 10; this.lamp = 0.4; this.poolR = 3;
     this.mat = mat4.create();
     this.col = { fog: [0, 0, 0], hi: [0, 0, 0], zen: [0, 0, 0], tint: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], glass: [0, 0, 0], pool: [0, 0, 0], one: [1, 1, 1], grass: [0, 0, 0], lamp: [0, 0, 0] };
     // the lamp as a point light (Kit v7): it lights its own post from the head down, the ground and the fence
     this.lampLight = [{ pos: [0, HEAD_Y - 0.25, 0], color: this.col.lamp, radius: 8 }];
+    // song sections: gates multiply the k fed into today's curves (clamped 0..1); swarmR scales the
+    // orbit radius; camIn pulls the camera orbit in (a camera position: slow, eased twice)
+    this.moods = new K.Moods({
+      still:  { countGate: 0.3, lampGate: 0.45, floodGate: 0.6,  swarmR: 1.12, camIn: 2.5 },
+      base:   { countGate: 1,   lampGate: 1,    floodGate: 1,    swarmR: 1,    camIn: 0 },
+      gather: { countGate: 1.3, lampGate: 1.1,  floodGate: 1.05, swarmR: 0.72, camIn: 0.8 },
+      full:   { countGate: 1.3, lampGate: 1.3,  floodGate: 1.65, swarmR: 0.9,  camIn: 0 },
+    }, { dropEase: 4, slow: ['camIn'] });
+    this.camIn = null; this.flCam = 0;
   }
+
+  /** Coming on screen (StyleManager.enter, after its moods / rig snap): the mood keys it eases a second time start at the current mood. */
+  enter() { this.camIn = null; }
 
   update(a, k, dt) {
     dt = Math.min(dt, 0.1);
     this.k = k; this.time += dt;
+    const m = this.moods.update(a, dt);
     const t = this.time, d = K.drive(a, k);
     const b = this.breath.update(a, dt);
     // slow, big things: energy (how big the song is), smoothed again
     this.E = damp(this.E, clamp(a.energy ?? a.level ?? 0), 1.5, dt);
-    const floodTarget = K.stage(k, 0.62, 1) * lerp(0.45, 1, K.stage(this.E, 0.35, 0.8));
+    const floodTarget = K.stage(clamp(k * m.floodGate), 0.62, 1) * lerp(0.45, 1, K.stage(this.E, 0.35, 0.8));
     this.flood = damp(this.flood, floodTarget, 1.4, dt);
     const fl = this.flood;
 
-    this.cam.radius = lerp(CAM_R, CAM_R - 1.5, k * 0.5 + fl * 0.5);
+    // camera orbit: the flood's pull-in and the mood's camIn, both eased once more (never a step)
+    if (this.camIn === null) { this.camIn = m.camIn; this.flCam = fl; }
+    this.camIn = damp(this.camIn, m.camIn, 2, dt); this.flCam = damp(this.flCam, fl, 2, dt);
+    this.cam.radius = lerp(CAM_R, CAM_R - 1.5, k * 0.5 + this.flCam * 0.5) - this.camIn;   // ≥ 9.5, and OrbitRig's close factor (× 1 - 0.25 · 0.8 in a breakdown) takes the orbit to ≥ 7.6: the grass is clear out to 6
     this.cam.update(a, k, dt);
     this.cam.eye[1] += b * 0.35;
     this.ground.follow(this.cam.eye[0], this.cam.eye[2]);
 
     // lamp: dim and slightly uneven at idle, steady and bright with the swell, near max at the peak
     const waver = (1 - k) * 0.06 * (K.noise2(t * 0.7, 3.1) - 0.5) * 2;
-    this.lamp = damp(this.lamp, lerp(0.42, 0.85, k) * (0.94 + 0.06 * b) + fl * 0.45 + waver + d.mid * 0.08, 0.5, dt);
+    this.lamp = damp(this.lamp, lerp(0.42, 0.85, clamp(k * m.lampGate)) * (0.94 + 0.06 * b) + fl * 0.45 + waver + d.mid * 0.08, 0.5, dt);
     this.poolR = damp(this.poolR, lerp(3, 5.6, k) + fl * 1.8 + b * 0.3, 0.8, dt);   // ≤ 7.7: on the flat ground, clear of the lens
 
     // halos: a core glow at the head and a wide soft one that grows to the flood
@@ -216,10 +235,12 @@ export class MothLamp {
     this.grass.upload(this.g.length);
 
     // moth swarm: count grows one by one, orbit tightens with the swell, flutters on beats
-    if (d.beat) this.scatter.kick(1.6 * (0.4 + 0.6 * k));
-    const sc = Math.max(0, this.scatter.update(dt));
-    this.count = damp(this.count, lerp(10, MAX_MOTHS, K.stage(k, 0, 0.85)), 1.2, dt);
-    const rad = lerp(3.3, 1.9, K.swell(k * 0.7 + fl * 0.3, 0, 1)), speed = lerp(0.7, 1.15, k);
+    // (at Gentle the swarm only loosens slowly with the groove, never a burst per beat)
+    if (d.beat) this.scatter.kick(1.6 * (0.4 + 0.6 * k) * d.beatMotion);
+    this.loose = damp(this.loose, d.groove * (1 - d.beatMotion) * 0.3, 0.8, dt);
+    const sc = Math.max(0, this.scatter.update(dt)) + this.loose;
+    this.count = damp(this.count, lerp(10, MAX_MOTHS, K.stage(clamp(k * m.countGate), 0, 0.85)), 1.2, dt);
+    const rad = lerp(3.3, 1.9, K.swell(k * 0.7 + fl * 0.3, 0, 1)) * m.swarmR, speed = lerp(0.7, 1.15, k);
     let n = 0;
     for (let i = 0; i < MAX_MOTHS; i++) {
       const pres = clamp(this.count - i);
@@ -238,7 +259,8 @@ export class MothLamp {
     }
     this.moths.upload(n);
 
-    this.dust.update(dt, [0, 2.4, 0], { amount: K.swell(k, 0.2, 0.75) + fl * 0.25, speed: 0.5 + d.high * 0.5 });
+    this.highE = damp(this.highE, d.high, 0.6, dt); this.highS = lerp(this.highE, d.high, d.beatMotion);   // mote speed: eased unless Punchy
+    this.dust.update(dt, [0, 2.4, 0], { amount: K.swell(k, 0.2, 0.75) + fl * 0.25, speed: 0.5 + this.highS * 0.5 });
   }
 
   render(r) {

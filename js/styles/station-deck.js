@@ -19,7 +19,7 @@
 // (and on the alarm) a red emergency light glows low in the corridor instead (K.LightSet, best 4).
 // Colours: base = gunmetal hull, secondary = teal screens/planet, accent =
 // warning red/amber (emergency strips, beacons, hazard trim), atmosphere = navy.
-import { mat4, lerp, clamp, hash } from '../gfx/math.js';
+import { mat4, lerp, damp, clamp, hash } from '../gfx/math.js';
 import { scaleColor, addColor, mixColor } from '../gfx/color.js';
 import { GeoBuilder, box, flatNormals } from '../gfx/geometry.js';
 import { solid } from '../gfx/textures.js';
@@ -324,7 +324,7 @@ export class StationDeck {
     this.alarm = new K.Envelope(0.24);
     this.slam = new K.Spring(5);
     this.wave = new K.History(90);
-    this.time = 0; this.k = 0; this.d = null;
+    this.time = 0; this.k = 0; this.d = null; this.bassS = 0; this.lvlS = 0; this.stripT = 0;
     this.m = mat4.create();
     this.col = { fog: [0, 0, 0], space: [0, 0, 0], zen: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], tmp: [0, 0, 0], lamp: [0, 0, 0], one: [1, 1, 1], strip: [0, 0, 0], holo: [0, 0, 0], pLamp: [0, 0, 0], pRed: [0, 0, 0], focus: [0, 0, 0] };
     this.lights = new K.LightSet({ reach: 6, cap: 32 });
@@ -335,13 +335,19 @@ export class StationDeck {
     const d = this.d = K.drive(a, k);
     this.cam.update(a, k, dt);
     // hum vibration: the hull buzzes with the bass
-    const e = this.cam.eye, t = this.time, hum = d.bass * 0.016;
+    // (Gentle: bass is eased and the buzz is a faint tremor, so the camera stays calm; Punchy is unchanged)
+    const bm = d.beatMotion;
+    this.bassS = damp(this.bassS, d.bass, 0.5, dt);
+    this.lvlS = damp(this.lvlS, d.level, 0.5, dt);
+    const e = this.cam.eye, t = this.time, hum = lerp(this.bassS * 0.35, d.bass, bm) * 0.016;
     e[0] += Math.sin(t * 53) * hum; e[1] += Math.sin(t * 47 + 1) * hum;
     this.cam.target[1] += 0.12 + Math.sin(t * 0.13) * 0.12;
-    if (d.beat) { this.alarm.trigger(k); this.slam.kick(13 * k); }
+    if (d.beat) { this.alarm.trigger(k); this.slam.kick(13 * k * bm); }
     this.alarm.update(dt); this.slam.update(dt);
-    this.wave.push(clamp(this.slam.x, 0, 1));
-    this.dust.update(dt, e, { amount: K.swell(k, 0.35, 0.9), speed: 0.5 + d.level, wind: [0, 0] });
+    // the doors' wave: Gentle sends a soft groove swing down the corridor instead of the beat slam
+    this.wave.push(clamp(lerp(d.groove * 0.35, this.slam.x, bm), 0, 1));
+    this.stripT += dt * (0.25 + k * 0.6);   // integrated: strip scroll rate follows k without the phase jumping
+    this.dust.update(dt, e, { amount: K.swell(k, 0.35, 0.9), speed: 0.5 + lerp(this.lvlS, d.level, bm), wind: [0, 0] });
   }
 
   /** Section power 0..1 for ring segment j (with a flicker while it comes on). */
@@ -436,7 +442,7 @@ export class StationDeck {
     r.drawInstanced(mesh.pool, inst.lamp, { texture: tex.pool, unlit: true, additive: true, tint: col.tmp });
     const sb = 0.55 + 0.25 * Math.sin(t * 1.1);
     col.strip[0] = col.strip[1] = col.strip[2] = sb;
-    r.drawInstanced(mesh.strip, inst.strip, { texture: tex.strip, unlit: true, additive: true, tint: col.strip, uvOffset: [-t * (0.25 + k * 0.6), 0] });
+    r.drawInstanced(mesh.strip, inst.strip, { texture: tex.strip, unlit: true, additive: true, tint: col.strip, uvOffset: [-this.stripT, 0] });
 
     for (let v = 0; v < 2; v++) r.updateTexture(tex.holo[v], drawHolo(this.holoGen[v], v, t + v * 3.7, boot, glitch, al));
     col.holo[0] = col.holo[1] = col.holo[2] = 0.9;

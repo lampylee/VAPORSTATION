@@ -17,6 +17,7 @@ export class AshfallTown {
   update(audio, intensity, dt) {}  // advance state only, no drawing
   render(r) {}                     // clear, camera, sky, fog, light, draws
   dispose(r) {}                    // free every mesh, texture, instance buffer
+  enter() {}                       // optional: coming on screen mid-song, see "Moods" below
 }
 ```
 
@@ -32,9 +33,18 @@ Register it in `js/styles/index.js` (append to `STYLES`; the index is its number
 
 ### Audio fields
 
-`update(audio, k, dt)` gets `level bass mid high` (0..1), `energy` (0..1, slow: how big the song is right now, a few seconds against a ~minute reference, so a chorus reads higher than the verse), `beat` (true on a beat frame), `beatPulse` (1 → 0, eased), `beatCount`, and from show control: `bpm` (0 when no tempo is tapped), `beatPhase` (0..1 through the current beat) and `bar` (0..3, beat within a 4-beat bar), filled from the Conductor's automatic tempo estimate when nothing is tapped. From the Conductor (Follow song, on by default): `section` (`intro` / `groove` / `build` / `drop` / `breakdown` / `outro`, '' when off), `build` (0..1, anticipation during a build-up), `drop` (true for one frame when a drop lands) and `songTime` (s). `k` itself already follows the song's shape (the top band, ~0.85-1, is reached on drops), so a reveal staged on `k` lands on the drop for free; `K.drive` passes `build` (× k) and `drop` through, and every kit camera rig narrows its FOV a little through a build and punches out on the drop. Use `bpm`/`beatPhase`/`bar` to phrase slow moves (e.g. a camera turn every 4 bars), and always fall back gracefully when `bpm` is 0. Beats already respect the strobe-safe limiter, so react to `beat` freely; don't build your own fast strobes.
+`update(audio, k, dt)` gets `level bass mid high` (0..1), `energy` (0..1, slow: how big the song is right now, a few seconds against a ~minute reference, so a chorus reads higher than the verse), `beat` (true on a beat frame), `beatPulse` (1 → 0, eased), `beatCount`, and from show control: `bpm` (0 when no tempo is tapped), `beatPhase` (0..1 through the current beat) and `bar` (0..3, beat within a 4-beat bar), filled from the Conductor's automatic tempo estimate when nothing is tapped. From the Conductor (Follow song, on by default): `section` (`intro` / `groove` / `build` / `drop` / `breakdown` / `outro`, '' when off), `build` (0..1, anticipation during a build-up), `drop` (true for one frame when a drop lands) and `songTime` (s). `k` itself already follows the song's shape (the top band, ~0.85-1, is reached on drops), so a reveal staged on `k` lands on the drop for free; `shape` (`close` -1..1, `pace`, `fog`, `weather`, `phrase`: the section's framing, eased over 4-8 s, neutral when the Conductor is off; kit rigs, fog and particles already read it), `groove` (0..1, a smooth swing on the beat, from `beatPhase` when a tempo is known; a swing, never a kick) and `beatMotion` (0 Gentle / 0.4 Medium / 1 Punchy: how much a beat may *move* things); `K.drive` passes `build` (× k) and `drop` through, and every kit camera rig narrows its FOV a little through a build and punches out on the drop. Use `bpm`/`beatPhase`/`bar` to phrase slow moves (e.g. a camera turn every 4 bars), and always fall back gracefully when `bpm` is 0. Beats already respect the strobe-safe limiter, so react to `beat` freely; don't build your own fast strobes.
 
 **Reactivity (Feel: Gentle / Medium / Punchy).** Show control reshapes the audio before your style sees it: at Gentle the bands are slowed and pulled toward `energy`, only strong beats arrive (about one a second) and `beatPulse` eases in and fades slowly. `K.Envelope` and `K.Spring` read `K.feel`, so kit beat flashes ease in, glow longer and are smaller, and kit camera kicks/FOV punches nearly vanish, with no code in your style. If you hand-roll a beat reaction, scale it yourself: flashes by `audio.accent` (decay times by `audio.decay`), camera/object motion by `audio.motion` (`K.drive` passes all three through). Drive big continuous things (speed, FOV, fog, light) from `energy` or smoothed bands, not straight from `bass`: a zoom that follows the kick drum is the jerkiest thing a scene can do. Check your style at Gentle **and** Punchy. Thumbnails for the environment browser call `update` with k = 0 and silent audio while the style is offscreen, so `update` must be safe to call before your style is ever shown.
+
+**Song-shape rules (calm motion).** At Gentle nothing moves per beat; motion follows `energy`, `groove`, bars and sections. When you hand-roll a beat reaction:
+- Beat *movement* (a hop, a position / scale bounce, a spring kick on `beat`) is multiplied by `d.beatMotion` (Gentle 0 / Medium 0.4 / Punchy 1). Beat *light* (glows, twinkles, flashes) is multiplied by `d.accent` as before. Never fold one into the other.
+- Where the motion is part of the world's look, blend instead of gating: `lerp(eased, raw, d.beatMotion)` gives a slow eased version at Gentle and your original at Punchy, so Punchy stays identical. `groove` or `energy` carry the "alive" feel at Gentle.
+- Never put an audio- or `k`-modulated frequency on absolute time (`sin(t * (1 + bass))` jumps whenever the rate changes). Integrate the phase (`ph += rate * dt`) and take the sine of that.
+- Gate beat values at the **source**, before they enter a kit object: a fire `burst`, particle `gust`, `Ripples.spawn`, `Pendulum` pump. Gating the drawn result afterwards leaves the object's own spring or ripple still moving. The ripple-gate snippet is copy-pasted in about five styles; a kit helper would be a good cleanup.
+- Once-a-bar events (a lightning bolt, a lantern ripple, a formation change) use `K.BarClock` at Gentle rather than every beat.
+- Drive positions from smoothed values (eased 0.4 s or more) or `energy`, not raw `d.bass` / `d.high`.
+- Camera rigs: `sway` (bar-phrased roll, rad; on `DriftRig`, `sway` is its lateral sway in units and the roll is `rig.swayRoll`) and `swayLift` (bar-phrased lift) replace beat kicks and scale with `k`; `shapeAmount` (default 1, 0 = off) scales how far the section's `close` and per-phrase `reframe` move the rig (`close` narrows / widens FOV about 10 % and moves the eye along a safe axis: orbit radius, dolly height, drift reach; sweep, path and grid rigs change FOV only), so lower it where framing would clip. Travel follows `energy`, not `bass`. A style that blends two rigs or calls `setCamera` itself must lerp the rigs' `camParams()` rather than read internals, or it loses sway and framing. Run `motionCheck` (see HANDOFF) at Gentle; the target is `maxAccel` <= 0.01 and `maxFovStep` <= 0.3.
 
 ## Palette ramps
 
@@ -66,7 +76,7 @@ r.setLight(dir, P.role('light') scaled, P.role('ambient') scaled);
 |---|---|---|
 | Noise | `fbm(x, z, {octaves, seed})`, `ridged()`, `noise2()`, `rand2(ix, iz, seed)` | deterministic; `rand2` for placement |
 | Swell | `swell(k, idle, active)`, `stage(k, from, to)`, `drive(audio, k)`, `Envelope`, `Spring`, `feel`, `Pendulum`, `History`, `fadeOut(d, near, far)`, `fadeIn` | `History` makes pulses travel through space; `Pendulum` actually swings (pump it with bass in phase with `.v`); `fadeOut` scales scattered things down at the edge |
-| Camera | `DollyRig(spline)`, `OrbitRig`, `SweepRig`, `PathRig(fn, {rollFn})`, `Spline(points)` | all have beat nudge, roll kick and FOV punch built in; `update(audio, k, dt)` then `apply(r)`. `rollFn: (s) => path.rollAt(s)` banks with a track |
+| Camera | `DollyRig(spline)`, `OrbitRig`, `SweepRig`, `PathRig(fn, {rollFn})`, `Spline(points)` | all have beat nudge, roll kick and FOV punch built in; `update(audio, k, dt)` then `apply(r)`. `rollFn: (s) => path.rollAt(s)` banks with a track. Beat kicks are off at Gentle (`beatMotion`); options `sway`, `swayLift`, `shapeAmount`; `camParams()` for blending rigs, see the song-shape rules |
 | Sky | `new Sky(r, {stars, moon, banded, moonTexture, clouds})`, `draw(r, eye, {horizon, zenith, brightness, starLevel, moonScale, cloudDrift})` | draw first; pass the fog colour as `horizon`. `moonTexture: K.sprites.moon({ ramp: 3 })` if the default accent glow reads wrong |
 | Terrain | `new Terrain(r, {size, cells, height, uvScale})`, `follow(x, z)`, `heightAt(x, z)`, `draw(r, opts)` | infinite, world-space UVs, Gouraud shading |
 | Particles | `new Particles(r, 'rain' \| 'snow' \| 'ash' \| 'embers' \| 'dust' \| 'fireflies' \| 'bubbles' \| 'petals' \| 'leaves' \| 'pollen' \| 'mist' \| 'drizzle' \| 'skyLanterns' \| 'starTwinkle', overrides)`, `update(dt, center, {amount, speed, wind})`, `draw(r, {brightness, opacity})` | one draw call each; `amount` 0..1 fades particles in/out. Presets with `spin` tumble (petals, leaves); `mist` draws big upright cards with screen-door `opacity`. Choose `center` and `area` so no particle can drift past the lens: a big sprite right at the camera fills the screen |
@@ -97,7 +107,30 @@ r.setLight(dir, P.role('light') scaled, P.role('ambient') scaled);
 | Dark fantasy (v6) | `new Fire(r, {pos, scale})` → `update(dt, {level, burst})`, `draw(r, {brightness})`, `.light`, `pointLight(color)`; `new Candles(r, {max})` → `set(i, x, y, z, h, level)`, `upload(n, dt)`, `draw(r)`, `groupLight()`; `new Lightning(r)` → `strike(from, to)`, `update(dt)`, `draw(r, {tint})`, `.flash` | flame cards + glows + embers + floor pool; candles never pop (level 0 shrinks the flame), pair with `Stager`; bolts with forks, gate them with `BarClock` and `audio.accent`, brighten sky / light by `.flash`. Reference: `js/styles/ember-vigil.js` |
 | Gothic (v6) | `props.gothicPier(h, r, {shafts, broken})`, `shapes.wallWithHole(w, h, cx, cy, r, {gable, depth})`, `shapes.roseWindow(r, {petals, broken})` → `{tracery, glass}`, `props.keep({seed, scale})` → `{geo, windows}`, `props.knight()` → `{body, cape, hands}` | clustered piers (broken = jagged stump), round openings in walls, rose windows with shattered petals (glass additive + `tex.stainedGlass`), a castle silhouette with window spots for glows, a kneeling armoured knight (cape: `K.Wobble` by uv v) |
 | Textures / sprites (v6) | `tex.flagstones/ashlar/stainedGlass/plateArmor/wornCloth`, `sprites.tatteredBanner({hanging})/colossus/corona/disc` | hanging banners are stored upside down: draw with a negative instance `heightScale` so `sway` moves the hem. `colossus` eyes sit at u ≈ 0.42 / 0.58, v ≈ 0.36 |
+| Moods (v8) | `new Moods(states, {map, ease, dropEase, slow})` → `update(audio, dt)` returns the eased `v`; `.mood` names the target | section-crossfaded named states of numbers, see "Moods" below |
 | Models | `await loadGLB(url)` → `{geo, images}`; `imageToIndexed(image, {ramp})` | vertex colours kept; convert embedded textures to one ramp so palettes still apply |
+
+### Moods (Kit v8): worlds that change through a song
+
+`K.Moods` crossfades named states by the Conductor's section so a breakdown and a chorus look like different moments of the same place. Reference: the Radiohead-set worlds (24-35), e.g. `js/styles/still-pool.js`, `before-dawn.js`, `moth-lamp.js`.
+
+```js
+this.moods = new K.Moods({
+  still: { lamps: 0.4, camReach: 0.2 },
+  base:  { lamps: 1,   camReach: 0.5 },          // today's look: defines EVERY key
+  full:  { lamps: 1.3, camReach: 1 },
+}, { slow: ['camReach'], dropEase: 4, map: { breakdown: 'still' } });
+// in update(audio, k, dt):  const m = this.moods.update(audio, dt);   // m.lamps, m.camReach
+```
+Default map: intro / outro / breakdown to `still`, groove (and Conductor off) to `base`, build to `gather`, drop to `full`. A missing state or key falls back to `base`. Rules:
+- Numbers only, so any pair blends. `base` **must define every key** (only `base`'s keys and the target's keys are eased) and must equal the world's look from before moods, so Conductor off or a long groove is unchanged.
+- Camera keys go in `slow`: they never ease faster than 6 s, even on a drop. Give them one extra `damp(v, target, 2, dt)` in the style, and snap them on the first frame so a style never starts mid-glide.
+- Coming on screen mid-song: when the style manager starts showing a world (any crossfade, plus bench / selftest) it calls `snap()` on every `K.Moods` and `snapShape()` on every camera rig that is an own property of the style, so their next update jumps to the current section (mood, `close`, phrase `reframe`, speed) instead of easing there on top of the crossfade. Then it calls the style's optional `enter()`: reset there anything else you ease from the mood, usually the first-frame sentinels of the extra camera damp (`enter() { this.camD = null; }`). Thumbnails never call it. Rigs or moods kept in arrays or nested objects need their own `snap()` / `snapShape()` in `enter()`.
+- Gates multiply the `k` fed into `stage(k, ...)`, then clamp (`stage(Math.min(1, k * m.gate), a, b)`); do not multiply `stage()`'s output. `k` stays the ceiling and k = 0 stays calm.
+- Light or motion a mood adds is also multiplied by `k`.
+- When a fast-settling `k` effect (a melt, a wave, a flock) has a mood-added share, give that share its own slower settle (6 s or more) so it doesn't flap on a section guess.
+- Things that arrive one by one (lamps, rows, figures) get ranked `K.Stager` stages instead of a discrete switch.
+- A style may set its own `dropEase` (default 1.5 s) and `map` entries. Section guesses are sometimes wrong; every effect must read as a slow drift when they are.
 
 ### Renderer (`r`)
 
@@ -143,13 +176,14 @@ r.setLight(dir, P.role('light') scaled, P.role('ambient') scaled);
 
 `js/styles/kit-calm.js` (hidden style 17, "Kit calm") is the reference: copy it for calm scenes.
 - Move less, glow more: keep the camera's `idleSpeed`/`activeSpeed` tiny and `fovPunch`/`nudge`/`rollKick` near zero; let intensity raise **light**, not speed.
-- Phrase with `K.Breath` (it follows a tapped tempo) instead of reacting to every beat. On a beat, prefer one soft event (a ripple, a pulse around a ring, one lantern brightening) over a flash.
+- Phrase with `K.Breath` (it follows a tapped tempo; downbeat corrections are paid back through an eased rate, so it never jolts the camera) instead of reacting to every beat. On a beat, prefer one soft event (a ripple, a pulse around a ring, one lantern brightening) over a flash.
 - Things that drift: `petals`, `leaves`, `pollen`, `mist`, `skyLanterns`, gliding birds (`School` with `flap: 0`).
 - Reflections and screen-door mist read beautifully at 320×240; keep reflected glows dimmer than the real ones.
 
 ## Checklist before committing an environment
 
 - [ ] Looks good at idle (k = 0) and at full intensity; the swell between them is smooth.
+- [ ] At Gentle nothing moves per beat and the camera passes `motionCheck`; at Punchy it matches your original.
 - [ ] Works with at least 3 other palettes (P), including a dark and a light one.
 - [ ] Debug overlay (D): within the draw/triangle budget; no console errors.
 - [ ] `?bench` (visible tab) shows ~60 fps for it.

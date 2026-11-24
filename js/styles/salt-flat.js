@@ -13,7 +13,10 @@
 // Idle: still, hazy, faint shimmer, a few motes of salt. Swell: haze lifts, shimmer
 // grows, salt streams across the ground, the drift speeds up a little.
 // No road, no lane markings, no traffic.
-import { mat4, lerp, damp } from '../gfx/math.js';
+// Song sections (K.Moods, Conductor on): intro / breakdown / outro drop the wind (no blowing salt,
+// shimmer only, a slower drift); a build sets the salt blowing and scours the crust; the drop speeds
+// the drift, pulls a dusty haze in over the horizon and raises a dust storm. Conductor off = base.
+import { mat4, lerp, clamp, damp } from '../gfx/math.js';
 import { scaleColor, mixColor } from '../gfx/color.js';
 import { GeoBuilder, merge } from '../gfx/geometry.js';
 import { R } from '../palette/palette.js';
@@ -153,43 +156,69 @@ export class SaltFlat {
     this.ringMesh = r.createMesh(K.decal(1, 1, 0.12));
     this.ringTex = r.texture(K.ringSprite({ index: R(0, 2) }));
     this.rings = [];
+    // the drop's dust storm: a taller, coarser layer of tan dust (mood-only, × k)
+    this.storm = new K.Particles(r, 'dust', { count: 800, color: R(0, 2), size: 0.1, vel: [0.5, 0.04, 0.08], jitter: [0.35, 0.12, 0.3], wobble: 0.4, area: [30, 3.5, 30], yOffset: -0.2, additive: false });
     this.puff = new K.Envelope(0.6);
+    this.bar = new K.BarClock({ minGap: 1 });   // Gentle: one dust ring per bar instead of per beat
 
     this.m = mat4.create();
     this.time = 0; this.k = 0; this.en = 0; this.shimmer = 0.12; this.yaw = 0; this.mirU = 0;
     this.col = { fog: [0, 0, 0], zen: [0, 0, 0], tint: [1, 1, 1], light: [0, 0, 0], amb: [0, 0, 0], sun: [0, 0, 0], mesa: [0, 0, 0], mir: [1, 1, 1] };
+
+    // song sections: gates multiply the k fed into today's stage() curves (clamped 0..1); windEn scales
+    // the energy part of the wind (a lift above 1 is × k); storm (the dust-storm layer) and haze (horizon
+    // haze: the fog pulls in, dust tint) are mood-only, × k. drift scales the active part of the path
+    // speed (camera motion: slow, eased twice).
+    this.moods = new K.Moods({
+      still:  { gustGate: 0.12, windEn: 0.25, shimGate: 1,    ringGate: 0.7, storm: 0,   haze: 0,    drift: 0.7 },
+      base:   { gustGate: 1,    windEn: 1,    shimGate: 1,    ringGate: 1,   storm: 0,   haze: 0,    drift: 1 },
+      gather: { gustGate: 1.6,  windEn: 1.4,  shimGate: 1.15, ringGate: 1.1, storm: 0.2, haze: 0.25, drift: 1.1 },
+      full:   { gustGate: 2,    windEn: 1.8,  shimGate: 1.35, ringGate: 1.3, storm: 1,   haze: 1,    drift: 1.5 },
+    }, { dropEase: 4, slow: ['drift'] });
+    this.drift = null; this.haze = 0; this.kg = 0;
   }
+
+  /** Coming on screen (StyleManager.enter, after its moods / rig snap): the mood keys it eases a second time start at the current mood. */
+  enter() { this.drift = null; }
 
   update(a, k, dt) {
     this.k = k; this.time += dt;
+    const m = this.moods.update(a, dt);
     const d = K.drive(a, k);
+    if (this.drift === null) this.drift = m.drift;
+    this.drift = damp(this.drift, m.drift, 2, dt);              // eased a second time so a section change starts softly
     // big continuous things follow smoothed energy, never the kick drum
     this.en = damp(this.en, d.energy, 1.5, dt);
-    this.cam.activeSpeed = 1.5 + this.en * 1.2;
+    this.cam.activeSpeed = 0.7 + (0.8 + this.en * 1.2) * this.drift;   // 0.7 = idleSpeed: the idle drift stays as it is
     this.cam.update(a, k, dt);
     this.cam.target[1] += 0.9;                                   // look a touch up: more sky
     const e = this.cam.eye, t = this.cam.target;
     this.yaw = Math.atan2(-(t[0] - e[0]), -(t[2] - e[2]));
     this.ground.follow(e[0], e[2]);
 
-    this.shimmer = damp(this.shimmer, lerp(0.12, 0.75, k) + this.en * 0.45, 1.2, dt);
+    this.kg = clamp(k * m.gustGate);
+    this.haze = m.haze * K.stage(k, 0.05, 0.6);
+    this.shimmer = damp(this.shimmer, lerp(0.12, 0.75, clamp(k * m.shimGate)) + this.en * 0.45, 1.2, dt);
     this.mirU += dt * (0.02 + this.shimmer * 0.06);              // accumulate, so a changing rate never jumps
     this._wobble();
 
-    // beat: a soft ring of dust kicked up somewhere ahead, scaled by accent
-    if (d.beat) {
+    // beat: a soft ring of dust kicked up somewhere ahead, scaled by accent. Gentle: one per bar
+    const bm = d.beatMotion, barFire = this.bar.update(a, dt);
+    if (d.beat) this.puff.trigger(k);                             // light only
+    if ((d.beat && Math.random() < bm) || (barFire && bm < 1 && k > 0.05)) {
       const fx = -Math.sin(this.yaw), fz = -Math.cos(this.yaw), dist = 11 + Math.random() * 8, side = (Math.random() - 0.5) * 10;
       const x = e[0] + fx * dist - fz * side, z = e[2] + fz * dist + fx * side;
-      this.rings.push({ x, y: height(x, z), z, size: (7 + Math.random() * 5) * (0.55 + 0.45 * d.accent) * (0.6 + 0.4 * k), amp: (0.35 + 0.65 * d.accent) * k, t: 0 });
+      this.rings.push({ x, y: height(x, z), z, size: (7 + Math.random() * 5) * (0.55 + 0.45 * d.accent) * (0.6 + 0.4 * k) * m.ringGate, amp: (0.35 + 0.65 * d.accent) * k, t: 0 });
       if (this.rings.length > 6) this.rings.shift();
-      this.puff.trigger(k);
     }
     this.rings = this.rings.filter((g) => (g.t += dt / (2.6 * d.decay)) < 1);
     this.puff.update(dt);
 
-    const gust = K.stage(k, 0.05, 0.85);
-    const wind = 0.2 + gust * 4.5 + this.en * 2;
-    this.salt.update(dt, e, { amount: lerp(0.08, 1, gust), speed: 1 + d.level * 0.5, wind: [wind, wind * 0.18] });
+    const gust = K.stage(this.kg, 0.05, 0.85), wl = m.windEn - 1, we = 1 + (wl > 0 ? wl * k : wl);
+    const wind = 0.2 + gust * 4.5 + this.en * 2 * we;
+    this.salt.update(dt, e, { amount: lerp(0.08, 1, gust), speed: 1 + lerp(d.energy, d.level, bm) * 0.5, wind: [wind, wind * 0.18] });
+    const st = m.storm * K.stage(k, 0.1, 0.7);
+    this.storm.update(dt, e, { amount: st, speed: 1 + st * 0.8 + this.en * 0.4, wind: [wind * 1.3, wind * 0.3] });
     this._scatter();
   }
 
@@ -230,6 +259,8 @@ export class SaltFlat {
     const bright = lerp(0.88, 1, k);
     // bleached haze: atmosphere's palest shade washed toward the palest crust colour
     mixColor(col.fog, P.color(R(3, 3)), P.color(R(0, 3)), lerp(0.55, 0.4, k));
+    const hz = this.haze;
+    if (hz > 0.001) mixColor(col.fog, col.fog, P.color(R(0, 2)), hz * 0.3);   // the drop: dust in the air
     scaleColor(col.fog, col.fog, bright);
     mixColor(col.zen, P.color(R(1, 3)), P.color(R(3, 2)), lerp(0.6, 0.4, k));
     r.clear(col.fog);
@@ -241,12 +272,12 @@ export class SaltFlat {
     col.tint[0] = col.tint[1] = col.tint[2] = bright;
 
     // far mesas: a much longer fog so they stay as hazy silhouettes
-    r.setFog(col.fog, 30, lerp(230, 300, k));
+    r.setFog(col.fog, 30, lerp(230, 300, k) * (1 - 0.45 * hz));
     mixColor(col.mesa, P.color(R(3, 2)), P.color(R(0, 1)), 0.35);
     r.draw(this.mesas, mat4.trs(this.m, e[0], 0, e[2], 0, this.yaw * 0.15, 0), { unlit: true, tint: col.mesa });
 
-    r.setFog(col.fog, lerp(6, 14, k), lerp(90, 125, k));
-    this.ground.draw(r, { texture: this.crustTex, texture2: this.crustTex2, blend: K.stage(k, 0.25, 1) * 0.45, tint: col.tint });
+    r.setFog(col.fog, lerp(6, 14, k) * (1 - 0.5 * hz), lerp(90, 125, k) * (1 - 0.4 * hz));
+    this.ground.draw(r, { texture: this.crustTex, texture2: this.crustTex2, blend: K.stage(this.kg, 0.25, 1) * 0.45, tint: col.tint });
     r.drawInstanced(this.lumpMesh, this.lumps, { texture: this.lumpTex, tint: col.tint });
 
     K.forSegments(this.cam.s, { length: SIGN_EVERY, ahead: 240, behind: 30 }, (i, s0) => {
@@ -265,6 +296,7 @@ export class SaltFlat {
     });
 
     this.salt.draw(r, { brightness: bright * (0.85 + this.puff.v * 0.25) });
+    if (this.storm.visible > 0) this.storm.draw(r, { brightness: bright * 0.9 });
     for (const g of this.rings) {
       const e2 = 1 - (1 - g.t) * (1 - g.t), sz = g.size * (0.15 + 0.85 * e2);
       r.draw(this.ringMesh, mat4.trs(this.m, g.x, g.y, g.z, 0, 0, 0, sz, 1, sz), { texture: this.ringTex, tint: col.tint, opacity: g.amp * Math.min(1, g.t * 6) * (1 - g.t) * (1 - g.t) * 0.9 });   // eases in, fades out
@@ -272,7 +304,7 @@ export class SaltFlat {
   }
 
   dispose(r) {
-    this.ground.dispose(); this.sky.dispose(r); this.salt.dispose(r);
+    this.ground.dispose(); this.sky.dispose(r); this.salt.dispose(r); this.storm.dispose(r);
     [this.mesas, this.mirage, this.signMesh, this.lumpMesh, this.ringMesh].forEach((m) => m.dispose());
     [this.crustTex, this.crustTex2, this.mirTex, this.signTex, this.lumpTex, this.ringTex].forEach((t) => r.deleteTexture(t));
     this.lumps.dispose();

@@ -327,7 +327,8 @@ export class GreenhouseDusk {
     if (d.beat) {
       this.pulses.trigger(eye[2] + 2, 0.5 + k * 0.5, 9);
       const ang = K.rand2(a.beatCount || 0, 1, 3) * TAU, rr = 0.6 + K.rand2(a.beatCount || 0, 2, 3) * 2;
-      this.ripples.spawn(Math.cos(ang) * rr, WATER + 0.01, PZ + Math.sin(ang) * rr, 1.4 + k * 1.2);
+      // the ring: every beat at Punchy, once a bar at Gentle
+      if (d.beatMotion > 0.5 || ((a.bpm || 0) > 0 && Number.isFinite(a.bar) ? (a.bar | 0) === 0 : (a.beatCount || 0) % 4 === 0)) this.ripples.spawn(Math.cos(ang) * rr, WATER + 0.01, PZ + Math.sin(ang) * rr, 1.4 + k * 1.2);
     }
     // idle life: now and then a koi touches the surface
     if ((this.nextIdleRipple -= dt) <= 0) {
@@ -342,11 +343,12 @@ export class GreenhouseDusk {
     // bulbs: a few glow at idle, the rest come on beam by beam; the pulse adds on top
     this.bulb.forEach((B, i) => {
       const lit = Math.max(B.idle ? 0.8 : 0.03, K.stage(k, B.on, B.on + 0.16));
-      const lvl = lit * (0.82 + 0.18 * b + 0.04 * Math.sin(t * 1.3 + B.ph)) + this.pulses.at(B.s) * (0.25 + lit * 0.6);
+      const lv0 = lit * (0.82 + 0.18 * b + 0.04 * Math.sin(t * 1.3 + B.ph)), pl = this.pulses.at(B.s) * (0.25 + lit * 0.6);
+      const lvl = lv0 + pl, lvSize = lv0 + pl * d.beatMotion + (1 - d.beatMotion) * d.groove * 0.1;   // the pulse brightens; it only swells the halo at Punchy
       this.bulbs.set(i, B.x, B.y - 0.17, B.z, 0.15, 0, 0.3 + lvl * 0.85, 0, 1.4);
       // glows right over the lens fade out, so a passing swag never fills the screen
       const near = K.fadeIn(Math.hypot(B.x - eye[0], B.y - eye[1], B.z - eye[2]), 2.2, 5.5);
-      const gs = (0.3 + lvl * 0.32) * (0.5 + 0.5 * near);
+      const gs = (0.3 + lvSize * 0.32) * (0.5 + 0.5 * near);
       this.glows.set(i, B.x, B.y - 0.1 - gs * 0.5, B.z, gs, 0, lvl * 0.75 * near, 0, 1);
     });
     this.bulbs.upload(this.bulb.length); this.glows.upload(this.bulb.length);
@@ -400,7 +402,7 @@ export class GreenhouseDusk {
     r.draw(this.ironMesh, this.m, { texture: this.ironTex, tint: col.tint });
 
     // plants
-    const sway = 0.012 + b * 0.015 + this.d.mid * 0.03;
+    const sway = 0.012 + b * 0.015 + lerp(this.d.energy, this.d.mid, this.d.beatMotion) * 0.03;
     r.drawInstanced(this.quad, this.ferns, { texture: this.fernTex, billboard: 1, sway, tint: col.tint });
     r.drawInstanced(this.quad, this.bushes, { texture: this.bushTex, billboard: 1, sway: sway * 0.5, tint: col.tint });
     r.drawInstanced(this.quad, this.palms, { texture: this.palmTex, billboard: 1, sway: sway * 0.6, tint: col.tint });

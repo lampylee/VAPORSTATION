@@ -17,7 +17,7 @@
 // the mist thickens and starts to glow. Beat = wisps flare + a lightning-ish
 // double flicker of moon and sky + camera nudge. Bass = tree sway + mist roll.
 // Highs = wisp sparkle.
-import { mat4, lerp, clamp, smoothstep } from '../gfx/math.js';
+import { mat4, lerp, damp, clamp, smoothstep } from '../gfx/math.js';
 import { scaleColor, mixColor } from '../gfx/color.js';
 import { GeoBuilder, box, merge } from '../gfx/geometry.js';
 import { R, fromKeys } from '../palette/palette.js';
@@ -295,12 +295,12 @@ export class GraveyardHill {
     this.mistRoll = 0;
 
     // ---- camera: slow orbit around the chapel, radius breathing in and out
-    this.cam = new K.OrbitRig({ center: [0, crest + 2.5, 0], radius: ORBIT, height: 0, bob: 0, pushIn: 2.5, idleSpeed: 0.035, activeSpeed: 0.1, bassBoost: 0.05, fov: 62, nudge: 0.3, rollKick: 0.04, far: 200 });
+    this.cam = new K.OrbitRig({ center: [0, crest + 2.5, 0], radius: ORBIT, height: 0, bob: 0, pushIn: 2.5, idleSpeed: 0.035, activeSpeed: 0.1, bassBoost: 0.05, fov: 62, nudge: 0.3, rollKick: 0.04, far: 200, shapeAmount: 0.5 });   // half: full close / wide framing would cross the inner and outer tree rings
     this.cam.angle = 0.4;
 
     this.flash = new K.Envelope(0.12);
     this.flare = new K.Envelope(0.35);
-    this.strike2 = -1;
+    this.strike2 = -1; this.bassS = 0; this.highS = 0; this.bassM = 0; this.highM = 0;
     this.m = mat4.create();
     this.time = 0; this.k = 0; this.a = SILENT;
     this.col = { fog: [0, 0, 0], zen: [0, 0, 0], tint: [1, 1, 1], light: [0, 0, 0], amb: [0, 0, 0], mist: [0, 0, 0], glow: [0, 0, 0], bat: [0, 0, 0], glass: [0, 0, 0], tmp: [0, 0, 0] };
@@ -323,8 +323,11 @@ export class GraveyardHill {
     if (this.strike2 > 0 && (this.strike2 -= dt) <= 0) { this.flash.trigger(k * 0.7); this.strike2 = -1; }
     this.flash.update(dt); this.flare.update(dt);
 
-    this.mistRoll += dt * (0.5 + d.bass * 4);
-    this.sparkle.update(dt, [eye[0], hill(eye[0], eye[2]), eye[2]], { amount: K.stage(k, 0.35, 0.9) * (0.4 + d.high * 0.9), speed: 1 + d.high * 2 });
+    // bass / highs shape motion directly only at Punchy; at Gentle they are eased
+    this.bassS = damp(this.bassS, d.bass, 0.5, dt); this.highS = damp(this.highS, d.high, 0.5, dt);
+    this.bassM = lerp(this.bassS, d.bass, d.beatMotion); this.highM = lerp(this.highS, d.high, d.beatMotion);
+    this.mistRoll += dt * (0.5 + this.bassM * 4);   // integrated phase
+    this.sparkle.update(dt, [eye[0], hill(eye[0], eye[2]), eye[2]], { amount: K.stage(k, 0.35, 0.9) * (0.4 + d.high * 0.9), speed: 1 + this.highM * 2 });
     this._wisps(d);
     this._bats();
     this._mist(d);
@@ -343,7 +346,7 @@ export class GraveyardHill {
       const x = w.x + Math.cos(t * 0.6 + w.seed) * 0.6 + sway, z = w.z + Math.sin(t * 0.7 + w.seed * 2) * 0.6;
       const y = w.y + 0.4 + u * 3.2 * on;
       const spark = 1 + d.high * 0.8 * (0.5 + 0.5 * Math.sin(t * 23 + w.seed * 5));
-      const s = 1.05 * on * (0.45 + 0.55 * life) * (1 + this.flare.v * 0.7);
+      const s = 1.05 * on * (0.45 + 0.55 * life) * (1 + this.flare.v * 0.7 * d.beatMotion + d.groove * (1 - d.beatMotion) * 0.2);   // size swell: flare at Punchy, groove otherwise
       const b = on * life * (0.7 + this.flare.v * 0.6) * spark;
       inst.set(c++, x, y, z, s, 0, b, 0, 1);
       inst.set(c++, x - sway * 0.3, y - 0.45 * on, z, s * 0.55, 0, b * 0.55, 0, 1);   // trailing tail
@@ -382,7 +385,7 @@ export class GraveyardHill {
       const x = e[0] + K.repeat(rx - e[0], MIST_BOX) - half, z = e[2] + K.repeat(rz - e[2], MIST_BOX) - half;
       const dist = Math.hypot(x - e[0], z - e[2]);
       const vis = K.fadeIn(dist, 5, 13) * K.fadeOut(dist, half - 12, half - 2);
-      const y = hill(x, z) - 0.6 + Math.sin(this.time * 0.3 + i) * 0.3 + d.bass * 0.6;
+      const y = hill(x, z) - 0.6 + Math.sin(this.time * 0.3 + i) * 0.3 + this.bassM * 0.6;
       this.mist.set(i, x, y, z, s * (1 + this.k * 0.25), 0, vis, i, 0.28);
     });
     this.mist.upload(MIST);
@@ -412,7 +415,7 @@ export class GraveyardHill {
     this.cam.apply(r);
 
     scaleColor(col.zen, P.color(R(3, 0)), 1 + fl * 0.8);
-    this.sky.draw(r, eye, { horizon: col.fog, zenith: col.zen, brightness: dim * (1 + fl * 0.6), starLevel: 0.3 + d.high * 0.5, moonScale: 1 + fl * 0.1 + d.pulse * 0.04, cloudDrift: this.time * 0.008 + this.mistRoll * 0.002 });
+    this.sky.draw(r, eye, { horizon: col.fog, zenith: col.zen, brightness: dim * (1 + fl * 0.6), starLevel: 0.3 + d.high * 0.5, moonScale: 1 + fl * 0.1 * d.beatMotion + lerp(d.groove, d.pulse, d.beatMotion) * 0.04, cloudDrift: this.time * 0.008 + this.mistRoll * 0.002 });
 
     r.setFog(col.fog, 12, lerp(74, 64, k));
     r.setLight([-0.35, -0.6, 1], scaleColor(col.light, P.role('light'), lerp(0.5, 0.75, k) + fl * 0.9), scaleColor(col.amb, P.role('ambient'), 0.42 + fl * 0.25));
@@ -424,10 +427,10 @@ export class GraveyardHill {
     r.drawInstanced(this.crossMesh, this.crosses, { texture: this.graveTex, tint: col.tint });
     r.drawInstanced(this.obelMesh, this.obels, { texture: this.graveTex, tint: col.tint });
     r.drawInstanced(this.fenceMesh, this.fence, { texture: this.fenceTex, tint: col.tint });
-    const sway = 0.008 + d.bass * 0.05;
+    const sway = 0.008 + this.bassM * 0.05;
     r.drawInstanced(this.quad, this.treesA, { texture: this.treeTexA, billboard: 1, sway, tint: col.tint });
     r.drawInstanced(this.quad, this.treesB, { texture: this.treeTexB, billboard: 1, sway: sway * 1.2, tint: col.tint });
-    r.drawInstanced(this.quad, this.grass, { texture: this.grassTex, billboard: 1, sway: 0.03 + d.bass * 0.08, tint: col.tint });
+    r.drawInstanced(this.quad, this.grass, { texture: this.grassTex, billboard: 1, sway: 0.03 + this.bassM * 0.08, tint: col.tint });
 
     // bats: dark silhouettes against the moonlit sky
     scaleColor(col.bat, P.color(R(0, 0)), 0.55);

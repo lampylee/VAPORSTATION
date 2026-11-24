@@ -22,6 +22,7 @@ import { SelfTest } from './safety/selftest.js';
 import { Sink, Output, watchDpr } from './show/output.js';
 import { FrameGuard, health } from './show/output-logic.js';
 import { OperatorView } from './show/operator.js';
+import { clamp } from './gfx/math.js';
 
 const s = loadSettings();
 const canvas = document.getElementById('view');
@@ -230,7 +231,7 @@ ui.makeCollapsible();
 // One thumbnail per frame on load, then one every 0.4 s, only while the panel is
 // visible. Each is the style at idle (k = 0) with its current palette, rendered
 // through the full pipeline before the real frame (which then overwrites it).
-const THUMB_AUDIO = { level: 0, bass: 0, mid: 0, high: 0, beat: false, beatPulse: 0, beatCount: 0, bpm: 0, beatPhase: 0, bar: 0, rmsDb: -100, rmsDbSmooth: -100 };
+const THUMB_AUDIO = { level: 0, bass: 0, mid: 0, high: 0, beat: false, beatPulse: 0, beatCount: 0, bpm: 0, beatPhase: 0, bar: 0, rmsDb: -100, rmsDbSmooth: -100, shape: { close: 0, pace: 1, fog: 1, weather: 1, phrase: 0 }, groove: 0, beatMotion: 1 };
 const thumbs = { pending: STYLES.map((_, i) => i), last: STYLES.map(() => -1), timer: 0, rr: 0, captureCur: false };
 function thumbFrame(dt, now) {
   thumbs.captureCur = false;
@@ -252,15 +253,15 @@ function thumbFrame(dt, now) {
   const st = styles.styles[i];
   const steps = thumbs.last[i] < 0 ? 20 : Math.min(10, Math.max(1, Math.round((now - thumbs.last[i]) / 50)));
   thumbs.last[i] = now;
-  const P = renderer.params, saved = [P.flash, P.fade, P.jitterBoost, P.fogScale];
+  const P = renderer.params, saved = [P.flash, P.fade, P.jitterBoost, P.fogScale, P.weather];
   try {
     for (let n = 0; n < steps; n++) st.update(THUMB_AUDIO, 0, 0.05);
-    P.flash = 0; P.fade = 0; P.jitterBoost = 0; P.fogScale = 1;
+    P.flash = 0; P.fade = 0; P.jitterBoost = 0; P.fogScale = 1; P.weather = 1;
     renderer.beginScene('A'); renderer.setPalette(st.pal); st.render(renderer);
     renderer.composite(0); renderer.present();
     renderer.snapshot(envBrowser.ctx(i));
   } catch (e) { styles._fail(i, e, 'thumbnail'); }
-  [P.flash, P.fade, P.jitterBoost, P.fogScale] = saved;
+  [P.flash, P.fade, P.jitterBoost, P.fogScale, P.weather] = saved;
 }
 
 // Drop anything on the window: images -> palette from art, palette files -> import, audio -> play.
@@ -610,7 +611,8 @@ function frame(now) {
   if (!show.freeze) {
     P.time = (P.time || 0) + dt;   // stops while frozen (vertex wobble holds too)
     P.jitterBoost = s.audioPushesLook ? audio.beatPulse * k * show.jitterPush : 0;   // 0 at Gentle reactivity
-    P.fogScale = s.audioPushesLook ? 1 + audio.level * k * 0.25 : 1;
+    P.fogScale = (s.audioPushesLook ? 1 + audio.level * k * 0.25 : 1) * clamp(audio.shape?.fog ?? 1, 0.75, 1.25);
+    P.weather = audio.shape?.weather ?? 1;
   }
   P.fade = show.fade;
   P.flash = show.flashLevel(s);
@@ -643,7 +645,7 @@ function frame(now) {
     overlay.hidden = false; overlay.textContent = selftest ? selftest.label : bench.label;
   } else if (selftest && !selftest.finished) {
     overlay.hidden = true; bench = null;
-    styles.cur = selftest.back; styles.next = -1;   // under the report dialog
+    styles.cur = selftest.back; styles.next = -1; styles.enter(styles.cur);   // under the report dialog
     selftest.finish().catch((e) => console.error('[selftest]', e));
   }
   else if (bench && bench.done && overlay.textContent !== bench.label) overlay.textContent = bench.label;
@@ -655,7 +657,8 @@ function frame(now) {
       audio, fps, intensity: k, playing, state: bench && !bench.done ? bench.label : state.label, thresholdDb: s.thresholdDb,
       res: `${renderer.width}x${renderer.height}`, draws: renderer.stats.draws, tris: renderer.stats.tris,
       style: styles.name(styles.cur), transition: styles.transitioning ? styles.name(styles.next) : '',
-      autoSwitch: s.autoSwitch, idle: styles.idleTime, setlist: setlist.label, show: show.label, song: s.conductor === false ? 'song: follow off' : conductor.label, safety: `${governor.label} · ${watchdog.label}`,
+      autoSwitch: s.autoSwitch, idle: styles.idleTime, setlist: setlist.label, show: show.label, song: s.conductor === false ? 'song: follow off' : conductor.label,
+      shape: audio.shape ? `shape: ${audio.shape.section || '-'} close ${audio.shape.close.toFixed(2)} pace ${audio.shape.pace.toFixed(2)} fog ${audio.shape.fog.toFixed(2)} wx ${audio.shape.weather.toFixed(2)} ph ${audio.shape.phrase}` : '', safety: `${governor.label} · ${watchdog.label}`,
       source: engine.mode === 'live' ? `live: ${engine.deviceLabel || 'default'}` : engine.mode === 'file' ? 'file playback' : 'no input',
     });
   }

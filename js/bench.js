@@ -20,7 +20,7 @@ export class Bench {
 
   _enter(i) {
     this.i = i; this.t = 0;
-    this.styles.cur = i; this.styles.next = -1; this.styles.queued = -1;
+    this.styles.cur = i; this.styles.next = -1; this.styles.queued = -1; this.styles.enter(i);
     this.frames = { idle: [], active: [] };
     this.cpu = { idle: [], active: [] };
   }

@@ -238,6 +238,6 @@ export class UI {
     d.beat.textContent = `BEAT ${a.beatCount}`;
     d.state.textContent = info.state;
     d.state.className = 'dstate ' + (info.playing ? 'playing' : 'silent');
-    d.foot.textContent = `${info.source}\nstyle: ${info.style}${info.transition ? '  → ' + info.transition : ''}\nsetlist: ${info.setlist}\nshow: ${info.show}\n${info.song || ''}\nsafety: ${info.safety || ''}\nauto-switch: ${info.autoSwitch ? 'on' : 'off'} · idle ${info.idle.toFixed(0)} s · auto-gain ×${a.gain.bass.toFixed(0)} (bass)`;
+    d.foot.textContent = `${info.source}\nstyle: ${info.style}${info.transition ? '  → ' + info.transition : ''}\nsetlist: ${info.setlist}\nshow: ${info.show}\n${info.song || ''}\n${info.shape || ''}\nsafety: ${info.safety || ''}\nauto-switch: ${info.autoSwitch ? 'on' : 'off'} · idle ${info.idle.toFixed(0)} s · auto-gain ×${a.gain.bass.toFixed(0)} (bass)`;
   }
 }

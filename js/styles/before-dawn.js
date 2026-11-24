@@ -14,6 +14,12 @@
 //
 // The design is the intensity curve: the ignition is K.stage(k, 0.7, 1), further eased by a slow
 // damp, so it always fades in and never pops.
+//
+// Song sections (K.Moods, Conductor on): intro / breakdown / outro keep the camera inside the
+// bedroom with only the lamp, dimmer; a build drifts it back out through the window until the
+// window frames the room, and warms the pre-dawn line; the drop takes it out into the field, and with high intensity
+// the sky catches fire faster. The camera only ever moves along camAt's path (through the middle of
+// the window opening), so a mood never takes it through a wall. Fire still starts at k 0.7.
 import { mat4, lerp, clamp, damp, smoothstep } from '../gfx/math.js';
 import { scaleColor, mixColor } from '../gfx/color.js';
 import { GeoBuilder, box, merge } from '../gfx/geometry.js';
@@ -205,29 +211,51 @@ export class BeforeDawn {
     this.cam = new K.CameraRig({ fov: 56, near: 0.08, far: 230, fovPunch: 0, nudge: 0.015, rollKick: 0, idleSpeed: 0, activeSpeed: 0, bassBoost: 0 });
     this.breath = new K.Breath({ beats: 8, period: 12 });
     this.flare = new K.Envelope(0.8);
-    this.time = 0; this.k = 0; this.u = 0; this.ign = 0; this.bass = 0; this.energy = 0; this.out = 0;
+    this.time = 0; this.k = 0; this.u = 0; this.ign = 0; this.bass = 0; this.bassM = 0; this.bassE = 0; this.energy = 0; this.out = 0;
     this.lamp = 0.25; this.wind = 0;
     this.m = mat4.create();
     this._t = [0, 0, 0];
     this.col = { fog: [0, 0, 0], zen: [0, 0, 0], tint: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], glow: [0, 0, 0], band: [0, 0, 0], tmp: [0, 0, 0], tmp2: [0, 0, 0], patch: [0, 0, 0], house: [0, 0, 0], lamp: [0, 0, 0] };
     this.lampLight = [{ pos: [LAMP[0], LAMP[1] + 0.12, LAMP[2] + 0.15], color: this.col.lamp, radius: 3.9 }];
+
+    // song sections: gates multiply the k fed into today's stage() / swell() curves (clamped 0..1);
+    // ignTop = the k where the fire is fully lit (it always starts at 0.7: the bottom 70 % stays held back).
+    // drift (how far the 300 s cycle takes the camera out) and uMin (a floor on the path position u:
+    // 0.2 = just outside, the window framing the room; 0.72 = far out in the field) are camera keys:
+    // slow, eased twice, then the path's own 7 s ease and speed limit.
+    this.moods = new K.Moods({
+      still:  { lampGate: 0.5, preGate: 0.4, dustGate: 0.7, ignGate: 0.85, ignTop: 1,    pullGate: 0.8, drift: 0.1,  uMin: 0 },
+      base:   { lampGate: 1,   preGate: 1,   dustGate: 1,   ignGate: 1,    ignTop: 1,    pullGate: 1,   drift: 1,    uMin: 0 },
+      gather: { lampGate: 1.1, preGate: 1.4, dustGate: 1.2, ignGate: 1,    ignTop: 0.95, pullGate: 1,   drift: 0.1,  uMin: 0.2 },
+      full:   { lampGate: 1.1, preGate: 1.6, dustGate: 1,   ignGate: 1,    ignTop: 0.85, pullGate: 1,   drift: 1,    uMin: 0.72 },
+    }, { dropEase: 4, slow: ['drift', 'uMin'] });
+    this.drift = null; this.uMin = 0; this.mv = { preGate: 1 };
   }
+
+  /** Coming on screen (StyleManager.enter, after its moods / rig snap): the mood keys it eases a second time start at the current mood. */
+  enter() { this.drift = null; }
 
   update(a, k, dt) {
     this.k = k; this.time += dt;
+    const m = this.moods.update(a, dt); this.mv = m;
     const d = K.drive(a, k), t = this.time;
     const b = this.breath.update(a, dt);
+    // camera mood keys: eased a second time so a section change starts softly
+    if (this.drift === null) { this.drift = m.drift; this.uMin = m.uMin; }
+    this.drift = damp(this.drift, m.drift, 2, dt); this.uMin = damp(this.uMin, m.uMin, 2, dt);
 
     // ignition: held back until k 0.7, then a slow ease on top so it never pops
-    this.ign = damp(this.ign, K.stage(k, 0.7, 1), 2.5, dt);
+    this.ign = damp(this.ign, K.stage(clamp(k * m.ignGate), 0.7, m.ignTop), 2.5, dt);
     const ign = this.ign;
     // the fuzz bass: smoothed, only matters once the sky burns
     this.bass = damp(this.bass, a.bass, 0.3, dt);
     this.energy = damp(this.energy, a.energy ?? a.level, 1.2, dt);
+    // bass for movement (wind, ember speed): slower unless the Feel allows beat-sized movement; flicker / brightness keep this.bass
+    this.bassE = damp(this.bassE, a.bass, 0.8, dt); this.bassM = lerp(this.bassE, this.bass, d.beatMotion);
 
     // camera: a slow time-driven drift out and back; the ignition pulls it out into the field
     const cyc = 0.5 - 0.5 * Math.cos((t / CYCLE) * TAU);
-    const uT = lerp(cyc * (0.85 + 0.15 * K.stage(k, 0.2, 0.7)), 1, K.stage(k, 0.6, 0.95));
+    const uT = lerp(lerp(this.uMin, 1, cyc * (0.85 + 0.15 * K.stage(k, 0.2, 0.7)) * this.drift), 1, K.stage(clamp(k * m.pullGate), 0.6, 0.95));
     const du = damp(this.u, uT, 7, dt) - this.u;
     this.u += clamp(du, -0.03 * dt, 0.03 * dt);
     this.cam.update(a, k, dt);
@@ -243,20 +271,20 @@ export class BeforeDawn {
     this.flare.update(dt);
 
     // the lamp breathes; it brightens a little with the song, never a lot
-    this.lamp = 0.22 + b * 0.06 + K.stage(k, 0.1, 0.7) * 0.2 + this.flare.v * 0.15;
-    this.glows.set(0, 0.45, 0.82, -2.68, 0.55 + this.lamp * 0.5, 0, this.lamp, 0, 1);
+    this.lamp = 0.22 + b * 0.06 + K.stage(clamp(k * m.lampGate), 0.1, 0.7) * 0.2 + this.flare.v * 0.15;
+    this.glows.set(0, 0.45, 0.82, -2.68, 0.55 + (this.lamp - this.flare.v * 0.15 * (1 - d.beatMotion)) * 0.5, 0, this.lamp, 0, 1);   // the flare's light stays; its halo-size swell is a beat movement
     const win = (0.12 + this.lamp * 0.25) * this.out * K.fadeIn(this.cam.eye[2] - ROOM.hz, 5, 14);   // only from afar: up close you see the lamp itself
     this.glows.set(1, 0, 1.5, ROOM.hz + 0.05, 1.7, 0, win, 0, 1);
     this.glows.upload(2);
 
     // curtains stir; when the sky burns a hot wind pushes them in
-    this.wind = damp(this.wind, 0.04 + d.energy * 0.06 + ign * (0.22 + this.bass * 0.1), 1.5, dt);
+    this.wind = damp(this.wind, 0.04 + d.energy * 0.06 + ign * (0.22 + this.bassM * 0.1), 1.5, dt);
     for (const c of this.curtains) c.mesh.update(curtainGeo(c.x0, c.x1, 0.7, 2.28, ROOM.hz - 0.14, 6, 5, t, this.wind, c.seed));
 
-    this.dust.update(dt, [0, 1.2, 0.2], { amount: K.swell(k, 0.4, 0.8) * (1 - this.out * 0.8), speed: 0.4 + this.wind * 2 });
+    this.dust.update(dt, [0, 1.2, 0.2], { amount: K.swell(clamp(k * m.dustGate), 0.4, 0.8) * (1 - this.out * 0.8), speed: 0.4 + this.wind * 2 });
     this.mist.update(dt, [0, 0.4, -34], { amount: lerp(0.75, 0.45, ign), speed: 0.35 + ign * 0.6 });
     // embers rise from the field behind and around the house, kept well ahead of the camera
-    this.embers.update(dt, [0, 6, -6], { amount: ign * 0.95 * K.fadeIn(eye[2], 14, 22), speed: 0.5 + this.energy * 0.6 + this.bass * ign * 0.5, wind: [0.4, 0.15] });
+    this.embers.update(dt, [0, 6, -6], { amount: ign * 0.95 * K.fadeIn(eye[2], 14, 22), speed: 0.5 + this.energy * 0.6 + this.bassM * ign * 0.5, wind: [0.4, 0.15] });
   }
 
   render(r) {
@@ -271,7 +299,7 @@ export class BeforeDawn {
     this.sky.draw(r, this.cam.eye, { horizon: col.fog, zenith: col.zen, brightness: dim, starLevel: lerp(0.42 + this.breath.v * 0.08, 0.06, ign) });
 
     // fire bands: a thin pre-dawn line at the horizon from k 0.35, the whole sky from k 0.7
-    const pre = K.stage(k, 0.35, 0.7) * 0.14;
+    const pre = K.stage(clamp(k * this.mv.preGate), 0.35, 0.7) * 0.14;
     const eye = this.cam.eye, accent = P.color(R(2, 2));
     this.bands.forEach((bd, i) => {
       const on = ign * K.stage(ign, (bd.on - 0.7) * 2, (bd.on - 0.7) * 2 + 0.45);   // lower bands catch first
