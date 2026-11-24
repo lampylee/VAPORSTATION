@@ -415,7 +415,7 @@ export class GraveyardHill {
     this.cam.apply(r);
 
     scaleColor(col.zen, P.color(R(3, 0)), 1 + fl * 0.8);
-    this.sky.draw(r, eye, { horizon: col.fog, zenith: col.zen, brightness: dim * (1 + fl * 0.6), starLevel: 0.3 + d.high * 0.5, moonScale: 1 + fl * 0.1 + lerp(d.groove, d.pulse, d.beatMotion) * 0.04, cloudDrift: this.time * 0.008 + this.mistRoll * 0.002 });
+    this.sky.draw(r, eye, { horizon: col.fog, zenith: col.zen, brightness: dim * (1 + fl * 0.6), starLevel: 0.3 + d.high * 0.5, moonScale: 1 + fl * 0.1 * d.beatMotion + lerp(d.groove, d.pulse, d.beatMotion) * 0.04, cloudDrift: this.time * 0.008 + this.mistRoll * 0.002 });
 
     r.setFog(col.fog, 12, lerp(74, 64, k));
     r.setLight([-0.35, -0.6, 1], scaleColor(col.light, P.role('light'), lerp(0.5, 0.75, k) + fl * 0.9), scaleColor(col.amb, P.role('ambient'), 0.42 + fl * 0.25));

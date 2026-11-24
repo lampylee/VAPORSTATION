@@ -232,8 +232,8 @@ export class AuroraField {
     this.wave.push(this.pulse.v * k);
     this._ribbons(d, k, t);
 
-    this.snow.update(dt, e, { amount: K.swell(k, 0.5, 0.75), speed: 0.75 + d.energy * 0.5, wind: [0.5 + this.bassM * 1.2, 0.15] });
-    this.sparkle.update(dt, e, { amount: 0.25 + K.stage(k, 0, 0.5) * 0.75, speed: 0.75 + d.energy * 0.5, wind: [0.5 + this.bassM * 1.2, 0.15] });
+    this.snow.update(dt, e, { amount: K.swell(k, 0.5, 0.75), speed: 0.75 + lerp(d.energy, d.level, d.beatMotion) * 0.5, wind: [0.5 + this.bassM * 1.2, 0.15] });
+    this.sparkle.update(dt, e, { amount: 0.25 + K.stage(k, 0, 0.5) * 0.75, speed: 0.75 + lerp(d.energy, d.level, d.beatMotion) * 0.5, wind: [0.5 + this.bassM * 1.2, 0.15] });
     this._scatter(d, k, t);
     this._stars(d, k, t);
   }

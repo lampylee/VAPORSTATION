@@ -171,7 +171,7 @@ export class LanternRiver {
     if (d.beat && nearest) {
       this.pulses.trigger(camS + 3, 0.5 + k * 0.4, 12);
       // the ring under the nearest lantern: every beat at Punchy, once a bar at Gentle
-      if (d.beatMotion > 0.5 || (a.beatCount || 0) % 4 === 0) this.ripples.spawn(nearest.x, WATER, nearest.z, 2.6 + k * 2);
+      if (d.beatMotion > 0.5 || ((a.bpm || 0) > 0 && Number.isFinite(a.bar) ? (a.bar | 0) === 0 : (a.beatCount || 0) % 4 === 0)) this.ripples.spawn(nearest.x, WATER, nearest.z, 2.6 + k * 2);
     }
     // idle life: now and then a fish rises somewhere ahead
     if ((this.nextIdleRipple -= dt) <= 0) {
@@ -261,7 +261,7 @@ export class LanternRiver {
     }
     this.mist.upload(N_MIST);
 
-    this.pollen.update(dt, this.cam.eye, { amount: K.swell(k, 0.1, 0.8), speed: 0.5 + d.energy });
+    this.pollen.update(dt, this.cam.eye, { amount: K.swell(k, 0.1, 0.8), speed: 0.5 + lerp(d.energy, d.high, d.beatMotion) });
   }
 
   /** Everything that stands above the water (drawn twice: reflected, then normally). */

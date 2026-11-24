@@ -317,7 +317,7 @@ export class ArcadeAfterHours {
     this._updateTiles(k, dt, chase);
     if (this.danceClock > 1 / 30) { this.danceClock = 0; this._drawTiles(); }
 
-    this.dust.update(dt, this.cam.eye, { amount: K.swell(k, 0.35, 0.7), speed: 1 + d.energy * 0.5 });
+    this.dust.update(dt, this.cam.eye, { amount: K.swell(k, 0.35, 0.7), speed: 1 + lerp(d.energy, d.level, d.beatMotion) * 0.5 });
     this._place(d, k);
   }
 
