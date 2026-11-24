@@ -520,7 +520,11 @@ const kiosk = params.has('kiosk');
 if (kiosk) {
   setUiVisible(false);
   document.body.classList.add('kiosk');
-  if (params.has('dual')) { s.output = 'dual'; syncOperator(); }   // kiosk.bat dual: operator view + "Open projector output" up front (this session only, not saved)
+  // Kiosk decides the output mode from the URL on every launch (saveSettings may persist it with other settings, so a
+  // saved 'dual' must not leak into a plain kiosk.bat start: that would show the operator view with no picture).
+  // kiosk.bat dual: operator view + "Open projector output" up front.
+  s.output = params.has('dual') ? 'dual' : 'single';
+  syncOperator();
   // kiosk.bat dual allows popups: open the projector by itself unless an existing one reattached meanwhile
   // (never window.open before that wait: it would reload the live projector page). Blocked -> the button stays.
   if (params.has('dual')) setTimeout(() => { if (output.state === 'none') openOutput(); }, 1500);
