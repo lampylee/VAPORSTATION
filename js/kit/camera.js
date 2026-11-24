@@ -51,7 +51,7 @@ export class CameraRig {
     this.dropT = 0; this.dropV = 0; this.dropHold = 0;   // drop zoom: eases in (~0.3 s), then decays
     this.tension = 0;   // 0..1, eased audio.build (narrows the FOV)
     // song shape (audio.shape), eased once more here so the eye never changes direction abruptly
-    this.close = 0; this._close = 0;      // -1 wide … +1 close framing (× shapeAmount)
+    this.close = 0;                       // -1 wide … +1 close framing (× shapeAmount)
     this.reframe = 0; this._reframe = 0; this._reframeT = 0; this._phrase = 0;   // -1..1, new framing each phrase
     this.swayV = 0; this.swayY = 0;       // bar sway (roll / lift): continuous, never a kick
   }
@@ -64,9 +64,9 @@ export class CameraRig {
     // travel follows the song's energy (not each kick) and the section's pace, slowly
     const energy = audio.energy ?? audio.level;
     this.speed = damp(this.speed, lerp(this.idleSpeed, this.activeSpeed, k) * (sh?.pace ?? 1) + energy * k * this.bassBoost, 1.5, dt);
-    // close / reframe: two cascaded eases (tau 2 s each) so a section or phrase change starts and ends softly
-    this._close = damp(this._close, (sh?.close ?? 0) * amt, 2, dt);
-    this.close = damp(this.close, this._close, 2, dt);
+    // close: shape.close is already eased once (2 s); one more ease here so a section change starts softly.
+    // reframe steps inside the rig, so it gets two cascaded eases (tau 2 s each).
+    this.close = damp(this.close, (sh?.close ?? 0) * amt, 2, dt);
     const ph = sh?.phrase ?? 0;
     if (ph !== this._phrase) { this._phrase = ph; this._reframeT = ((ph * 0.618) % 1) * 2 - 1; }
     this._reframe = damp(this._reframe, this._reframeT * amt, 2, dt);
@@ -94,14 +94,25 @@ export class CameraRig {
     this.nudge.update(dt); this.rollSpring.update(dt); this.punch.update(dt);
   }
 
+  /**
+   * What apply() adds on top of eye / target: { lift (eye y), fov, roll }. For styles that call
+   * setCamera themselves (e.g. blending two rigs): lerp two rigs' camParams() instead of reading internals.
+   */
+  camParams(out = {}) {
+    const k = this.k;
+    out.lift = this.nudge.x + this.swayLift * this.swayY * k;
+    out.fov = this.fov * (1 - 0.07 * this.tension) * (1 - 0.1 * this.close) + (this.punch.v + this.dropV) * this.fovPunch;
+    out.roll = this.roll + this.rollSpring.x + this.swayRoll * this.swayV * k;
+    return out;
+  }
+
   apply(r) {
-    const e = this.eye, k = this.k;
-    _eye[0] = e[0]; _eye[1] = e[1] + this.nudge.x + this.swayLift * this.swayY * k; _eye[2] = e[2];
-    const fov = this.fov * (1 - 0.07 * this.tension) * (1 - 0.1 * this.close) + (this.punch.v + this.dropV) * this.fovPunch;
-    r.setCamera(_eye, this.target, { fov, near: this.near, far: this.far, roll: this.roll + this.rollSpring.x + this.swayRoll * this.swayV * k });
+    const e = this.eye, p = this.camParams(_cp);
+    _eye[0] = e[0]; _eye[1] = e[1] + p.lift; _eye[2] = e[2];
+    r.setCamera(_eye, this.target, { fov: p.fov, near: this.near, far: this.far, roll: p.roll });
   }
 }
-const _eye = [0, 0, 0];
+const _eye = [0, 0, 0], _cp = {};
 
 /** Follows a Spline (or any {at(t), length}), looking ahead along it. */
 export class DollyRig extends CameraRig {
@@ -195,17 +206,18 @@ export class OrbitFocusRig extends CameraRig {
   constructor({ center = [0, 3, 0], rx = 30, rz = 15, focus = [0, 0, 0], lookMix = 0.7, lookDist = 12, lookDrop = 1, bob = 0.25, rollSway = 0.02, start = 0, ...o } = {}) {
     super({ nudge: 0.07, rollKick: 0.01, fovPunch: 1.2, idleSpeed: 1, activeSpeed: 2.3, bassBoost: 0.3, ...o });
     Object.assign(this, { center, rx, rz, focus, lookMix, lookDist, lookDrop, bob, rollSway });
-    this.th = start; this._p = [0, 0, 0]; this._sc = 1;
+    this.th = start; this._p = [0, 0, 0];
   }
-  /** Point on the ellipse at angle th (radii × the current close-framing scale). */
-  pos(th, out) { const c = this.center, sc = this._sc; out[0] = c[0] + Math.sin(th) * this.rx * sc; out[1] = c[1]; out[2] = c[2] - Math.cos(th) * this.rz * sc; return out; }
+  pos(th, out) { const c = this.center; out[0] = c[0] + Math.sin(th) * this.rx; out[1] = c[1]; out[2] = c[2] - Math.cos(th) * this.rz; return out; }
   update(audio, k, dt) {
     super.update(audio, k, dt);
     const local = Math.hypot(this.rx * Math.cos(this.th), this.rz * Math.sin(this.th));   // keep speed in world units
     this.th += (this.speed * dt) / Math.max(1, local);
-    this._sc = 1 - 0.2 * this.close;
     const th = this.th + 0.5 * this.reframe;
     const e = this.pos(th, this.eye), p = this.pos(th + 0.1, this._p);
+    // close framing: scale the eye's offset from the focus (wide = strictly farther from what it looks at)
+    const F0 = typeof this.focus === 'function' ? this.focus(e) : this.focus, sc = 1 - 0.2 * this.close;
+    for (const q of [e, p]) { q[0] = F0[0] + (q[0] - F0[0]) * sc; q[2] = F0[2] + (q[2] - F0[2]) * sc; }
     e[1] = this.center[1] + (Math.sin(this.time * 0.37) * 0.65 + Math.sin(this.time * 0.23 + 1) * 0.35) * this.bob;
     let ax = p[0] - e[0], az = p[2] - e[2]; const al = Math.hypot(ax, az) || 1; ax /= al; az /= al;
     const F = typeof this.focus === 'function' ? this.focus(e) : this.focus;

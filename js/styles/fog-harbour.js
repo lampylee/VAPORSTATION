@@ -284,6 +284,7 @@ export class FogHarbour {
       center: [0, 3.3, 30], rx: 58, rz: 16, start: -0.35, focus: (e) => [e[0] * 0.8, 0, -12], lookMix: 1 / 1.45,
       lookDist: 12, lookDrop: 1.1, bob: 0.34, rollSway: 0.022,
       fov: 58, near: 0.1, far: 170, fovPunch: 1.2, nudge: 0.07, rollKick: 0.01, idleSpeed: 1.0, activeSpeed: 2.3, bassBoost: 0.3,
+      shapeAmount: 0.5,   // half: full close framing would take the boat over the pier and into its end lamp
     });
     this.col = { fog: [0, 0, 0], glowFog: [0, 0, 0], tint: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], one: [1, 1, 1], water: [0, 0, 0], mist: [0, 0, 0], dark: [0, 0, 0], rock: [0, 0, 0], skin: [0, 0, 0], lamp: [0, 0, 0], focus: [0, 0, 0] };
     this._wave = [0, 0.16, 0.55];

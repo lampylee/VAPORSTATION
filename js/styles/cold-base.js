@@ -436,11 +436,11 @@ export class ColdBase {
     scaleColor(col.fog, P.role('fog'), dim * (1 + k * 0.12));
     mixColor(col.fog, col.fog, P.role('glow'), fl * 0.12 * k);
     r.clear(col.fog);
-    // blended camera: lerp the two rigs' beat reactions as well
-    const sw = this.sweep, dl = this.dolly, cw = this.camW;
+    // blended camera: lerp the two rigs' camera params (beat / drop reactions, song shape, sway) as well
+    const cw = this.camW, ps = this.sweep.camParams(this._ps || (this._ps = {})), pd = this.dolly.camParams(this._pd || (this._pd = {}));
     const e2 = this._e2 || (this._e2 = [0, 0, 0]);
-    e2[0] = eye[0]; e2[1] = eye[1] + lerp(sw.nudge.x, dl.nudge.x, cw); e2[2] = eye[2];
-    r.setCamera(e2, this.tgt, { fov: lerp(sw.fov, dl.fov, cw) + lerp(sw.punch.v, dl.punch.v, cw) * 5, near: 0.1, far: 220, roll: lerp(sw.rollSpring.x, dl.rollSpring.x, cw) });
+    e2[0] = eye[0]; e2[1] = eye[1] + lerp(ps.lift, pd.lift, cw); e2[2] = eye[2];
+    r.setCamera(e2, this.tgt, { fov: lerp(ps.fov, pd.fov, cw), near: 0.1, far: 220, roll: lerp(ps.roll, pd.roll, cw) });
 
     const storm = K.stage(k, 0.15, 0.85);
     this.sky.draw(r, eye, { horizon: col.fog, zenith: P.color(R(3, 0)), brightness: dim, starLevel: 0.4 * (1 - storm) + d.high * 0.15, moonScale: 1, cloudDrift: t * (0.004 + k * 0.01) });
