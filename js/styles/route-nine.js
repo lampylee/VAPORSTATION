@@ -16,7 +16,7 @@
 // sequence, heat-shimmer dust appears, stars brighten.
 // Reactions: bass = speed + suspension bounce; beat = neon pulse + camera nudge;
 // highs = neon flicker + star twinkle.
-import { mat4, lerp } from '../gfx/math.js';
+import { mat4, lerp, damp } from '../gfx/math.js';
 import { scaleColor, mixColor } from '../gfx/color.js';
 import { blotch, grain, solid, CLEAR } from '../gfx/textures.js';
 import { GeoBuilder, box, merge } from '../gfx/geometry.js';
@@ -343,10 +343,10 @@ export class RouteNine {
 
     // ---- camera: driver's seat, right-hand lane
     this.bounce = new K.Spring(9);
-    this.prevBass = 0;
+    this.prevBass = 0; this.roadPh = 0; this.swell = 0; this.bassS = 0; this.bassM = 0; this.lvlS = 0;
     this.cam = new K.PathRig((s, out) => {
       out[0] = LANE_X + Math.sin(s * 0.011) * 0.22;
-      out[1] = EYE_Y + this.bounce.x + Math.sin(s * 0.9) * 0.004;
+      out[1] = EYE_Y + this.bounce.x + Math.sin(s * 0.9) * 0.004 + Math.sin(this.roadPh) * this.swell * 0.03;
       out[2] = -s;
       return out;
     }, { lookAhead: 12, idleSpeed: 8, activeSpeed: 24, bassBoost: 14, fov: 62, nudge: 0.18, rollKick: 0.025, fovPunch: 4, far: 220 });
@@ -361,17 +361,25 @@ export class RouteNine {
     this.a = a; this.k = k; this.time += dt;
     const d = K.drive(a, k);
     // suspension: bass onsets push the car down, a little road hum always
+    // (Gentle: no per-beat / per-onset dip; a slow groove-driven road swell keeps the car breathing)
+    const bm = d.beatMotion;
     const db = d.bass - this.prevBass; this.prevBass = d.bass;
-    if (db > 0.04) this.bounce.kick(-db * 1.6);
-    if (d.beat) { this.bounce.kick(-0.12 * k); this.signPulse.trigger(k); }
+    if (db > 0.04) this.bounce.kick(-db * 1.6 * bm);
+    if (d.beat) { this.bounce.kick(-0.12 * k * bm); this.signPulse.trigger(k); }
     this.bounce.update(dt); this.signPulse.update(dt);
+    this.roadPh += dt * 0.7;
+    this.swell = damp(this.swell, d.groove * (1 - bm), 0.8, dt);
+    this.bassS = damp(this.bassS, d.bass, 0.5, dt);
+    this.lvlS = damp(this.lvlS, d.level, 0.5, dt);
+    const bassM = lerp(this.bassS, d.bass, bm);
 
     this.cam.update(a, k, dt);
     this.cam.target[1] -= 0.16; // look slightly down the road
     if (this.cam.s >= PERIOD) this.cam.s -= PERIOD; // world repeats: seamless wrap
     const eye = this.cam.eye;
     this.ground.follow(eye[0], eye[2] - 40);
-    this.dust.update(dt, [eye[0], EYE_Y, eye[2] - 6], { amount: K.stage(k, 0.25, 0.75), speed: 1 + d.level, wind: [1.2 + d.bass * 2, 0.4] });
+    this.dust.update(dt, [eye[0], EYE_Y, eye[2] - 6], { amount: K.stage(k, 0.25, 0.75), speed: 1 + lerp(this.lvlS, d.level, bm), wind: [1.2 + bassM * 2, 0.4] });
+    this.bassM = bassM;
     this._scatter();
   }
 
@@ -447,7 +455,7 @@ export class RouteNine {
     this.poles.upload(np);
     r.drawInstanced(this.poleMesh, this.poles, { texture: this.woodTex, tint: col.tint });
     scaleColor(col.t, col.tint, 0.7);
-    r.drawInstanced(this.wireMesh, this.poles, { texture: this.wireTex, unlit: true, tint: col.t, sway: 0.003 + d.bass * 0.012 });
+    r.drawInstanced(this.wireMesh, this.poles, { texture: this.wireTex, unlit: true, tint: col.t, sway: 0.003 + this.bassM * 0.012 });
 
     let nd = 0;
     this._slots(DELIN_S, 4, (z, key) => {
@@ -455,7 +463,7 @@ export class RouteNine {
         const th = K.rand2(key, side, 31) * 0.55; // each reflector wakes at its own intensity
         const on = K.stage(k, th, th + 0.18);
         this.delin.set(nd, side * DELIN_X, 0, z, 1, 0, 0.8, 0, 1);
-        this.reflect.set(nd, side * DELIN_X, 0.62, z, 0.32 + d.pulse * 0.12, 0, 0.25 + on * 0.85, 0, 1);
+        this.reflect.set(nd, side * DELIN_X, 0.62, z, 0.32 + lerp(d.groove, d.pulse, d.beatMotion) * 0.12, 0, 0.25 + on * 0.85, 0, 1);
         nd++;
       }
     });
@@ -468,7 +476,7 @@ export class RouteNine {
     r.drawInstanced(this.mileMesh, this.miles, { texture: this.plateTex, tint: col.tint });
 
     // ---- foliage
-    const sway = 0.008 + d.bass * 0.03;
+    const sway = 0.008 + this.bassM * 0.03;
     r.drawInstanced(this.quad, this.cacti, { texture: this.cactusTex, billboard: 1, tint: col.tint });
     r.drawInstanced(this.quad, this.scrub, { texture: this.scrubTex, billboard: 1, sway, tint: col.tint });
 
@@ -536,7 +544,7 @@ export class RouteNine {
     for (let j = 0; j < 2; j++) {
       const lz = z + (j ? -8 : 8), lx = LOT_X - 6;
       this.lamps.set(li + j, lx, 0, lz, 1, Math.PI, 0.9, 0, 1);
-      this.lampGlow.set(li + j, lx - 1, 4.8 - 1, lz, 2 + d.pulse * 0.6, 0, 0.1 + lampOn * 0.9 * (0.93 + 0.07 * Math.sin(t * 11 + j * 4)), 0, 1);
+      this.lampGlow.set(li + j, lx - 1, 4.8 - 1, lz, 2 + lerp(d.groove, d.pulse, d.beatMotion) * 0.6, 0, 0.1 + lampOn * 0.9 * (0.93 + 0.07 * Math.sin(t * 11 + j * 4)), 0, 1);
     }
   }
 

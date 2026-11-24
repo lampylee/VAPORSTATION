@@ -62,7 +62,7 @@ export class Relic {
     this.stars = r.createMesh(merge(sp));
 
     this.time = 0; this.rotY = 0; this.rotX = 0; this.kick = 0; this.flash = 0;
-    this.nudge = 0; this.nudgeVel = 0; this.camDist = 9; this.k = 0; this.a = null;
+    this.nudge = 0; this.nudgeVel = 0; this.bassS = 0; this.highS = 0; this.orbitT = 0; this.camDist = 9; this.k = 0; this.a = null;
     this.m = mat4.create();
     this.eye = [0, 0, 0];
     this.col = { fog: [0, 0, 0], tint: [0, 0, 0], emi: [0, 0, 0], cage: [0, 0, 0], orbit: [0, 0, 0], star: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0] };
@@ -71,15 +71,23 @@ export class Relic {
   update(a, k, dt) {
     this.a = a; this.k = k;
     const t = (this.time += dt);
-    if (a.beat) { const mo = a.motion ?? 1; this.kick += 2.5 * k * mo; this.flash = Math.max(this.flash, k * (a.accent ?? 1)); this.nudgeVel += 3 * k * mo; }
+    // Gentle: bass, high and the beat pulse reach the shape only through easing and the smooth groove swing
+    const bm = a.beatMotion ?? 1;
+    this.bassS = damp(this.bassS, a.bass * k, 0.5, dt);
+    this.highS = damp(this.highS, a.high * k, 0.5, dt);
+    const bassM = lerp(this.bassS, a.bass * k, bm), highM = lerp(this.highS, a.high * k, bm);
+    const swing = lerp(a.groove ?? a.beatPulse, a.beatPulse, bm);
+    this.bassM = bassM; this.highM = highM; this.swing = swing;
+    if (a.beat) { const mo = a.motion ?? 1; this.kick += 2.5 * k * mo * bm; this.flash = Math.max(this.flash, k * (a.accent ?? 1)); this.nudgeVel += 3 * k * mo * bm; }
     this.kick *= Math.exp(-dt / 0.35);
     this.flash *= Math.exp(-dt / (0.2 * (a.decay ?? 1)));
-    const spin = 0.15 + a.bass * k * 1.2 + this.kick;
+    this.orbitT += (0.35 + highM * 1.6) * dt; // integrated, so a speed change never jumps the orbit phase
+    const spin = 0.15 + bassM * 1.2 + this.kick;
     this.rotY += spin * dt; this.rotX += spin * 0.55 * dt;
     const w = 6;
     this.nudgeVel += (-this.nudge * w * w - 2 * w * this.nudgeVel) * dt;
     this.nudge += this.nudgeVel * dt;
-    this.camDist = damp(this.camDist, lerp(9, 7.4, k) - a.bass * k * 0.9, 0.2, dt);
+    this.camDist = damp(this.camDist, lerp(9, 7.4, k) - bassM * 0.9, lerp(0.5, 0.2, bm), dt);
 
     // deform the core
     const { verts } = this.ico;
@@ -87,7 +95,7 @@ export class Relic {
       const s = this.seeds[i];
       const n = Math.sin(t * 1.3 + s.a * 6.283) * 0.5 + 0.5;
       const rad = 1.3 * (1 + 0.06 * Math.sin(t * 0.7 + s.a * 10)
-        + k * (a.bass * 0.5 * s.b + a.high * 0.18 * n + a.beatPulse * 0.15 * s.c));
+        + bassM * 0.5 * s.b + highM * 0.18 * n + swing * k * 0.15 * s.c);
       this.cur[i][0] = verts[i][0] * rad; this.cur[i][1] = verts[i][1] * rad; this.cur[i][2] = verts[i][2] * rad;
     }
     const Pos = this.coreGeo.positions;
@@ -104,7 +112,7 @@ export class Relic {
     r.clear(col.fog);
     const ang = t * 0.12;
     eye[0] = Math.sin(ang) * this.camDist; eye[1] = 1.5 + Math.sin(t * 0.17) * 1.5 + this.nudge * 0.3; eye[2] = Math.cos(ang) * this.camDist;
-    r.setCamera(eye, [0, this.nudge * 0.1, 0], { fov: 55 + this.flash * 4, near: 0.1, far: 150 });
+    r.setCamera(eye, [0, this.nudge * 0.1, 0], { fov: 55 + this.flash * 4 * (a.beatMotion ?? 1), near: 0.1, far: 150 });
     mixColor(col.light, P.role('light'), P.role('glow'), a.mid * k * 0.6);
     r.setLight([Math.sin(t * 0.4), -0.6, Math.cos(t * 0.4)], col.light, scaleColor(col.amb, P.role('ambient'), 0.4));
 
@@ -120,19 +128,18 @@ export class Relic {
     r.draw(this.core, mat4.trs(m, 0, 0, 0, this.rotX, this.rotY, 0), { texture: this.tex.core, tint: col.tint, emissive: col.emi });
 
     scaleColor(col.cage, P.role('glow'), 0.05 + a.high * k * 0.4 + this.flash * 0.3);
-    const cs = 2.3 * (1 + a.beatPulse * k * 0.08);
+    const cs = 2.3 * (1 + this.swing * k * 0.08);
     r.draw(this.cage, mat4.trs(m, 0, 0, 0, -this.rotX * 0.4, -this.rotY * 0.5, 0, cs), { texture: this.tex.cage, tint: col.tint, emissive: col.cage });
 
-    const orbitSpeed = 0.35 + a.high * k * 1.6;
     const orbitCol = P.color(R(1, 3));
     RINGS.forEach((ring, ri) => {
       for (let i = 0; i < ring.n; i++) {
-        const th = t * orbitSpeed * (ri % 2 ? -1 : 1) + (i / ring.n) * Math.PI * 2;
+        const th = this.orbitT * (ri % 2 ? -1 : 1) + (i / ring.n) * Math.PI * 2;
         const x = Math.cos(th) * ring.r, z = Math.sin(th) * ring.r;
         const y = z * Math.sin(ring.tilt), zz = z * Math.cos(ring.tilt);
         const sparkle = hash(i + ri * 31, Math.floor(t * 8)) < a.high * k * 0.8 ? 1 : 0.08;
         scaleColor(col.orbit, orbitCol, sparkle + this.flash * 0.3);
-        mat4.trs(m, x, y, zz, t * 1.5 + i, t + i, 0, 1 + a.bass * k * 0.4);
+        mat4.trs(m, x, y, zz, t * 1.5 + i, t + i, 0, 1 + this.bassM * 0.4);
         r.draw(this.cube, m, { texture: this.tex.orbit, tint: col.tint, emissive: col.orbit });
       }
     });

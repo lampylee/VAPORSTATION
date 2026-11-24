@@ -15,7 +15,7 @@
 // the accent ramp shifts in (magenta fringes), the lake and snow pick up the glow.
 // Beat: a gentle brightness pulse that travels out along each ribbon + tiny nudge.
 // Mids: ripple speed. Highs: star twinkle + snow sparkle.
-import { mat4, lerp, clamp } from '../gfx/math.js';
+import { mat4, lerp, damp, clamp } from '../gfx/math.js';
 import { scaleColor, mixColor } from '../gfx/color.js';
 import { GeoBuilder } from '../gfx/geometry.js';
 import { solid } from '../gfx/textures.js';
@@ -206,6 +206,7 @@ export class AuroraField {
 
     this.m = mat4.create();
     this.time = 0; this.k = 0; this.a = null; this.aur = 0; this.az = 0;
+    this.bassS = 0; this.midS = 0; this.bassM = 0;
     this.col = { fog: [0, 0, 0], zen: [0, 0, 0], tint: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], glow: [0, 0, 0], ice: [0, 0, 0], one: [1, 1, 1], tmp: [0, 0, 0] };
   }
 
@@ -222,14 +223,17 @@ export class AuroraField {
 
     // aurora motion: slow drift always, ripple speed from mids
     this.drift += dt * (0.05 + k * 0.05);
-    this.ripple += dt * (0.35 + k * 0.25 + d.mid * 2.2);
+    // mids / bass shape motion directly only at Punchy; at Gentle they are eased (0.5 s)
+    this.bassS = damp(this.bassS, d.bass, 0.5, dt); this.midS = damp(this.midS, d.mid, 0.5, dt);
+    this.bassM = lerp(this.bassS, d.bass, d.beatMotion);
+    this.ripple += dt * (0.35 + k * 0.25 + lerp(this.midS, d.mid, d.beatMotion) * 2.2);   // integrated phase
     if (d.beat) this.pulse.trigger(0.35 + 0.35 * k);
     this.pulse.update(dt);
     this.wave.push(this.pulse.v * k);
     this._ribbons(d, k, t);
 
-    this.snow.update(dt, e, { amount: K.swell(k, 0.5, 0.75), speed: 0.75 + d.level * 0.5, wind: [0.5 + d.bass * 1.2, 0.15] });
-    this.sparkle.update(dt, e, { amount: 0.25 + K.stage(k, 0, 0.5) * 0.75, speed: 0.75 + d.level * 0.5, wind: [0.5 + d.bass * 1.2, 0.15] });
+    this.snow.update(dt, e, { amount: K.swell(k, 0.5, 0.75), speed: 0.75 + lerp(d.energy, d.level, d.beatMotion) * 0.5, wind: [0.5 + this.bassM * 1.2, 0.15] });
+    this.sparkle.update(dt, e, { amount: 0.25 + K.stage(k, 0, 0.5) * 0.75, speed: 0.75 + lerp(d.energy, d.level, d.beatMotion) * 0.5, wind: [0.5 + this.bassM * 1.2, 0.15] });
     this._scatter(d, k, t);
     this._stars(d, k, t);
   }
@@ -347,7 +351,7 @@ export class AuroraField {
     this.cam.apply(r);
 
     mixColor(col.zen, P.color(R(3, 0)), col.glow, aur * 0.12);
-    this.sky.draw(r, eye, { horizon: col.fog, zenith: col.zen, brightness: dim, moonScale: 1 + this.pulse.v * 0.04 });
+    this.sky.draw(r, eye, { horizon: col.fog, zenith: col.zen, brightness: dim, moonScale: 1 + lerp(d.groove, this.pulse.v, d.beatMotion) * 0.04 });
     // stars: additive dots, brighter where the sky is darker
     scaleColor(col.tmp, col.one, (0.55 + d.high * 0.3) * (1 - aur * 0.3));
     r.drawInstanced(this.starMesh, this.starInst, { texture: this.starTex, billboard: 2, unlit: true, additive: true, fog: false, tint: col.tmp });
@@ -372,7 +376,7 @@ export class AuroraField {
     r.draw(this.lake, mat4.trs(this.m, LX, LAKE_Y, LZ), {
       texture: this.iceTex, texture2: this.iceLitTex, blend: K.stage(k, 0.15, 0.85) * 0.6, tint: col.tint, emissive: col.ice,
     });
-    const sway = 0.012 + d.bass * 0.03;
+    const sway = 0.012 + this.bassM * 0.03;
     r.drawInstanced(this.quad, this.trees, { texture: this.pineTex, billboard: 1, sway, tint: col.tint });
     r.drawInstanced(this.quad, this.reeds, { texture: this.reedTex, billboard: 1, sway: sway * 2, tint: col.tint });
 

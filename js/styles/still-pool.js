@@ -16,6 +16,10 @@
 // the waterline (fog closes in, the surface fades) and opens again underwater, looking up at the
 // rings from below. It only goes under once intensity has stayed high (hysteresis), so it never
 // hovers in the murk. Bass: rings. Beat: at most one soft ring. Nothing else reacts to beats.
+// Song sections (K.Moods, Conductor on): intro / breakdown / outro still the pool (small rings close
+// in, reeds barely move, fewer lights, the camera sinks less); a build sets the reeds swaying and
+// lets the rings spread wide; the drop lowers the camera to skim the surface with rings everywhere.
+// Only the groove (= today, also Conductor off) may take the camera under; the other moods stay above.
 import { mat4, lerp, clamp, damp, smoothstep } from '../gfx/math.js';
 import { scaleColor, mixColor } from '../gfx/color.js';
 import { GeoBuilder, icosphere, flatNormals } from '../gfx/geometry.js';
@@ -29,6 +33,7 @@ const PCZ = -4, PX = 10, PZ = 9.5;    // pool: ellipse centred at (0, PCZ)
 const N_LIGHTS = 9;
 const SUB_IN = 0.78, SUB_OUT = 0.6;  // smoothed intensity that takes the camera under / back up
 const SUB_TIME = 9;                  // seconds for a full pass through the waterline
+const SKIM_Y = 0.2;                  // the drop's eye height over the water (above the murk band)
 
 const sm = (t) => t * t * (3 - 2 * t);
 const poolE = (x, z) => Math.hypot(x / PX, (z - PCZ) / PZ);   // < 1 inside the pool
@@ -122,49 +127,81 @@ export class StillPool {
     this.cam = new K.CameraRig({ fov: 56, near: 0.05, far: 140, fovPunch: 0, nudge: 0.02, rollKick: 0, idleSpeed: 0, activeSpeed: 0, bassBoost: 0 });
     this.breath = new K.Breath({ beats: 8, period: 12 });
     this.time = 0; this.k = 0; this.sk = 0; this.sub = 0; this.subTarget = 0; this.under = 0; this.murk = 0; this.eyeY = 1;
-    this.a = null; this.bassAvg = 0; this.cool = 0; this.nextDrip = 1.5;
+    this.a = null; this.barClock = new K.BarClock({ minGap: 1 }); this.midS = 0; this.swayMid = 0; this.bassAvg = 0; this.cool = 0; this.nextDrip = 1.5;
     this.m = mat4.create();
     this.col = { fog: [0, 0, 0], murk: [0, 0, 0], tmp: [0, 0, 0], zen: [0, 0, 0], tint: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], glow: [0, 0, 0], water: [0, 0, 0] };
+
+    // song sections: gates multiply the k fed into today's stage() curves (clamped 0..1); ringGate /
+    // spread scale ring size / where rings land; rain = extra small rings per second (× k).
+    // sink (how far the swell lowers the eye), skim (0..1 toward SKIM_Y) and subGate (> 0.5 lets the
+    // camera go under) are camera keys: slow, eased twice.
+    this.moods = new K.Moods({
+      still:  { lightGate: 0.55, flyGate: 0.4, ringGate: 0.6,  ringBright: 0.8,  spread: 0.65, reedSway: 0.35, rain: 0,   sink: 0.6, skim: 0, subGate: 0 },
+      base:   { lightGate: 1,    flyGate: 1,   ringGate: 1,    ringBright: 1,   spread: 1,    reedSway: 1,    rain: 0,   sink: 1,   skim: 0, subGate: 1 },
+      gather: { lightGate: 1.2,  flyGate: 1.2, ringGate: 1.25, ringBright: 1.3, spread: 1.5,  reedSway: 2.4,  rain: 0.6, sink: 1,   skim: 0, subGate: 0 },
+      full:   { lightGate: 1.4,  flyGate: 1.3, ringGate: 1.35, ringBright: 1.8, spread: 1.9,  reedSway: 2,    rain: 2.5, sink: 1,   skim: 1, subGate: 0 },
+    }, { dropEase: 4, slow: ['sink', 'skim', 'subGate'] });
+    this.camSink = null; this.camSkim = 0; this.camSub = 1; this.spread = 1; this.reedSway = 1; this.ringB = 1; this.nextRain = 0.5;
   }
 
   /** Spawn a ring somewhere in view on the water. */
-  _ring(size) {
-    const x = (Math.random() - 0.5) * 9, z = -2.5 - Math.random() * 8;
-    this.ripples.spawn(x, W, z, size);
+  _ring(size, amp = 1) {
+    // a wide spread (build / drop) reaches past the far bank: retry a few times, then pull it onto the water
+    const sp = this.spread;
+    let x = 0, z = 0, e = 2;
+    for (let i = 0; i < 4 && e > 0.95; i++) { x = (Math.random() - 0.5) * 9 * sp; z = -2.5 - Math.random() * 8 * sp; e = poolE(x, z); }
+    if (e > 0.95) { const s = 0.95 / e; x *= s; z = PCZ + (z - PCZ) * s; }
+    this.ripples.spawn(x, W, z, size, amp);
   }
+
+  /** Coming on screen (StyleManager.enter, after its moods / rig snap): the mood keys it eases a second time start at the current mood. */
+  enter() { this.camSink = null; }
 
   update(a, k, dt) {
     this.a = a; this.k = k; this.time += dt;
+    const m = this.moods.update(a, dt);
     const d = K.drive(a, k), t = this.time;
     const b = this.breath.update(a, dt);
+    // camera mood keys: eased a second time so a section change starts softly
+    if (this.camSink === null) { this.camSink = m.sink; this.camSkim = m.skim; this.camSub = m.subGate; }
+    this.camSink = damp(this.camSink, m.sink, 2, dt); this.camSkim = damp(this.camSkim, m.skim, 2, dt); this.camSub = damp(this.camSub, m.subGate, 2, dt);
+    this.spread = m.spread; this.reedSway = m.reedSway;
+    const rl = m.ringBright - 1; this.ringB = 1 + (rl > 0 ? rl * k : rl);   // brighter rings are light: × k
+    const skim = smoothstep(clamp(this.camSkim));
     // big, slow things follow a heavily smoothed intensity (plus a little song energy)
     this.sk = damp(this.sk, clamp(k * 0.85 + d.energy * 0.15), 4, dt);
     const sk = this.sk;
 
     // going under: hysteresis, then a slow constant-speed pass through the waterline
     if (sk > SUB_IN) this.subTarget = 1; else if (sk < SUB_OUT) this.subTarget = 0;
-    this.sub = clamp(this.sub + Math.sign(this.subTarget - this.sub) * Math.min(Math.abs(this.subTarget - this.sub), dt / SUB_TIME));
+    const subT = this.camSub > 0.5 ? this.subTarget : 0;   // only the groove goes under; elsewhere the pass runs back up
+    this.sub = clamp(this.sub + Math.sign(subT - this.sub) * Math.min(Math.abs(subT - this.sub), dt / SUB_TIME));
     const u = smoothstep(this.sub);
 
     this.cam.update(a, k, dt);
     const e = this.cam.eye, tg = this.cam.target;
-    const yAbove = lerp(1.25, 0.42, sk) + b * 0.08, yBelow = -0.8 + b * 0.06;
+    const skS = sk * this.camSink;
+    const yAbove = lerp(lerp(1.25, 0.42, skS), SKIM_Y, skim) + b * lerp(0.08, 0.05, skim), yBelow = -0.8 + b * 0.06;
     e[0] = Math.sin(t * 0.031) * 1.1;
     e[1] = lerp(yAbove, yBelow, u);
     e[2] = 1.4 - sk * 1.1 + Math.sin(t * 0.023 + 1) * 0.3;
     tg[0] = Math.sin(t * 0.019 + 2) * 2.4;
-    tg[1] = lerp(lerp(-1.6, -0.45, sk), 0.9, u);   // look down at the water; from below, up at the surface
+    tg[1] = lerp(lerp(lerp(-1.6, -0.45, skS), -0.2, skim), 0.9, u);   // look down at the water (skimming: along it); from below, up at the surface
     tg[2] = -9;
     this.eyeY = e[1] + this.cam.nudge.x;
     this.under = this.eyeY < W ? 1 : 0;
-    this.murk = 1 - smoothstep(clamp(Math.abs(this.eyeY - W) / 0.32));
+    // (skimming, the eye is near the waterline without crossing it: then murk only during a pass under)
+    this.murk = (1 - smoothstep(clamp(Math.abs(this.eyeY - W) / 0.32))) * lerp(1, smoothstep(clamp(this.sub * 3)), skim);
 
     // rings: a bass onset, or a beat; never more than one at a time (shared cooldown)
     this.bassAvg = damp(this.bassAvg, a.bass, 0.5, dt);
     this.cool -= dt;
+    // (below Punchy a ring is a once-a-bar event: a ring growing on every kick is a beat movement)
     const onset = d.bass > 0.05 && a.bass - this.bassAvg > 0.07;
-    if ((d.beat || onset) && this.cool <= 0) {
-      this._ring((2.2 + k * 2.8 + d.bass * 1.5) * lerp(0.7, 1, clamp(d.accent)));
+    const bar = this.barClock.update(a, dt) && k > 0.05;
+    const hit = d.beatMotion >= 0.5 ? d.beat || onset : bar;
+    if (hit && this.cool <= 0) {
+      this._ring((2.2 + k * 2.8 + lerp(d.energy, d.bass, d.beatMotion) * 1.5) * lerp(0.7, 1, clamp(d.accent)) * m.ringGate);
       this.cool = 0.75 * Math.max(1, d.decay);
     }
     // idle life: a drip now and then (sparser as the song takes over)
@@ -172,19 +209,26 @@ export class StillPool {
       this.nextDrip = lerp(3, 6, sk) + Math.random() * 3;
       this._ring(1.1 + Math.random() * 0.8);
     }
+    // build / drop: small rings spreading everywhere, as if a light rain began (a steady rate, never on beats)
+    if (m.rain * k > 0.01 && (this.nextRain -= dt * m.rain * k) <= 0) {
+      this.nextRain = 0.6 + Math.random() * 0.8;
+      this._ring(0.9 + Math.random() * 1.2, 0.7);
+    }
     this.ripples.update(dt);
     this.caustics.update(dt, 0.6 + sk * 0.6);
 
     // far lights come on one by one with the swell and breathe gently
     this.lights.forEach((L, i) => {
-      const lit = Math.max(L.idle ? 0.5 : 0, K.stage(sk, L.on, L.on + 0.2));
+      const lit = Math.max(L.idle ? 0.5 : 0, K.stage(clamp(sk * m.lightGate), L.on, L.on + 0.2));
       L.level = lit * (0.78 + 0.22 * b) * (0.92 + 0.08 * Math.sin(t * 0.7 + L.ph)) * lerp(0.8, 1.15, sk);
       this.glows.set(i, L.x, L.y, L.z, L.size * (0.8 + L.level * 0.6), 0, L.level, 0, 1);
     });
     this.glows.upload(N_LIGHTS);
 
-    this.flies.update(dt, [0, W + 0.9, -8], { amount: K.stage(sk, 0.25, 0.75) * 0.8, speed: 0.4 });
-    this.bubbles.update(dt, [0, -1.25, -5.5], { amount: u * lerp(0.3, 0.8, k), speed: 0.6 + d.mid * 0.4 });
+    this.midS = damp(this.midS, d.mid, 0.5, dt);
+    this.swayMid = lerp(this.midS, d.mid, d.beatMotion);
+    this.flies.update(dt, [0, W + 0.9, -8], { amount: K.stage(clamp(sk * m.flyGate), 0.25, 0.75) * 0.8, speed: 0.4 });
+    this.bubbles.update(dt, [0, -1.25, -5.5], { amount: u * lerp(0.3, 0.8, k), speed: 0.6 + this.swayMid * 0.4 });
   }
 
   /** Sky + everything standing in the scene. Drawn mirrored, then clipped (above), or once (below). */
@@ -193,7 +237,7 @@ export class StillPool {
     this.sky.draw(r, this.cam.eye, { horizon: col.fog, zenith: col.zen, brightness: 1, starLevel: (0.25 + this.breath.v * 0.1) * fade * (1 - this.under * 0.5) });
     this.ground.draw(r, { texture: this.groundTex, tint: col.tint });
     r.drawInstanced(this.stoneMesh, this.stones, { texture: this.stoneTex, tint: col.tint });
-    const sway = 0.012 + this.breath.v * 0.015 + (this.a ? K.drive(this.a, this.k).mid * 0.03 : 0);
+    const sway = 0.012 + this.breath.v * 0.015 * Math.min(1, this.reedSway) + this.swayMid * 0.03 * this.reedSway;
     r.drawInstanced(this.quad, this.reeds, { texture: this.reedTex, billboard: 1, sway, tint: col.tint });
     const g = glowLevel * fade;
     if (g > 0.01) {
@@ -239,7 +283,7 @@ export class StillPool {
         const dr = this.time * 0.006;
         r.draw(this.waterMesh, mat4.identity(this.m), { texture: this.waterTex, tint: col.water, opacity: op, uvOffset: [dr, dr * 0.4] });
       }
-      this.ripples.draw(r, { brightness: lerp(0.4, 0.8, sk) * (1 - murk) });
+      this.ripples.draw(r, { brightness: lerp(0.4, 0.8, sk) * (1 - murk) * this.ringB });
     } else {
       // below: murky green-dark water, the bed with caustics, the surface seen from beneath
       r.setFog(col.fog, lerp(0.5, 0, murk), lerp(lerp(9, 15, sk), 1.2, murk));

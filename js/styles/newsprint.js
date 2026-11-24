@@ -13,6 +13,10 @@
 // smoothed energy and eased. Beat = a gust: a velocity burst through the
 // storm and a push on the towers, scaled by audio.accent / motion.
 // Page "print" is abstract dithered blocks and lines only: no text, no mastheads.
+// Song sections (K.Moods, Conductor on): intro / breakdown / outro hold the storm back (a few
+// pages float, the stacks stand still); a build sets the stacks swaying and gathers more pages
+// into the flocks, circling tighter round the central stacks; the drop whips the page storm up around the camera,
+// whose orbit eases in (slowly, never inside today's k = 1 reach). Conductor off = base.
 import { mat4, lerp, clamp, damp, smoothstep } from '../gfx/math.js';
 import { scaleColor } from '../gfx/color.js';
 import { GeoBuilder } from '../gfx/geometry.js';
@@ -229,49 +233,85 @@ export class Newsprint {
     this.glide = new K.School(r, { kind: 'bird', groups: 3, perGroup: 6, size: 1.1, spread: [1.5, 4], lift: 1, texture: fold });
     this.flock = new K.School(r, { kind: 'bird', groups: 4, perGroup: 10, size: 1.0, spread: [1.2, 3.6], lift: 1.2, texture: fold });
 
-    this.cam = new K.OrbitRig({ center: CENTER.slice(), radius: ORBIT, height: 3, bob: 0.7, pushIn: 0, idleSpeed: 0.025, activeSpeed: 0.09, bassBoost: 0, fov: 62, fovPunch: 1.5, nudge: 0.1, rollKick: 0.015 });
+    this.cam = new K.OrbitRig({ center: CENTER.slice(), radius: ORBIT, height: 3, bob: 0.7, pushIn: 0, idleSpeed: 0.025, activeSpeed: 0.09, bassBoost: 0, fov: 62, fovPunch: 1.5, nudge: 0.1, rollKick: 0.015, shapeAmount: 0.5 });   // half: close framing would pull the orbit into the inner stacks
     this.cam.angle = 0.6;
     this.towerPush = new K.Spring(1.6);   // beat gusts lean every tower, then they settle
+    this.bar = new K.BarClock({ minGap: 1 });   // Gentle: one soft gust per bar
+    this.lean = 0;   // eased groove lean (Gentle payback for the beat shove)
     this.eS = 0; this.swayAmt = 0; this.windA = 0.4; this.windTo = 0.4;
     this.m = mat4.create();
     this.time = 0; this.k = 0; this.a = SILENT;
     this.col = { fog: [0, 0, 0], tint: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], page: [0, 0, 0] };
+
+    // song sections: stormGate multiplies the k fed into today's storm stage (clamped 0..1): pages,
+    // swirl, gusts, flocks, tower sway. camGate does the same for the camera's share of it (orbit
+    // radius / height: a camera position, so slow and eased twice; at most today's k = 1 framing).
+    // Mood-only: sway = extra tower sway (× k), flockR = the flocks' circling radius, flockMore =
+    // extra pages in the flapping flock (× k).
+    this.moods = new K.Moods({
+      still:  { stormGate: 0.35, camGate: 0.5, sway: 0,   flockR: 1,    flockMore: 0 },
+      base:   { stormGate: 1,    camGate: 1,   sway: 0,   flockR: 1,    flockMore: 0 },
+      gather: { stormGate: 1.2,  camGate: 1.1, sway: 1,   flockR: 0.75, flockMore: 1 },
+      full:   { stormGate: 1.7,  camGate: 1.7, sway: 0.6, flockR: 1,    flockMore: 0 },
+    }, { dropEase: 4, slow: ['camGate'] });
+    this.camG = null; this.fr = null; this.more = 0;
   }
+
+  /** Coming on screen (StyleManager.enter, after its moods / rig snap): the mood keys it eases a second time start at the current mood. */
+  enter() { this.camG = null; this.fr = null; }
 
   update(a, k, dt) {
     this.a = a; this.k = k; this.time += dt;
+    const m = this.moods.update(a, dt);
     const d = K.drive(a, k), t = this.time;
     // slow, eased energy: what the stacks and storm follow (never the raw kick)
     this.eS = damp(this.eS, clamp(a.energy ?? a.level ?? 0), 1.2, dt);
-    const storm = K.stage(k, 0.3, 1), big = storm * (0.45 + 0.55 * this.eS);
+    const ksg = clamp(k * m.stormGate), storm = K.stage(ksg, 0.3, 1), big = storm * (0.45 + 0.55 * this.eS);
 
-    this.cam.radius = lerp(ORBIT, ORBIT - 3, big);
-    this.cam.height = lerp(3, 2.2, big);
+    // camera: its own gate, eased a second time so a section change starts softly (radius ≥ ORBIT - 3,
+    // today's k = 1 framing: the ring of towers is kept clear 6.5 either side of ORBIT)
+    if (this.camG === null) this.camG = m.camGate;
+    this.camG = damp(this.camG, m.camGate, 2, dt);
+    const bigC = K.stage(clamp(k * this.camG), 0.3, 1) * (0.45 + 0.55 * this.eS);
+    this.cam.radius = lerp(ORBIT, ORBIT - 3, bigC);
+    this.cam.height = lerp(3, 2.2, bigC);
     this.cam.update(a, k, dt);
     const eye = this.cam.eye;
 
     // gust on the beat: velocity impulse through the storm + a shove on the towers
     let gust = 0;
-    if (d.beat) {
-      gust = d.accent * (0.8 + 4.2 * storm) * k;
-      this.towerPush.kick(d.accent * 0.5 * storm);
-      this.windTo += (K.rand2(a.beatCount || 0, 1, 3) - 0.5) * 0.6 * storm;   // gusts veer the wind a little
+    const bm = d.beatMotion, barFire = this.bar.update(a, dt);
+    if (d.beat && bm > 0.01) {
+      gust = d.accent * (0.8 + 4.2 * storm) * k * bm;
+      this.towerPush.kick(d.accent * 0.5 * storm * bm);
+      this.windTo += (K.rand2(a.beatCount || 0, 1, 3) - 0.5) * 0.6 * storm * bm;   // gusts veer the wind a little
     }
+    if (barFire && bm < 1 && k > 0.05) {      // Gentle: a softer gust once per bar
+      gust += d.accent * (0.8 + 4.2 * storm) * k * 0.3 * (1 - bm);
+      this.windTo += (K.rand2(a.beatCount || 0, 2, 3) - 0.5) * 0.4 * storm * (1 - bm);
+    }
+    this.lean = damp(this.lean, d.groove * (1 - bm) * 0.3 * storm, 0.6, dt);   // groove leans the towers slowly
     this.towerPush.update(dt);
     this.windA = damp(this.windA, this.windTo, 1.5, dt);   // eased, so the towers' lean turns, never jumps
-    this.swayAmt = damp(this.swayAmt, big, 1.5, dt);
+    this.swayAmt = damp(this.swayAmt, big + m.sway * K.stage(k, 0.05, 0.5) * 0.45, 1.5, dt);   // build: the stacks sway (× k)
 
     const wind = 0.25 + big * 1.5;
     this.storm.update(dt, eye, {
       amount: 0.06 + 0.94 * storm * (0.6 + 0.4 * this.eS),
-      swirl: lerp(0.25, 1.6, K.stage(k, 0.15, 0.6)) + 7.5 * big,
+      swirl: lerp(0.25, 1.6, K.stage(ksg, 0.15, 0.6)) + 7.5 * big,
       fall: lerp(0.45, 0.8, storm), flutter: lerp(0.45, 1.3, storm),
       wind: [Math.cos(this.windA) * wind, Math.sin(this.windA) * wind],
       gust, ring: lerp(8, 6, storm), spin: lerp(0.7, 1.6, storm),
     });
 
     // flocks circle the central stacks, high above at idle, lower and quicker as it swells
-    const flockH = lerp(13, 9, storm);
+    // build: more pages gather into the flocks, circling tighter round the central stacks (eased by
+    // the mood, × k; the flocks stay at today's height, above the tallest central stack)
+    // (their × k share has its own slow settle, like the mood itself: a song's start / end ramp is fast)
+    const kf = K.stage(k, 0.05, 0.5), moreT = m.flockMore * kf, frT = lerp(1, m.flockR, kf);
+    if (this.fr === null) { this.more = moreT; this.fr = frT; }
+    this.more = damp(this.more, moreT, 2, dt); this.fr = damp(this.fr, frT, 2, dt);
+    const more = this.more, fr = this.fr, flockH = lerp(13, 9, storm);
     const centre = (g, tt, out, rad) => {
       const ang = tt * 0.25 + g * (TAU / 4);
       out[0] = Math.cos(ang) * rad + Math.sin(tt * 0.13 + g) * 2;
@@ -279,8 +319,8 @@ export class Newsprint {
       out[1] = flockH + Math.sin(tt * 0.31 + g * 1.7) * 1.5 - g * 0.6;
       return out;
     };
-    this.glide.update(dt, (g, tt, out) => centre(g, tt, out, 9), { amount: lerp(0.5, 0.25, storm), speed: lerp(0.35, 0.7, storm), flap: 0 });
-    this.flock.update(dt, (g, tt, out) => centre(g + 0.5, tt, out, 7), { amount: storm * (0.5 + 0.5 * this.eS), speed: 0.6 + big * 0.9, flap: 0.55 });
+    this.glide.update(dt, (g, tt, out) => centre(g, tt, out, 9 * fr), { amount: lerp(0.5, 0.25, storm), speed: lerp(0.35, 0.7, storm), flap: 0 });
+    this.flock.update(dt, (g, tt, out) => centre(g + 0.5, tt, out, 7 * fr), { amount: clamp(storm * (0.5 + 0.5 * this.eS) + more * 0.4), speed: 0.6 + big * 0.9, flap: 0.55 });
 
 
     this._towers(t);
@@ -289,7 +329,7 @@ export class Newsprint {
 
   /** Stack every bundle on a bending curve: offset grows with height², tilt follows the slope. */
   _towers(t) {
-    const n = [0, 0], A = this.swayAmt, push = this.towerPush.x, wa = this.windA;
+    const n = [0, 0], A = this.swayAmt, push = this.towerPush.x + this.lean, wa = this.windA;
     const wx = Math.cos(wa), wz = Math.sin(wa);
     for (const tw of this.towers) {
       const H = Math.max(1, tw.H);

@@ -30,7 +30,13 @@
 //           (rigs, not used here: K.OrbitFocusRig, K.DriftRig, K.GridWanderRig)
 //
 // Intensity: idle = dim dusk, slow drift, snow. Playing = lamps on, faster
-// flight, trees sway with bass, fireflies, moon pulses on beats.
+// flight, trees sway with the song's energy, fireflies, lanterns breathe.
+//
+// Beat motion follows Feel (d.beatMotion: Gentle 0 ... Punchy 1): anything that
+// MOVES or SCALES on a beat is multiplied by it, and a slow d.groove swing pays
+// the motion back at Gentle. Raw bands that drive positions are blended
+// lerp(d.energy, raw, d.beatMotion), so Punchy is exactly the raw band.
+// Light and colour reactions (flares, flicker, window flashes) are left alone.
 import { mat4, lerp } from '../gfx/math.js';
 import { scaleColor } from '../gfx/color.js';
 import { merge } from '../gfx/geometry.js';
@@ -192,11 +198,11 @@ export class KitDemo {
     const d = K.drive(a, k);
     this.cam.update(a, k, dt);
     this.ground.follow(this.cam.eye[0], this.cam.eye[2]);
-    if (d.beat) this.moonPulse.trigger(k);
+    if (d.beat) this.moonPulse.trigger(k);   // light flash on the searchlights; the moon only grows with it at Punchy (render)
     this.moonPulse.update(dt);
     // bass pumps the lantern swing in phase with its motion, so it builds up instead of jerking
     for (const pd of [this.swingX, this.swingZ]) {
-      pd.push((Math.sign(pd.v) || 1) * (d.bass * 0.12 * dt + (d.beat ? 0.06 : 0)));
+      pd.push((Math.sign(pd.v) || 1) * (lerp(d.energy, d.bass, d.beatMotion) * 0.12 * dt + (d.beat ? 0.06 * d.beatMotion : 0)));
       pd.push(Math.sin(this.time * 0.7) * 0.03 * dt); // a faint idle breeze
       pd.update(dt);
     }
@@ -213,22 +219,23 @@ export class KitDemo {
       this.search.set(i, t, this.aims[i].update(T, dt), { width: 5, brightness: wake * (0.65 + this.moonPulse.v * 0.35) });
     });
     this.search.upload(eye);
-    if (d.beat) this.snow.gust(0.8 * d.accent);
-    this.snow.update(dt, eye, { amount: K.swell(k, 0.7, 0.15), speed: 1 + d.level });
-    this.flies.update(dt, [eye[0], this.ground.heightAt(eye[0], eye[2]) + 2, eye[2]], { amount: k, speed: 1 + d.high * 2 });
-    this._yard(d, k, dt);
+    if (d.beat && d.beatMotion > 0) this.snow.gust(0.8 * d.accent * d.beatMotion);
+    this.snow.update(dt, eye, { amount: K.swell(k, 0.7, 0.15), speed: 1 + lerp(d.energy, d.level, d.beatMotion) });
+    this.flies.update(dt, [eye[0], this.ground.heightAt(eye[0], eye[2]) + 2, eye[2]], { amount: k, speed: 1 + lerp(d.energy, d.high, d.beatMotion) * 2 });
+    this._yard(d, k, dt, a);
     this._scatter();
   }
 
   /** Kit v5 well yard: spreading rings, beam, beat rings, windows, walkers. */
-  _yard(d, k, dt) {
+  _yard(d, k, dt, a) {
     const [wx, wy, wz] = this.wellPos, t = this.time;
     const spread = K.swell(k, 1, 17);                                   // blight front radius
     this.rings.forEach((g) => { g.blend = Math.min(1, Math.max(0, (spread - g.mid) / 5)) * 0.85; });
     this.beam = K.stage(k, 0.65, 1);
     this.beamInst.set(0, wx, wy + 0.5, wz, 1, 0, this.beam * (0.8 + 0.2 * Math.sin(t * 1.3)), 0, 1);
     this.beamInst.upload(1);
-    if (d.beat && k > 0.1) this.ripples.spawn(wx, wy + 0.1, wz, 34, 0.4 + 0.6 * d.accent * k);
+    // the ring: every beat at Punchy, once a bar at Gentle
+    if (d.beat && k > 0.1 && (d.beatMotion > 0.5 || ((a.bpm || 0) > 0 && Number.isFinite(a.bar) ? (a.bar | 0) === 0 : (a.beatCount || 0) % 4 === 0))) this.ripples.spawn(wx, wy + 0.1, wz, 34, 0.4 + 0.6 * d.accent * k);
     this.ripples.update(dt);
     this.windows.forEach((w, i) => {
       const lit = K.stage(k, 0.1 + i * 0.08, 0.3 + i * 0.08) * 0.7 + this.ripples.at(w.x, w.z, 3) * 0.8;
@@ -274,7 +281,7 @@ export class KitDemo {
     r.clear(col.fog);
     this.cam.apply(r);
 
-    this.sky.draw(r, eye, { horizon: col.fog, zenith: P.color(R(3, 0)), brightness: dim, starLevel: 0.25 + d.high * 0.8, moonScale: 1 + this.moonPulse.v * 0.15, cloudDrift: this.time * 0.01 });
+    this.sky.draw(r, eye, { horizon: col.fog, zenith: P.color(R(3, 0)), brightness: dim, starLevel: 0.25 + d.high * 0.8, moonScale: 1 + this.moonPulse.v * 0.15 * d.beatMotion + (1 - d.beatMotion) * d.groove * 0.04, cloudDrift: this.time * 0.01 });
 
     r.setFog(col.fog, 8, lerp(45, 70, k));
     r.setLight([-0.4, -0.7, 0.5], scaleColor(col.light, P.role('light'), lerp(0.45, 0.85, k)), scaleColor(col.amb, P.role('ambient'), 0.45));
@@ -285,7 +292,7 @@ export class KitDemo {
     if (col.band[0] + col.band[1] + col.band[2] > 0.01) r.draw(this.bandMesh, mat4.trs(this.m, eye[0], eye[1], eye[2]), { texture: this.bandTex, unlit: true, fog: false, additive: true, depthWrite: false, tint: col.band, uvOffset: [this.time * 0.01, 0] });
 
     this.ground.draw(r, { texture: this.groundTex, texture2: this.groundTex2, blend: K.stage(k, 0.15, 0.9) * 0.85, tint: col.tint });
-    const sway = 0.02 + d.bass * 0.12;
+    const sway = 0.02 + lerp(d.energy, d.bass, d.beatMotion) * 0.12;
     r.drawInstanced(this.quad, this.trees, { texture: this.pineTex, billboard: 1, sway, tint: col.tint });
     r.drawInstanced(this.quad, this.bushes, { texture: this.bushTex, billboard: 1, sway: sway * 0.5, tint: col.tint });
     r.drawInstanced(this.fenceMesh, this.fenceInst, { texture: this.fenceTex, tint: col.tint });
@@ -315,7 +322,7 @@ export class KitDemo {
       const on = K.stage(k, 0.05 + (i / nl) * 0.6, 0.15 + (i / nl) * 0.6);
       const flick = on * (0.85 + 0.15 * Math.sin(this.time * 13 + i * 7)) * (1 + d.high * 0.6);
       this.lampInst.set(i, l.x, l.y, l.z, 1, l.rot, 1, 0, 1);
-      this.glowInst.set(i, l.hx, l.y + 3.85, l.hz, 1.6 + d.pulse * 0.8, 0, flick, 0, 1);
+      this.glowInst.set(i, l.hx, l.y + 3.85, l.hz, 1.6 + d.pulse * 0.8 * d.beatMotion + (1 - d.beatMotion) * d.groove * 0.3, 0, flick, 0, 1);
       // each lantern swings with the shared pendulums, phase-shifted along the path
       const c = Math.cos(i * 1.3), sn = Math.sin(i * 1.3);
       this.lanternInst.set(i, l.hx, l.y + 4.0, l.hz, 1, l.rot, 0.9, 0, 1, this.swingX.x * c - this.swingZ.x * sn, this.swingZ.x * c + this.swingX.x * sn);

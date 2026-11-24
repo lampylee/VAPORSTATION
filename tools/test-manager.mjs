@@ -49,4 +49,43 @@ const run = (m, secs, playing = false) => { for (let i = 0; i < secs * 60; i++) 
   m.goNext(-1); run(m, 0.6, true);
   check('goNext(-1) steps backwards', m.cur !== before && m.cur !== m.upcoming);
 }
+{
+  // enter(): every way a style comes on screen snaps its moods / rigs and calls style.enter()
+  const m = make();
+  const entered = [];
+  m.styles.forEach((s, i) => { s.enter = () => entered.push(i); });
+  m.goTo(2);
+  check('goTo calls enter on the incoming style', entered.join() === '2', entered.join());
+  m.goTo(3);
+  check('a queued request does not enter yet', entered.join() === '2', entered.join());
+  run(m, 0.6, true);
+  check('the queued style enters when its crossfade starts', entered.join() === '2,3', entered.join());
+  run(m, 0.6, true);
+  m.goNext();
+  check('goNext enters', entered.length === 3 && entered[2] === m.next, entered.join());
+  run(m, 0.6, true);
+  const n = entered.length;
+  run(m, 2, false);   // idle: auto-switch
+  check('auto-switch enters', entered.length === n + 1 && entered[n] === m.target, entered.join());
+  run(m, 0.6, false);
+  const before = entered.length;
+  for (let i = 0; i < 30; i++) m.styles.forEach((s, j) => j !== m.cur && s.update(audio, 0, 0.05));   // thumbnails
+  check('updating off-screen styles (thumbnails) does not enter', entered.length === before);
+  // the kit default: own K.Moods and camera rigs snap even without style.enter()
+  const { Moods } = await import('../js/kit/moods.js');
+  const { CameraRig } = await import('../js/kit/camera.js');
+  const t = m.rotation.find((j) => j !== m.cur);
+  const st = m.styles[t]; delete st.enter;
+  st.moods = new Moods({ base: { a: 1 } }); st.cam = new CameraRig();
+  st.moods._init = true; st.cam._snap = false;
+  m.goTo(t);
+  check('enter snaps own Moods and CameraRigs', st.moods._init === false && st.cam._snap === true);
+  // a throwing enter() marks the style broken instead of breaking the show
+  const m2 = make();
+  m2.styles[2].enter = () => { throw new Error('boom'); };
+  const err = console.error; console.error = () => {};
+  m2.goTo(2);
+  console.error = err;
+  check('a throwing enter() is caught (style marked broken)', m2.broken.has(2));
+}
 process.exit(fails ? 1 : 0);

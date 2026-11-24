@@ -351,6 +351,7 @@ export class PS1Renderer {
       resolution: '320x240', aspectMode: 'fit',
       jitter: 1, affine: 1, dither: 1, colorBits: 5, crt: false,
       jitterBoost: 0,   // added by audio (beats)
+      weather: 1,       // particle amount multiplier (song shape)
       fogScale: 1,      // multiplies fog distances (audio level)
       flash: 0,         // show control: 0..1 flash toward flashColor (composite pass)
       flashColor: [1, 1, 1],

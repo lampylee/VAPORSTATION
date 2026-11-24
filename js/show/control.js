@@ -16,7 +16,9 @@
 // Styles also receive audio.bpm (0 = unknown), audio.beatPhase (0..1 within the
 // beat) and audio.bar (beat index within a 4-beat bar) for phrasing camera moves:
 // from tap tempo when tapped, else from the Conductor's automatic estimate. And the
-// Conductor's song shape: audio.section, audio.build (0..1), audio.drop (one frame), audio.songTime.
+// Conductor's song shape: audio.section, audio.build (0..1), audio.drop (one frame), audio.songTime,
+// plus audio.shape (eased close / pace / fog / weather / phrase, see shape.js), audio.groove
+// (smooth 0..1 swing on the beat) and audio.beatMotion (0 Gentle ... 1 Punchy: how much beats move the camera).
 //
 // Reactivity (s.reactivity, 0 = Gentle, 0.5 = Medium, 1 = Punchy) reshapes the
 // audio before any style sees it. Gentle follows the song's energy rather than
@@ -26,6 +28,7 @@
 // analysis through, which is the original, club-style feel.
 import { clamp, damp, lerp } from '../gfx/math.js';
 import { feel } from '../kit/swell.js';
+import { SongShape } from './shape.js';
 
 const MIN_BEAT_GAP = 1 / 3;   // strobe-safe: ≤ 3 beats per second
 
@@ -35,9 +38,9 @@ const MIN_BEAT_GAP = 1 / 3;   // strobe-safe: ≤ 3 beats per second
 //   pAtt/pDec beat pulse ease-in / fade (s)   accent/motion/attack/decay  -> K.feel
 //   jitter    beat push on the PS1 vertex snap (whole-frame wobble)
 const PROFILES = [
-  { att: 0.2, rel: 0.6, detail: 0.55, gap: 0.9, min: 1.3, pAtt: 0.09, pDec: 0.75, accent: 0.4, motion: 0.15, attack: 0.09, decay: 2.6, jitter: 0 },
-  { att: 0.12, rel: 0.35, detail: 0.7, gap: 0.5, min: 1.12, pAtt: 0.04, pDec: 0.4, accent: 0.7, motion: 0.5, attack: 0.04, decay: 1.6, jitter: 0.4 },
-  { att: 0, rel: 0, detail: 1, gap: 0, min: 1, pAtt: 0, pDec: 0.18, accent: 1, motion: 1, attack: 0, decay: 1, jitter: 1.2 },
+  { att: 0.2, rel: 0.6, detail: 0.55, gap: 0.9, min: 1.3, pAtt: 0.09, pDec: 0.75, accent: 0.4, motion: 0.15, attack: 0.09, decay: 2.6, jitter: 0, beatMotion: 0 },
+  { att: 0.12, rel: 0.35, detail: 0.7, gap: 0.5, min: 1.12, pAtt: 0.04, pDec: 0.4, accent: 0.7, motion: 0.5, attack: 0.04, decay: 1.6, jitter: 0.4, beatMotion: 0.4 },
+  { att: 0, rel: 0, detail: 1, gap: 0, min: 1, pAtt: 0, pDec: 0.18, accent: 1, motion: 1, attack: 0, decay: 1, jitter: 1.2, beatMotion: 1 },
 ];
 
 function profileAt(r, out) {
@@ -103,7 +106,9 @@ export class ShowControl {
     this.lastBeat = -1;
     this.lastFlash = -10;
     this.pendingFlash = false;
-    this.out = { level: 0, bass: 0, mid: 0, high: 0, energy: 0, beat: false, beatPulse: 0, beatCount: 0, accent: 1, motion: 1, decay: 1, bpm: 0, beatPhase: 0, bar: 0, section: '', build: 0, drop: false, songTime: 0 };
+    this.out = { level: 0, bass: 0, mid: 0, high: 0, energy: 0, beat: false, beatPulse: 0, beatCount: 0, accent: 1, motion: 1, decay: 1, bpm: 0, beatPhase: 0, bar: 0, section: '', build: 0, drop: false, songTime: 0, groove: 0, beatMotion: 1, shape: null };
+    this.shape = new SongShape();
+    this.out.shape = this.shape.out;
     this.react = -1;          // eased reactivity (-1 = not started; snaps to the setting on the first frame)
     this.prof = profileAt(1, {});
     this.band = { level: 0, bass: 0, mid: 0, high: 0 };   // extra-smoothed bands
@@ -127,6 +132,7 @@ export class ShowControl {
     const P = profileAt(this.react, this.prof);
     feel.accent = P.accent; feel.motion = P.motion; feel.attack = P.attack; feel.decay = P.decay;
     o.accent = P.accent; o.motion = P.motion; o.decay = P.decay;
+    o.beatMotion = feel.beatMotion = P.beatMotion;
 
     // ---- intensity: hold eases to the level; flash pushes toward full
     // (both the on/off blend and the level are eased, so a toggle or a MIDI knob jump never cuts)
@@ -178,6 +184,10 @@ export class ShowControl {
     else { o.bpm = a.autoBpm || 0; o.beatPhase = o.bpm ? a.autoPhase : 0; o.bar = o.bpm ? a.autoBar : 0; }
     // the conductor's song shape (neutral when it is off)
     o.section = a.section || ''; o.build = a.build || 0; o.drop = !!a.drop; o.songTime = a.songTime || 0;
+    o.shape = this.shape.update(o, dt);
+    // groove: a smooth swing on the beat grid (tempo known), else the eased beat pulse; damped so switching never steps
+    const gTarget = o.bpm > 0 ? 0.5 - 0.5 * Math.cos(2 * Math.PI * o.beatPhase) : o.beatPulse;
+    o.groove = damp(o.groove, gTarget, 0.15, dt);
     if (this.holdBlend > 0.01 && !playing) {
       // held but the room is quiet: give the styles a gentle synthetic pulse to react to
       const t = this.time, w = this.holdBlend;

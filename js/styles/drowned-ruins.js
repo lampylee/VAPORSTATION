@@ -196,7 +196,7 @@ export class DrownedRuins {
     this.pulse = new K.Envelope(0.4);
     this.burstEnv = new K.Envelope(0.9);
     this.time = 0; this.k = 0; this.a = null;
-    this.cur = 0; this.hi = 0; this.swimT = 0; this.causticT = 0;
+    this.cur = 0; this.hi = 0; this.hiS = 0; this.swimT = 0; this.causticT = 0;
     this.col = { fog: [0, 0, 0], zen: [0, 0, 0], tint: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], caus: [0, 0, 0], shaft: [0, 0, 0], one: [1, 1, 1] };
     this.m = mat4.create();
   }
@@ -252,6 +252,8 @@ export class DrownedRuins {
     const d = K.drive(a, k);
     this.cur = damp(this.cur, d.bass, 0.4, dt);   // "current" strength from bass
     this.hi = damp(this.hi, d.high, 0.08, dt);
+    const bm = d.beatMotion;
+    this.hiS = damp(this.hiS, d.high, 0.5, dt);   // sparkle drift speed: eased at Gentle (the glint itself stays on this.hi)
     this.cam.heightOffset = Math.sin(this.time * 0.23) * 0.8;
     this.cam.update(a, k, dt);
     const eye = this.cam.eye;
@@ -261,8 +263,8 @@ export class DrownedRuins {
 
     const wind = [Math.cos(this.time * 0.05) * this.cur * 2.5, Math.sin(this.time * 0.05) * this.cur * 2.5];
     this.bubbles.update(dt, eye, { amount: K.swell(k, 0.18, 0.55), speed: 0.6 + k * 0.6 + this.cur, wind });
-    this.burst.update(dt, [eye[0] + (this.cam.target[0] - eye[0]) * 0.5, eye[1] - 2, eye[2] + (this.cam.target[2] - eye[2]) * 0.5], { amount: this.burstEnv.v * k, speed: 1 + this.burstEnv.v, wind });
-    this.sparkle.update(dt, eye, { amount: K.stage(k, 0.05, 0.5) * 0.85, speed: 0.6 + this.hi * 2, wind });
+    this.burst.update(dt, [eye[0] + (this.cam.target[0] - eye[0]) * 0.5, eye[1] - 2, eye[2] + (this.cam.target[2] - eye[2]) * 0.5], { amount: lerp(d.groove * 0.3, this.burstEnv.v * k, bm), speed: 1 + this.burstEnv.v * bm, wind });   // Gentle: a steady groove-swung drift of bubbles instead of beat bursts
+    this.sparkle.update(dt, eye, { amount: K.stage(k, 0.05, 0.5) * 0.85, speed: 0.6 + lerp(this.hiS, this.hi, bm) * 2, wind });
 
     this.swimT += dt * (K.swell(k, 0.35, 1) + this.cur * 1.6);
     this.causticT += dt * (0.6 + k * 0.6 + this.cur);
@@ -385,7 +387,7 @@ export class DrownedRuins {
       if (on <= 0.001) continue;
       const [x, y, z, s] = this.glowSpots[i];
       const fl = on * (0.65 + 0.35 * Math.sin(t * 2.1 + i * 2.7)) * (1 + this.hi * 1.4);
-      this.glows.set(n++, x, y + Math.sin(t * 0.8 + i) * 0.15, z, s * (1 + d.pulse * 0.4), 0, fl, 0, 1);
+      this.glows.set(n++, x, y + Math.sin(t * 0.8 + i) * 0.15, z, s * (1 + lerp(d.groove, d.pulse, d.beatMotion) * 0.4), 0, fl, 0, 1);
     }
     this.glows.upload(n);
     r.drawInstanced(this.quad, this.glows, { texture: this.glowTex, billboard: 2, unlit: true, additive: true, tint: col.one });

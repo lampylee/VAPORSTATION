@@ -16,6 +16,10 @@
 // The song's uneven time trips beat trackers, so nothing is beat-locked: the
 // swell rides intensity, smoothed energy and the breath. A beat only sends one
 // faint pulse of starlight running downstream (scaled by audio.accent).
+// Song sections (K.Moods, Conductor on): intro / breakdown / outro hold the camera shallow with
+// few figures near and the stars dimmer; a build sinks faster (silt rising quicker, the camera
+// settling lower) and brings more figures in; the drop takes the camera down near the riverbed,
+// looking along it, with the star field bright. Every change is a slow ease, never on the beat.
 import { lerp, clamp, damp } from '../gfx/math.js';
 import { scaleColor, mixColor } from '../gfx/color.js';
 import { R } from '../palette/palette.js';
@@ -115,14 +119,31 @@ export class Underriver {
     this.cam = new K.PathRig((s, out) => { out[0] = riverX(-s); out[1] = 0; out[2] = -s; return out; },
       { lookAhead: 16, fov: 60, far: 200, fovPunch: 0, nudge: 0.02, rollKick: 0.004, idleSpeed: 0.55, activeSpeed: 1.0, bassBoost: 0 });
     this.breath = new K.Breath({ beats: 8, period: 12 });
-    this.time = 0; this.k = 0; this.kk = 0; this.e = 0; this.low = 0; this.h = 15;
+    this.bm = 1; this.time = 0; this.k = 0; this.kk = 0; this.e = 0; this.low = 0; this.h = 15;
     this.col = { fog: [0, 0, 0], zen: [0, 0, 0], tint: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], star: [1, 1, 1], fig: [0, 0, 0], figGlow: [0, 0, 0], weed: [0, 0, 0] };
+
+    // song sections: gates multiply the kk fed into today's stage() / swell() curves (clamped 0..1);
+    // starBright scales star light (a lift above 1 is × k); sink scales how fast the silt rises.
+    // depth (+ = lower, toward the bed) is a camera key: slow, eased twice.
+    this.moods = new K.Moods({
+      still:  { figGate: 0.35, starGate: 0.6,  starBright: 0.8,  lightGate: 0.6, sink: 0.6, depth: -3 },
+      base:   { figGate: 1,    starGate: 1,    starBright: 1,    lightGate: 1,   sink: 1,   depth: 0 },
+      gather: { figGate: 1.6,  starGate: 1.15, starBright: 1.05, lightGate: 1.2, sink: 1.8, depth: 1.2 },
+      full:   { figGate: 1.5,  starGate: 1.5,  starBright: 1.4,  lightGate: 1.3, sink: 1.3, depth: 2.5 },
+    }, { dropEase: 4, slow: ['depth'] });
+    this.depth = null;
   }
+
+  /** Coming on screen (StyleManager.enter, after its moods / rig snap): the mood keys it eases a second time start at the current mood. */
+  enter() { this.depth = null; }
 
   update(a, k, dt) {
     this.k = k; this.time += dt;
+    const m = this.moods.update(a, dt);
     const t = this.time, d = K.drive(a, k);
     const b = this.breath.update(a, dt);
+    if (this.depth === null) this.depth = m.depth;
+    this.depth = damp(this.depth, m.depth, 2, dt);   // eased a second time so a section change starts softly
     // slow, smoothed song size: drives everything big (no raw bass on the camera)
     this.e = damp(this.e, a.energy ?? a.level ?? 0, 2.5, dt);
     this.low = damp(this.low, a.bass ?? 0, 1.2, dt);
@@ -131,21 +152,25 @@ export class Underriver {
 
     // camera: drifts downstream; sinks lower as the song grows, with a long slow sink/rise and the breath
     this.cam.update(a, k, dt);
-    const hT = lerp(11, 6, kk) + Math.cos(t * TAU / 80) * 1.8 - b * 0.8 - this.low * k * 0.6;
+    // (near the bed the long sink/rise and the breath shrink, so the camera keeps its clearance)
+    const dep = this.depth, deep = clamp(dep / 2.5), osc = lerp(1, 0.45, deep);
+    const hT = lerp(11, 6, kk) - dep + (Math.cos(t * TAU / 80) * 1.8 - b * 0.8 - this.low * k * 0.6) * osc;
     this.h = damp(this.h, hT, 1.5, dt);
     const eye = this.cam.eye, tg = this.cam.target;
     eye[1] = height(eye[0], eye[2]) * 0.3 + this.h;
-    tg[1] = eye[1] - lerp(7.5, 4.5, kk);
+    tg[1] = eye[1] - lerp(7.5, 4.5, kk) + deep * 1.8;   // near the bed: look along it
     tg[0] += Math.sin(t * 0.07) * 3;
     this.cam.roll = Math.sin(t * 0.05) * 0.03;
     this.ground.follow(eye[0], eye[2] - 30);
 
     // a beat sends one faint pulse of starlight downstream ahead of the camera
+    this.bm = d.beatMotion;
     if (d.beat) this.pulses.trigger(-eye[2] + 12, 0.45 * k * d.accent, 7);
     this.pulses.update(dt);
 
     // stars: centred ahead of the camera, kindling from the river's middle out to the banks
     const cx = eye[0], cz = eye[2] - 26, R0 = STAR_CELL * STAR_RADIUS;
+    const ks = clamp(kk * m.starGate), sl = m.starBright - 1, sb = 1 + (sl > 0 ? sl * k : sl);
     let n = 0;
     K.scatter(cx, cz, { cell: STAR_CELL, radius: STAR_RADIUS, seed: 31 }, (x, z, dist, gx, gz) => {
       if (n >= MAX_STARS) return;
@@ -154,16 +179,17 @@ export class Underriver {
       if (r3 > 0.62 || (off >= 1 && r1 > 0.3)) return;                  // leave dark gaps; only a few up on the banks
       const on = 0.04 + off * 0.6 + r1 * 0.3;
       const idleLit = r2 < 0.14 ? 1.5 : 0;
-      const lit = Math.max(idleLit, 0.1 + 0.9 * K.stage(kk, on, on + 0.18)) * (0.5 + 0.5 * r2);   // dormant stars stay faint pinpoints
+      const lit = Math.max(idleLit, 0.1 + 0.9 * K.stage(ks, on, on + 0.18)) * (0.5 + 0.5 * r2);   // dormant stars stay faint pinpoints
       // slow ripples of light travelling downstream across the bed (stars brighten in sequence)
       const wave = Math.pow(Math.max(0, Math.sin(t * 0.35 + z * 0.07 + x * 0.02)), 6) * lerp(0.15, 0.5, kk);
       const tw = 0.6 + 0.4 * Math.sin(t * (0.6 + r3 * 0.8) + r1 * 40);
       const y = height(x, z) + 0.1 + (r3 < 0.18 ? 0.6 + r3 * 14 : 0);      // some float just above the bed
       const nearFade = K.fadeIn(Math.hypot(x - eye[0], y - eye[1], z - eye[2]), 4, 9);   // never a big blob at the lens
-      const lv = (lit * tw * (0.8 + 0.25 * b) + wave * (lit + 0.15) + this.pulses.at(-z) * (lit + 0.2)) * K.fadeOut(dist, R0 * 0.6, R0) * nearFade;
+      const fade = K.fadeOut(dist, R0 * 0.6, R0) * nearFade, pl = this.pulses.at(-z) * (lit + 0.2) * fade;   // pulse light stays; its halo-size swell is a beat movement
+      const lvBase = (lit * tw * (0.8 + 0.25 * b) + wave * (lit + 0.15)) * fade * sb, lv = lvBase + pl;
       if (lv < 0.01) return;
       const s = 0.4 + r2 * 0.45;
-      const hs = s * (1.7 + Math.min(1, lv) * 1.1), cs = s * 0.6;     // quads pivot at the base: lift so the halo clears the bed
+      const hs = s * (1.7 + Math.min(1, lvBase + pl * this.bm) * 1.1), cs = s * 0.6;     // quads pivot at the base: lift so the halo clears the bed
       this.halos.set(n, x, y, z, hs, 0, Math.min(0.9, lv * 0.8), 0, 1);
       this.cores.set(n, x, y + (hs - cs) * 0.5, z, cs, 0, Math.min(1, 0.1 + lv * 1.5), 0, 1);
       n++;
@@ -172,10 +198,11 @@ export class Underriver {
     this.halos.upload(n); this.cores.upload(n);
 
     // figures: carried slowly downstream (the camera overtakes them); they drift closer with the swell
+    const kf = clamp(kk * m.figGate);
     this.fig.forEach((f, i) => {
       f.z -= 0.25 * dt;
       if (f.z > eye[2] + 8) f.z -= 92;                                   // behind the camera → far ahead, deep in fog
-      const close = Math.max(f.idle ? 0.8 : 0, K.stage(kk, f.on, f.on + 0.3));
+      const close = Math.max(f.idle ? 0.8 : 0, K.stage(kf, f.on, f.on + 0.3));
       f.lat = damp(f.lat, lerp(f.far, f.near, close), 3, dt);
       const x = riverX(f.z) + f.side * f.lat + Math.sin(t * 0.11 + f.ph) * 1.5;
       const y = height(x, f.z) + f.y + Math.sin(t * 0.23 + f.ph) * 0.7 + b * 0.4;
@@ -202,9 +229,9 @@ export class Underriver {
 
     this.caus.update(dt, 0.5 + kk * 0.5);
     // soft lights float past, in a box that stays 8+ units ahead of and below the lens
-    this.lights.update(dt, [eye[0], eye[1] - 8.5, eye[2] - 23], { amount: K.swell(kk, 0.3, 0.95), speed: 0.6 + this.e * 0.4 });
+    this.lights.update(dt, [eye[0], eye[1] - 8.5, eye[2] - 23], { amount: K.swell(clamp(kk * m.lightGate), 0.3, 0.95), speed: 0.6 + this.e * 0.4 });
     // silt rises past the camera: the steady sense of sinking
-    this.silt.update(dt, eye, { amount: K.swell(kk, 0.6, 0.9), speed: 0.7 + kk * 0.3 });
+    this.silt.update(dt, eye, { amount: K.swell(kk, 0.6, 0.9), speed: (0.7 + kk * 0.3) * m.sink });
   }
 
   render(r) {

@@ -15,6 +15,12 @@
 //                (audio.bpm > 0), else on every 4th audio.beatCount
 //   beat         a soft swell of light rolls across the columns (K.History), scaled by feel
 //
+// Song sections (K.Moods, Conductor on): intro / breakdown / outro = few blocks, loosened from
+// their slots and drifting apart, rearranging rarely, the camera eased back; a build brings blocks
+// in one by one and the grid forms (they settle tighter into their slots); the drop fills the
+// wall, locks the blocks still in their rows and rearranges every bar, mostly whole rows shifting
+// along. Every move is still an eased glide; Conductor off = base.
+//
 // Colours: base ramp = blocks and ice, secondary = block seams / ice veins, accent = streaks
 // and glows, atmosphere = fog and sky.
 import { mat4, lerp, clamp, damp, smoothstep } from '../gfx/math.js';
@@ -137,7 +143,9 @@ export class RightPlace {
     }
 
     // ---- camera + atmosphere
-    this.cam = new K.CameraRig({ fov: 58, fovPunch: 2, nudge: 0.12, rollKick: 0.015, idleSpeed: 1, activeSpeed: 1, bassBoost: 0, far: 220 });
+    // shapeAmount 0: the shape's close only narrows the FOV here, which would cancel half the mood's camD
+    // (quiet sections step back, the drop comes closer); the mood carries the framing instead
+    this.cam = new K.CameraRig({ fov: 58, fovPunch: 2, nudge: 0.12, rollKick: 0.015, idleSpeed: 1, activeSpeed: 1, bassBoost: 0, far: 220, shapeAmount: 0 });
     this.snow = new K.Particles(r, 'snow');
     this.pulses = new K.History(48);
     this.flare = new K.Envelope(0.6);
@@ -148,6 +156,20 @@ export class RightPlace {
     this.lastBar = -1; this.lastBC = -1; this.sinceStep = 99; this.idleT = 9; this.stepAcc = 0.6; this.joinT = 0;
     this.col = { fog: [0, 0, 0], zen: [0, 0, 0], tint: [1, 1, 1], light: [0, 0, 0], amb: [0, 0, 0], glow: [0, 0, 0], band: [0, 0, 0] };
     this._tmp = [0, 0, 0];
+
+    // song sections: gates multiply the k fed into today's curves (clamped 0..1) — countGate how many
+    // blocks are out (they still join / leave one at a time), stepGate how often and how big the
+    // bar steps are, glowGate the streaks and the moving blocks' glow. Mood-only: minBlocks = the
+    // idle count (today IDLE_BLOCKS), loose = blocks drifting apart out of their slots (× k),
+    // lock = blocks held still in their slots (less bob / wobble, × k), rowBias = the chance a step
+    // is a whole row shifting. camD (+ = back) is a camera position: slow, eased twice.
+    this.moods = new K.Moods({
+      still:  { countGate: 0.35, stepGate: 0.45, glowGate: 0.6,  minBlocks: 8,           loose: 1, lock: 0,   rowBias: 0.5,  camD: 3 },
+      base:   { countGate: 1,    stepGate: 1,    glowGate: 1,    minBlocks: IDLE_BLOCKS, loose: 0, lock: 0,   rowBias: 0.5,  camD: 0 },
+      gather: { countGate: 1.12, stepGate: 1.05, glowGate: 1.1,  minBlocks: IDLE_BLOCKS, loose: 0, lock: 0.5, rowBias: 0.6,  camD: 0 },
+      full:   { countGate: 1.6,  stepGate: 1.6,  glowGate: 1.4,  minBlocks: IDLE_BLOCKS, loose: 0, lock: 1,   rowBias: 0.85, camD: -1.5 },
+    }, { dropEase: 4, slow: ['camD'] });
+    this.mv = this.moods.v; this.camD = null; this.kg = 0; this.loose = null; this.lock = 0;
   }
 
   // ------------------------------------------------------------ helpers
@@ -186,7 +208,7 @@ export class RightPlace {
     const g = Math.max(2, Math.round(lerp(1, 8, k) * lerp(0.6, 1.2, this._rand())));
     const pool = this._settled();
     if (pool.length < 2) return;
-    const rowShift = g >= 3 && this._rand() < 0.5;
+    const rowShift = g >= 3 && this._rand() < this.mv.rowBias;
     if (rowShift) {
       // a whole row slides one slot along (into free slots, wrapping round the far end on a wide arc)
       const row = Math.floor(this._rand() * ROWS * LAYERS), dir = this._rand() < 0.5 ? 1 : -1;
@@ -237,15 +259,26 @@ export class RightPlace {
     return fire;
   }
 
+  /** Coming on screen (StyleManager.enter, after its moods / rig snap): camD and loose / lock start at the current mood. */
+  enter() { this.camD = null; this.loose = null; }
+
   // ------------------------------------------------------------ update
   update(a, k, dt) {
     this.a = a; this.k = k; this.time += dt;
+    const m = this.mv = this.moods.update(a, dt);
     const d = K.drive(a, k);
     this.energy = damp(this.energy, d.energy, 1.2, dt);
     this.mid = damp(this.mid, d.mid, 0.6, dt);
+    const ks = clamp(k * m.stepGate);
+    this.kg = clamp(k * m.glowGate);
+    // × k, but with their own slow settle (tau 2 s): the k ramp at a song's start / end is fast, and
+    // loose is a large position offset, so it must still spread / gather over ~6 s, never jump
+    const kl = K.stage(k, 0.02, 0.3);
+    if (this.loose === null) { this.loose = m.loose * kl; this.lock = m.lock * kl; }   // first frame: already there (style switch mid-song)
+    this.loose = damp(this.loose, m.loose * kl, 2, dt); this.lock = damp(this.lock, m.lock * kl, 2, dt);
 
     // -- how many blocks are out: joins and leaves trickle one at a time, never all at once
-    const want = Math.round(lerp(IDLE_BLOCKS, MAX_BLOCKS, smoothstep(clamp(k * 0.75 + this.energy * 0.4))));
+    const want = Math.round(lerp(m.minBlocks, MAX_BLOCKS, smoothstep(clamp((k * 0.75 + this.energy * 0.4) * m.countGate))));
     this.joinT -= dt;
     if (this.joinT <= 0) {
       const active = this.blocks.filter((b) => b.active && b.slot >= 0);
@@ -260,12 +293,12 @@ export class RightPlace {
 
     // -- rearrangement steps: one per bar (sometimes skipped at low intensity), plus a rare idle swap
     if (this._barClock(a, dt) && k > 0.05) {
-      this.stepAcc += lerp(0.35, 1, k);
-      if (this.stepAcc >= 1) { this.stepAcc -= 1; this._step(k, d.motion); this.flare.trigger(0.5 + 0.5 * k); }
+      this.stepAcc += lerp(0.35, 1, ks);
+      if (this.stepAcc >= 1) { this.stepAcc -= 1; this._step(ks, d.motion); this.flare.trigger(0.5 + 0.5 * k); }
     }
     this.idleT -= dt;
     // free clock: a rare single swap at idle; while playing with no beats arriving (ambient passages), a slow step
-    if (this.idleT <= 0) { const iv = lerp(15, 6, k); this.idleT = iv + this._rand() * iv * 0.4; if (this.sinceStep > iv * 0.8) { this._step(k * 0.5, d.motion); this.sinceStep = 0; } }
+    if (this.idleT <= 0) { const iv = lerp(15, 6, ks); this.idleT = iv + this._rand() * iv * 0.4; if (this.sinceStep > iv * 0.8) { this._step(ks * 0.5, d.motion); this.sinceStep = 0; } }
 
     // -- advance the slides
     for (const b of this.blocks) {
@@ -290,16 +323,20 @@ export class RightPlace {
 
     // -- camera: a slow lateral drift in front of the wall, easing a touch closer as the song grows
     this.cam.update(a, k, dt);
-    const t = this.time, dist = lerp(19, 16, this.energy);
+    // camD: eased back for the quiet sections, a touch closer in the drop (eye z ≥ 13; the wall's
+    // front face and lifted blocks stay inside z < 5.5)
+    if (this.camD === null) this.camD = m.camD;
+    this.camD = damp(this.camD, m.camD, 2, dt);
+    const t = this.time, dist = lerp(19, 16, this.energy) + this.camD;
     const e = this.cam.eye, tg = this.cam.target;
     e[0] = Math.sin(t * 0.045) * 5.5 + Math.sin(t * 0.017) * 2;
-    e[1] = 4 + Math.sin(t * 0.06) * 0.7;
+    e[1] = 4 + Math.sin(t * 0.06) * 0.7 + this.camD * 0.25;
     e[2] = dist + Math.cos(t * 0.045) * 1.5;
     tg[0] = e[0] * 0.25; tg[1] = 4.3 + Math.sin(t * 0.05) * 0.2; tg[2] = -2;
     this.cam.roll = Math.sin(t * 0.03) * 0.015;
     this.ground.follow(e[0], e[2]);
 
-    this.snow.update(dt, [e[0], e[1], e[2] - 12], { amount: K.swell(k, 0.3, 0.5), speed: 0.7 + d.level * 0.6, wind: 0.3 + this.mid });
+    this.snow.update(dt, [e[0], e[1], e[2] - 12], { amount: K.swell(k, 0.3, 0.5), speed: 0.7 + lerp(d.energy, d.level, d.beatMotion) * 0.6, wind: 0.3 + this.mid });
     this.streaks.forEach((sk) => { sk.scroll += dt * sk.speed * (1 + k * 2.5 + this.energy * 2); });
   }
 
@@ -316,7 +353,7 @@ export class RightPlace {
     // red streaks across the sky: always there, crawling; brighter and faster as the song grows
     const accent = P.color(R(2, 2));
     this.streaks.forEach((sk, i) => {
-      const lvl = (lerp(0.32, 0.85, k) + this.energy * 0.25 + this.flare.v * 0.35) * (1 - i * 0.18) * (0.92 + 0.08 * Math.sin(t * 0.4 + sk.ph));
+      const lvl = (lerp(0.32, 0.85, this.kg) +this.energy * 0.25 + this.flare.v * 0.35) * (1 - i * 0.18) * (0.92 + 0.08 * Math.sin(t * 0.4 + sk.ph));
       scaleColor(col.band, accent, lvl);
       mat4.trs(this.mSky, eye[0], eye[1] - 6, eye[2], 0, sk.ph, 0);
       r.draw(sk.mesh, this.mSky, { texture: sk.tex, unlit: true, fog: false, additive: true, depthWrite: false, tint: col.band, uvOffset: [sk.scroll, 0] });
@@ -332,18 +369,28 @@ export class RightPlace {
 
     // blocks: one instanced draw; per-instance shade lifts moving blocks and carries the beat wave
     let n = 0, ng = 0;
-    const bob = 0.1 * (1 + this.energy * 0.6);
+    const lk = 1 - 0.75 * this.lock, ls = this.loose;
+    const bob = 0.1 * (1 + this.energy * 0.6) * lk;
     for (const b of this.blocks) {
       if (!b.active || b.scale <= 0.002) continue;
       const c = b.slot >= 0 ? slotCol(b.slot) : 0;
       const wave = this.pulses.at(c / (COLS - 1) * 0.5) * 0.18 * k;
-      const y = b.pos[1] + Math.sin(t * b.bobF + b.ph) * bob;
-      const rotY = Math.sin(t * 0.2 + b.ph) * 0.05 + b.moving * b.spin;
-      const rotX = Math.sin(t * 0.17 + b.ph * 1.3) * 0.03;
+      // quiet sections: drifting apart, out of the grid (an offset from the block's own continuous
+      // position, so a slide in progress stays smooth). The spread scales with the slot position, so
+      // settled neighbours stay ≥ 1.69 apart on some axis (blocks are 1.4, ≤ 1.7 turned 0.25 rad); the back layer moves further back; forward drift ≤ 1.7
+      let ox = 0, oy = 0, oz = 0;
+      if (ls > 0.001) {
+        ox = ls * (b.pos[0] * 0.3 + Math.sin(t * 0.07 + b.ph) * 0.55);
+        oy = ls * ((b.pos[1] - BASE_Y - GAP) * 0.35 + Math.sin(t * 0.09 + b.ph * 1.7) * 0.6);
+        oz = ls * (0.8 + b.pos[2] * 0.6 + Math.sin(t * 0.05 + b.ph * 2.3) * 0.9);
+      }
+      const y = b.pos[1] + oy + Math.sin(t * b.bobF + b.ph) * bob;
+      const rotY = (Math.sin(t * 0.2 + b.ph) * 0.05 + ls * Math.sin(t * 0.06 + b.ph) * 0.2) * lk + b.moving * b.spin;
+      const rotX = (Math.sin(t * 0.17 + b.ph * 1.3) * 0.03 + ls * Math.sin(t * 0.05 + b.ph * 0.7) * 0.2) * lk;
       const shade = 0.92 + b.moving * 0.25 + wave;
-      this.blockInst.set(n++, b.pos[0], y, b.pos[2], b.scale, rotY, shade, 0, 1, rotX, 0);
-      const gl = b.moving * K.stage(k, 0.1, 0.6);
-      if (gl > 0.01) this.glowInst.set(ng++, b.pos[0], b.pos[1], b.pos[2] - 0.8, (3 + gl) * b.scale, 0, gl * 0.8, 0, 1);
+      this.blockInst.set(n++, b.pos[0] + ox, y, b.pos[2] + oz, b.scale, rotY, shade, 0, 1, rotX, 0);
+      const gl = b.moving * K.stage(this.kg, 0.1, 0.6);
+      if (gl > 0.01) this.glowInst.set(ng++, b.pos[0] + ox, b.pos[1] + oy, b.pos[2] + oz - 0.8, (3 + gl) * b.scale, 0, gl * 0.8, 0, 1);
     }
     this.blockInst.upload(n); this.glowInst.upload(ng);
     // box() is centred, so instance y is the block centre

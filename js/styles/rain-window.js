@@ -173,6 +173,7 @@ export class RainWindow {
     }));
     this.runners = Array.from({ length: N_RUN }, (_, i) => ({ x: gx(), y: lerp(WY0 + 0.4, WY1, Math.random()), len: 0.2, v: 0, seed: i * 7.3, on: i < 6 ? -1 : 0.1 + (i / N_RUN) * 0.75, maxLen: 0.3 + Math.random() * 0.6 }));
     this.beatDrops = Array.from({ length: N_BEAT }, () => ({ x: 0, y: -10, len: 0, live: false, amp: 0 }));
+    this.dropClock = 1;
     this.glintList = Array.from({ length: N_GLINT }, (_, i) => ({ src: Math.floor(K.rand2(i, 1, 95) * N_BEADS), ph: K.rand2(i, 2, 95) * TAU }));
     this.gx = gx;
 
@@ -321,8 +322,11 @@ export class RainWindow {
       this.drops.set(n++, rn.x, rn.y - 0.03, z + 0.002, 0.06, 0, 0.55 * vis, 0, 1);
       this.trails.set(nt++, rn.x, rn.y, z, 0.05, 0, 0.45 * vis, 0, Math.max(0.01, rn.len) / 0.05);
     }
-    // a beat sends one fresh drop all the way down the glass
-    if (d.beat) {
+    // a beat sends one fresh drop all the way down the glass at Punchy; at Gentle a drop starts on its own
+    // every few seconds, a little more often as the energy rises (no beat-timed motion)
+    let spawn = d.beat && d.beatMotion > 0.5;
+    if (d.beatMotion <= 0.5) { this.dropClock -= dt * (0.15 + d.energy * 0.35); if (this.dropClock <= 0) { this.dropClock = 1; spawn = k > 0.05; } }
+    if (spawn) {
       const bd = this.beatDrops.find((x) => !x.live) || this.beatDrops[0];
       Object.assign(bd, { x: this.gx(), y: WY1 - 0.02, len: 0, live: true, amp: 0.6 + 0.4 * k });
     }
