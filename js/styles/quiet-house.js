@@ -249,7 +249,7 @@ export class QuietHouse {
     const yaw = Math.atan2(-CAM[0], CAM[2] - 0.5);
     this.cam = new K.SweepRig({ position: CAM.slice(), yaw, yawRange: 0.035, pitch: 0.045, distance: 22, idleSpeed: 0.045, activeSpeed: 0.06, bassBoost: 0, fovPunch: 0, nudge: 0, rollKick: 0, fov: 50, far: 230 });
     this.breath = new K.Breath({ beats: 8, period: 12 });
-    this.time = 0; this.k = 0; this.green = 0; this.energy = 0; this.lampLevel = 0;
+    this.time = 0; this.k = 0; this.green = 0; this.energy = 0; this.lampLevel = 0; this.midS = 0; this.swayMid = 0; this.bm = 1;
     this.m = mat4.create(); this.mLawn = mat4.create();
     this.col = { fog: [0, 0, 0], wrong: [0, 0, 0], tmp: [0, 0, 0], zen: [0, 0, 0], tint: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], glass: [1, 1, 1], halo: [0, 0, 0], pool: [0, 0, 0], tw: [1, 1, 1], lamp: [0, 0, 0], win: [0, 0, 0], focus: [0, 2, 4] };
     this.lights = new K.LightSet({ reach: 12 });
@@ -272,6 +272,10 @@ export class QuietHouse {
     this.energy = damp(this.energy, a.energy ?? a.level ?? 0, 2.5, dt);
     this.green = damp(this.green, K.stage(k, 0.15, 0.95) * (0.6 + 0.4 * this.energy), 3, dt);
     this.lampLevel = damp(this.lampLevel, K.stage(k, 0.35, 0.65), 1.5, dt);
+    // foliage sway: the mid band eased (0.5 s) unless the Feel allows beat-sized movement
+    this.midS = damp(this.midS, d.mid, 0.5, dt);
+    this.swayMid = lerp(this.midS, d.mid, d.beatMotion);
+    this.bm = d.beatMotion;
 
     // windows: one is always on; the rest come on one by one with the swell
     for (const w of this.win) {
@@ -305,7 +309,7 @@ export class QuietHouse {
     }
     this.tw.forEach((t, i) => {
       const v = t.env.update(dt);
-      this.twinkles.set(i, t.x, t.y, t.z, t.s * (0.5 + v * 0.7), v * 1.6, v, 0, 1);
+      this.twinkles.set(i, t.x, t.y, t.z, t.s * (0.5 + v * 0.7 * lerp(0.3, 1, this.bm)), v * 1.6, v, 0, 1);   // the glint's size swell is a beat movement; its light stays
     });
     this.twinkles.upload(N_TWINKLES);
   }
@@ -344,7 +348,7 @@ export class QuietHouse {
     r.drawInstanced(this.glassMesh, this.winInst, { texture: this.glassTex, unlit: true, tint: col.glass });
     r.drawInstanced(this.frameMesh, this.winInst, { texture: this.frameTex, tint: col.tint });
 
-    const sway = 0.006 + this.breath.v * 0.006 + K.drive(this.a || { level: 0, bass: 0, mid: 0, high: 0, beatPulse: 0 }, k).mid * 0.012;
+    const sway = 0.006 + this.breath.v * 0.006 + this.swayMid * 0.012;
     r.drawInstanced(this.quad, this.pines, { texture: this.pineTex, billboard: 1, sway: sway * 0.5, tint: col.tint });
     r.drawInstanced(this.quad, this.trees, { texture: this.treeTex, billboard: 1, sway, tint: col.tint });
     r.drawInstanced(this.quad, this.bushes, { texture: this.bushTex, billboard: 1, sway: sway * 0.5, tint: col.tint });

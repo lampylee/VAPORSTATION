@@ -122,7 +122,7 @@ export class StillPool {
     this.cam = new K.CameraRig({ fov: 56, near: 0.05, far: 140, fovPunch: 0, nudge: 0.02, rollKick: 0, idleSpeed: 0, activeSpeed: 0, bassBoost: 0 });
     this.breath = new K.Breath({ beats: 8, period: 12 });
     this.time = 0; this.k = 0; this.sk = 0; this.sub = 0; this.subTarget = 0; this.under = 0; this.murk = 0; this.eyeY = 1;
-    this.a = null; this.bassAvg = 0; this.cool = 0; this.nextDrip = 1.5;
+    this.a = null; this.barClock = new K.BarClock({ minGap: 1 }); this.midS = 0; this.swayMid = 0; this.bassAvg = 0; this.cool = 0; this.nextDrip = 1.5;
     this.m = mat4.create();
     this.col = { fog: [0, 0, 0], murk: [0, 0, 0], tmp: [0, 0, 0], zen: [0, 0, 0], tint: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], glow: [0, 0, 0], water: [0, 0, 0] };
   }
@@ -162,9 +162,12 @@ export class StillPool {
     // rings: a bass onset, or a beat; never more than one at a time (shared cooldown)
     this.bassAvg = damp(this.bassAvg, a.bass, 0.5, dt);
     this.cool -= dt;
+    // (below Punchy a ring is a once-a-bar event: a ring growing on every kick is a beat movement)
     const onset = d.bass > 0.05 && a.bass - this.bassAvg > 0.07;
-    if ((d.beat || onset) && this.cool <= 0) {
-      this._ring((2.2 + k * 2.8 + d.bass * 1.5) * lerp(0.7, 1, clamp(d.accent)));
+    const bar = this.barClock.update(a, dt) && k > 0.05;
+    const hit = d.beatMotion >= 0.5 ? d.beat || onset : bar;
+    if (hit && this.cool <= 0) {
+      this._ring((2.2 + k * 2.8 + lerp(d.energy, d.bass, d.beatMotion) * 1.5) * lerp(0.7, 1, clamp(d.accent)));
       this.cool = 0.75 * Math.max(1, d.decay);
     }
     // idle life: a drip now and then (sparser as the song takes over)
@@ -183,8 +186,10 @@ export class StillPool {
     });
     this.glows.upload(N_LIGHTS);
 
+    this.midS = damp(this.midS, d.mid, 0.5, dt);
+    this.swayMid = lerp(this.midS, d.mid, d.beatMotion);
     this.flies.update(dt, [0, W + 0.9, -8], { amount: K.stage(sk, 0.25, 0.75) * 0.8, speed: 0.4 });
-    this.bubbles.update(dt, [0, -1.25, -5.5], { amount: u * lerp(0.3, 0.8, k), speed: 0.6 + d.mid * 0.4 });
+    this.bubbles.update(dt, [0, -1.25, -5.5], { amount: u * lerp(0.3, 0.8, k), speed: 0.6 + this.swayMid * 0.4 });
   }
 
   /** Sky + everything standing in the scene. Drawn mirrored, then clipped (above), or once (below). */
@@ -193,7 +198,7 @@ export class StillPool {
     this.sky.draw(r, this.cam.eye, { horizon: col.fog, zenith: col.zen, brightness: 1, starLevel: (0.25 + this.breath.v * 0.1) * fade * (1 - this.under * 0.5) });
     this.ground.draw(r, { texture: this.groundTex, tint: col.tint });
     r.drawInstanced(this.stoneMesh, this.stones, { texture: this.stoneTex, tint: col.tint });
-    const sway = 0.012 + this.breath.v * 0.015 + (this.a ? K.drive(this.a, this.k).mid * 0.03 : 0);
+    const sway = 0.012 + this.breath.v * 0.015 + this.swayMid * 0.03;
     r.drawInstanced(this.quad, this.reeds, { texture: this.reedTex, billboard: 1, sway, tint: col.tint });
     const g = glowLevel * fade;
     if (g > 0.01) {

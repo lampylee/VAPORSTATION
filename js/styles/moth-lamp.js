@@ -171,7 +171,7 @@ export class MothLamp {
 
     this.cam = new K.OrbitRig({ center: [0, 2.1, 0], radius: CAM_R, height: 1.3, bob: 0.25, pushIn: 0, idleSpeed: 0.012, activeSpeed: 0.028, bassBoost: 0, fovPunch: 0.6, nudge: 0.03, rollKick: 0, fov: 52, far: 220 });
     this.breath = new K.Breath({ beats: 8, period: 12 });
-    this.scatter = new K.Spring(2.2);
+    this.scatter = new K.Spring(2.2); this.loose = 0; this.highE = 0; this.highS = 0;
     this.time = 0; this.k = 0; this.E = 0; this.flood = 0; this.count = 10; this.lamp = 0.4; this.poolR = 3;
     this.mat = mat4.create();
     this.col = { fog: [0, 0, 0], hi: [0, 0, 0], zen: [0, 0, 0], tint: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], glass: [0, 0, 0], pool: [0, 0, 0], one: [1, 1, 1], grass: [0, 0, 0], lamp: [0, 0, 0] };
@@ -216,8 +216,10 @@ export class MothLamp {
     this.grass.upload(this.g.length);
 
     // moth swarm: count grows one by one, orbit tightens with the swell, flutters on beats
-    if (d.beat) this.scatter.kick(1.6 * (0.4 + 0.6 * k));
-    const sc = Math.max(0, this.scatter.update(dt));
+    // (at Gentle the swarm only loosens slowly with the groove, never a burst per beat)
+    if (d.beat) this.scatter.kick(1.6 * (0.4 + 0.6 * k) * d.beatMotion);
+    this.loose = damp(this.loose, d.groove * (1 - d.beatMotion) * 0.3, 0.8, dt);
+    const sc = Math.max(0, this.scatter.update(dt)) + this.loose;
     this.count = damp(this.count, lerp(10, MAX_MOTHS, K.stage(k, 0, 0.85)), 1.2, dt);
     const rad = lerp(3.3, 1.9, K.swell(k * 0.7 + fl * 0.3, 0, 1)), speed = lerp(0.7, 1.15, k);
     let n = 0;
@@ -238,7 +240,8 @@ export class MothLamp {
     }
     this.moths.upload(n);
 
-    this.dust.update(dt, [0, 2.4, 0], { amount: K.swell(k, 0.2, 0.75) + fl * 0.25, speed: 0.5 + d.high * 0.5 });
+    this.highE = damp(this.highE, d.high, 0.6, dt); this.highS = lerp(this.highE, d.high, d.beatMotion);   // mote speed: eased unless Punchy
+    this.dust.update(dt, [0, 2.4, 0], { amount: K.swell(k, 0.2, 0.75) + fl * 0.25, speed: 0.5 + this.highS * 0.5 });
   }
 
   render(r) {

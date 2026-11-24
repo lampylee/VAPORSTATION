@@ -229,7 +229,7 @@ export class UnderTheHull {
 
     this.cam = new DriftRig({ fov: 62, far: 720, idleSpeed: 0.011, activeSpeed: 0.016, bassBoost: 0, fovPunch: 0.6, nudge: 0.03, rollKick: 0.004 });
     this.breath = new K.Breath({ beats: 16, period: 14 });
-    this.time = 0; this.k = 0; this.hp = 0; this.hv = 0; this.cover = 0; this.edge = HULL_FAR + HULL_L / 2;
+    this.highE = 0; this.highS = 0; this.bm = 1; this.time = 0; this.k = 0; this.hp = 0; this.hv = 0; this.cover = 0; this.edge = HULL_FAR + HULL_L / 2;
     this.hullM = mat4.create(); this.m = mat4.create();
     this.col = { fog: [0, 0, 0], a: [0, 0, 0], b: [0, 0, 0], zen: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], tint: [1, 1, 1], hull: [0, 0, 0], glow: [1, 1, 1], pool: [0, 0, 0], lamp: [0, 0, 0], focus: [0, 0, 0] };
     this.lights = new K.LightSet({ reach: 12 });
@@ -259,11 +259,13 @@ export class UnderTheHull {
     if ((this.nextIdlePulse -= dt) <= 0) { this.nextIdlePulse = 10 + Math.random() * 6; this.pulses.trigger(-3, 0.3, 6); }
     this.pulses.update(dt);
 
+    this.bm = d.beatMotion;
     this._updateLights(t, b);
 
     const eye = this.cam.eye;
+    this.highE = damp(this.highE, d.high, 0.6, dt); this.highS = lerp(this.highE, d.high, d.beatMotion);
     this.mist.update(dt, [eye[0], 0.4, eye[2] - 30], { amount: K.swell(this.cover, 0.8, 1), speed: 0.35 });
-    this.dust.update(dt, eye, { amount: K.stage(this.cover, 0.3, 0.9) * 0.7, speed: 0.4 + d.high * 0.4, wind: [0.15, 0.05] });
+    this.dust.update(dt, eye, { amount: K.stage(this.cover, 0.3, 0.9) * 0.7, speed: 0.4 + this.highS * 0.4, wind: [0.15, 0.05] });
   }
 
   _updateHull(t) {
@@ -300,8 +302,8 @@ export class UnderTheHull {
     // keel strip in hull-local space, far end (-z) is s = 0
     for (let i = 0; i < N_KEEL; i++) {
       const z = -HULL_L * 0.44 + (i / (N_KEEL - 1)) * HULL_L * 0.88;
-      const lv = 0.3 + 0.1 * b + Math.min(1.3, this.pulses.at(i) * 2.2);
-      this.keel.set(i, 0, -9, z, 4 + lv * 3, 0, lv);
+      const base = 0.3 + 0.1 * b, pl = Math.min(1.3, this.pulses.at(i) * 2.2);   // the pulse's light stays; its size swell is a beat movement
+      this.keel.set(i, 0, -9, z, 4 + (base + pl * this.bm) * 3, 0, base + pl);
     }
     this.keel.upload(N_KEEL);
     this.navLights.forEach(([x, y, z], i) => {

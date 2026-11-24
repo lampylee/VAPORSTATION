@@ -205,7 +205,7 @@ export class BeforeDawn {
     this.cam = new K.CameraRig({ fov: 56, near: 0.08, far: 230, fovPunch: 0, nudge: 0.015, rollKick: 0, idleSpeed: 0, activeSpeed: 0, bassBoost: 0 });
     this.breath = new K.Breath({ beats: 8, period: 12 });
     this.flare = new K.Envelope(0.8);
-    this.time = 0; this.k = 0; this.u = 0; this.ign = 0; this.bass = 0; this.energy = 0; this.out = 0;
+    this.time = 0; this.k = 0; this.u = 0; this.ign = 0; this.bass = 0; this.bassM = 0; this.bassE = 0; this.energy = 0; this.out = 0;
     this.lamp = 0.25; this.wind = 0;
     this.m = mat4.create();
     this._t = [0, 0, 0];
@@ -224,6 +224,8 @@ export class BeforeDawn {
     // the fuzz bass: smoothed, only matters once the sky burns
     this.bass = damp(this.bass, a.bass, 0.3, dt);
     this.energy = damp(this.energy, a.energy ?? a.level, 1.2, dt);
+    // bass for movement (wind, ember speed): slower unless the Feel allows beat-sized movement; flicker / brightness keep this.bass
+    this.bassE = damp(this.bassE, a.bass, 0.8, dt); this.bassM = lerp(this.bassE, this.bass, d.beatMotion);
 
     // camera: a slow time-driven drift out and back; the ignition pulls it out into the field
     const cyc = 0.5 - 0.5 * Math.cos((t / CYCLE) * TAU);
@@ -244,19 +246,19 @@ export class BeforeDawn {
 
     // the lamp breathes; it brightens a little with the song, never a lot
     this.lamp = 0.22 + b * 0.06 + K.stage(k, 0.1, 0.7) * 0.2 + this.flare.v * 0.15;
-    this.glows.set(0, 0.45, 0.82, -2.68, 0.55 + this.lamp * 0.5, 0, this.lamp, 0, 1);
+    this.glows.set(0, 0.45, 0.82, -2.68, 0.55 + (this.lamp - this.flare.v * 0.15 * (1 - d.beatMotion)) * 0.5, 0, this.lamp, 0, 1);   // the flare's light stays; its halo-size swell is a beat movement
     const win = (0.12 + this.lamp * 0.25) * this.out * K.fadeIn(this.cam.eye[2] - ROOM.hz, 5, 14);   // only from afar: up close you see the lamp itself
     this.glows.set(1, 0, 1.5, ROOM.hz + 0.05, 1.7, 0, win, 0, 1);
     this.glows.upload(2);
 
     // curtains stir; when the sky burns a hot wind pushes them in
-    this.wind = damp(this.wind, 0.04 + d.energy * 0.06 + ign * (0.22 + this.bass * 0.1), 1.5, dt);
+    this.wind = damp(this.wind, 0.04 + d.energy * 0.06 + ign * (0.22 + this.bassM * 0.1), 1.5, dt);
     for (const c of this.curtains) c.mesh.update(curtainGeo(c.x0, c.x1, 0.7, 2.28, ROOM.hz - 0.14, 6, 5, t, this.wind, c.seed));
 
     this.dust.update(dt, [0, 1.2, 0.2], { amount: K.swell(k, 0.4, 0.8) * (1 - this.out * 0.8), speed: 0.4 + this.wind * 2 });
     this.mist.update(dt, [0, 0.4, -34], { amount: lerp(0.75, 0.45, ign), speed: 0.35 + ign * 0.6 });
     // embers rise from the field behind and around the house, kept well ahead of the camera
-    this.embers.update(dt, [0, 6, -6], { amount: ign * 0.95 * K.fadeIn(eye[2], 14, 22), speed: 0.5 + this.energy * 0.6 + this.bass * ign * 0.5, wind: [0.4, 0.15] });
+    this.embers.update(dt, [0, 6, -6], { amount: ign * 0.95 * K.fadeIn(eye[2], 14, 22), speed: 0.5 + this.energy * 0.6 + this.bassM * ign * 0.5, wind: [0.4, 0.15] });
   }
 
   render(r) {

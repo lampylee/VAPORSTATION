@@ -115,7 +115,7 @@ export class Underriver {
     this.cam = new K.PathRig((s, out) => { out[0] = riverX(-s); out[1] = 0; out[2] = -s; return out; },
       { lookAhead: 16, fov: 60, far: 200, fovPunch: 0, nudge: 0.02, rollKick: 0.004, idleSpeed: 0.55, activeSpeed: 1.0, bassBoost: 0 });
     this.breath = new K.Breath({ beats: 8, period: 12 });
-    this.time = 0; this.k = 0; this.kk = 0; this.e = 0; this.low = 0; this.h = 15;
+    this.bm = 1; this.time = 0; this.k = 0; this.kk = 0; this.e = 0; this.low = 0; this.h = 15;
     this.col = { fog: [0, 0, 0], zen: [0, 0, 0], tint: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], star: [1, 1, 1], fig: [0, 0, 0], figGlow: [0, 0, 0], weed: [0, 0, 0] };
   }
 
@@ -141,6 +141,7 @@ export class Underriver {
     this.ground.follow(eye[0], eye[2] - 30);
 
     // a beat sends one faint pulse of starlight downstream ahead of the camera
+    this.bm = d.beatMotion;
     if (d.beat) this.pulses.trigger(-eye[2] + 12, 0.45 * k * d.accent, 7);
     this.pulses.update(dt);
 
@@ -160,10 +161,11 @@ export class Underriver {
       const tw = 0.6 + 0.4 * Math.sin(t * (0.6 + r3 * 0.8) + r1 * 40);
       const y = height(x, z) + 0.1 + (r3 < 0.18 ? 0.6 + r3 * 14 : 0);      // some float just above the bed
       const nearFade = K.fadeIn(Math.hypot(x - eye[0], y - eye[1], z - eye[2]), 4, 9);   // never a big blob at the lens
-      const lv = (lit * tw * (0.8 + 0.25 * b) + wave * (lit + 0.15) + this.pulses.at(-z) * (lit + 0.2)) * K.fadeOut(dist, R0 * 0.6, R0) * nearFade;
+      const fade = K.fadeOut(dist, R0 * 0.6, R0) * nearFade, pl = this.pulses.at(-z) * (lit + 0.2) * fade;   // pulse light stays; its halo-size swell is a beat movement
+      const lvBase = (lit * tw * (0.8 + 0.25 * b) + wave * (lit + 0.15)) * fade, lv = lvBase + pl;
       if (lv < 0.01) return;
       const s = 0.4 + r2 * 0.45;
-      const hs = s * (1.7 + Math.min(1, lv) * 1.1), cs = s * 0.6;     // quads pivot at the base: lift so the halo clears the bed
+      const hs = s * (1.7 + Math.min(1, lvBase + pl * this.bm) * 1.1), cs = s * 0.6;     // quads pivot at the base: lift so the halo clears the bed
       this.halos.set(n, x, y, z, hs, 0, Math.min(0.9, lv * 0.8), 0, 1);
       this.cores.set(n, x, y + (hs - cs) * 0.5, z, cs, 0, Math.min(1, 0.1 + lv * 1.5), 0, 1);
       n++;
