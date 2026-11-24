@@ -205,7 +205,7 @@ export class SearchlightTown {
     this.midS = 0;          // eased mid (tree sway at Gentle)
     this.bar = new K.BarClock({ minGap: 1 });   // Gentle: the beams swing on once per bar, not per beat
     this.melt = 0;          // eased peak distortion 0..1
-    this.amp = 0; this.bm = 1;
+    this.amp = 0; this.bm = 1; this.meltK = 0; this.meltX = 0;
     this.col = { fog: [0, 0, 0], tint: [1, 1, 1], light: [0, 0, 0], amb: [0, 0, 0], one: [1, 1, 1] };
 
     // song sections: gates multiply the k fed into today's stage() curves (clamped 0..1) — the lights
@@ -242,8 +242,13 @@ export class SearchlightTown {
     this.kw = clamp(k * m.winGate);
 
     // peak distortion: eased in slowly, settles back a little faster
-    const mt = K.stage(clamp(k * m.meltGate), 0.74, 0.98);
-    this.melt = damp(this.melt, mt, mt > this.melt ? 1.6 : 1.1, dt);
+    // (today's melt follows k alone; the mood's share is a separate term with a slow settle, so leaving a
+    // drop takes 6 s+ and with the Conductor off (gate 1, share 0) the melt is exactly today's)
+    const mt = K.stage(k, 0.74, 0.98);
+    this.meltK = damp(this.meltK, mt, mt > this.meltK ? 1.6 : 1.1, dt);
+    const mx = K.stage(clamp(k * m.meltGate), 0.74, 0.98) - mt;
+    this.meltX = damp(this.meltX, mx, mx > this.meltX ? 1.6 : 3, dt);
+    this.melt = clamp(this.meltK + this.meltX * K.stage(k, 0.05, 0.4));
     this.amp = this.melt * (0.6 + 0.4 * this.en);
     this.cam.roll = Math.sin(t * 0.55) * 0.05 * this.melt;
 

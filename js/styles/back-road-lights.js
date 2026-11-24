@@ -41,6 +41,7 @@ const CAM = [4, 0, 38];
 const HOUSE = [-20, -30], BARN = [16, -44], MILL = [34, -20];
 const N_LIGHTS = 9, MAX_BEAMS = 2, HELD_BEAMS = 2, POOL_SEGS = 6;   // beat beams use the first MAX_BEAMS slots
 const GATE = [-22, -16.5];   // gap in the fence: the farm lane
+const MILL_CLEAR = 19.5;     // lowest formation height within 6 units of the mill (eases off by 11) (rotor top ≈ 13.8, beam dip ≤ 1.8, lens ≤ 1.8)
 
 const ease = (t) => { t = clamp(t); return t * t * (3 - 2 * t); };
 
@@ -349,6 +350,9 @@ export class BackRoadLights {
       out[2] = lerp(out[2], HOUSE[1] + Math.sin(a) * 7, hs);
     }
     out[1] -= this.low * (out[1] - 8) * 0.45;
+    // keep clear of the windmill rotor (top ≈ 13.8): near the mill, slots rise smoothly to MILL_CLEAR
+    const dm = Math.hypot(out[0] - MILL[0], out[2] - MILL[1]), nearMill = 1 - ease((dm - 6) / 5);
+    if (nearMill > 0 && out[1] < MILL_CLEAR) out[1] += (MILL_CLEAR - out[1]) * nearMill;
     return out;
   }
 
@@ -436,7 +440,7 @@ export class BackRoadLights {
       if (b.held) {
         b.hold -= dt;
         b.hv = damp(b.hv, b.hold > 0 ? b.hl : 0, 0.5, dt);
-        v = Math.max(v, b.hv);
+        v = Math.max(v, b.hv * K.stage(this.k, 0, 0.3));   // light: × k, so a stop dims a held beam at once
       }
       if (b.light < 0) { b.v = 0; continue; }
       const L = this.lights[b.light];
