@@ -13,6 +13,11 @@
 //          little as it passes, scaled by audio.accent / audio.motion
 //   camera a slow, low glide behind and beside the mic, looking at the crowd
 //
+// Song sections (K.Moods, Conductor on): intro / breakdown / outro leave the figures slumped and
+// the hall dark (only the mic lit); a build stands the rows up front to back, sooner than k alone;
+// the drop has them all standing, the hall lamps up and a slow ripple rolling through the rows
+// (steady, not on beats). Conductor off = base (today's look).
+//
 // Kit used: CameraRig (local subclass), stage, drive, Pulses, Breath,
 // Envelope, makeIndexed/dshade/ditherPick, atlasUV, decal, props.prism,
 // tex.boards, sprites.glow/lightShaft, Particles('dust'), instance tilt.
@@ -203,11 +208,27 @@ export class PaperCrowd {
     this.time = 0; this.k = 0; this.energy = 0; this.br = 0;
     this.a = { level: 0, bass: 0, mid: 0, high: 0, beat: false, beatPulse: 0, beatCount: 0 };
     this.col = { fog: [0, 0, 0], tint: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], glow: [0, 0, 0], warm: [0, 0, 0], pool: [0, 0, 0], shaft: [0, 0, 0], tmp: [0, 0, 0] };
+
+    // song sections: gates multiply the k fed into today's curves (clamped 0..1) — riseGate the rows
+    // standing (front to back, per row), hallGate the hall light (dim, warm, sconces, shafts, dust),
+    // rippleGate the beat ripple's size (already × k). Mood-only: sconceIdle = the sconces' idle
+    // glow (today 0.12), micLift = a little extra mic light (× k), wave = the drop's rolling ripple
+    // through the rows (× k). No camera keys (the glide is today's).
+    this.moods = new K.Moods({
+      still:  { riseGate: 0.1,  hallGate: 0.45, rippleGate: 0.5, sconceIdle: 0.03, micLift: 0.15, wave: 0 },
+      base:   { riseGate: 1,    hallGate: 1,    rippleGate: 1,   sconceIdle: 0.12, micLift: 0,    wave: 0 },
+      gather: { riseGate: 1.35, hallGate: 1.15, rippleGate: 1,   sconceIdle: 0.12, micLift: 0,    wave: 0 },
+      full:   { riseGate: 1.8,  hallGate: 1.4,  rippleGate: 1.3, sconceIdle: 0.12, micLift: 0,    wave: 1 },
+    }, { dropEase: 4 });
+    this.mv = this.moods.v; this.kh = 0; this.waveP = 0;
   }
 
   update(a, k, dt) {
     this.a = a; this.k = k; this.time += dt;
+    const m = this.mv = this.moods.update(a, dt);
     const d = K.drive(a, k);
+    this.kh = clamp(k * m.hallGate);
+    const kr = clamp(k * m.riseGate);
     this.cam.update(a, k, dt);
     this.energy = damp(this.energy, d.energy, 0.8, dt);
     this.br = this.breath.update(a, dt);
@@ -215,22 +236,26 @@ export class PaperCrowd {
     // rows stand up front to back; damped so nothing snaps even if k jumps
     for (let i = 0; i < ROWS; i++) {
       const f = i / (ROWS - 1);
-      const tgt = K.stage(k, 0.04 + f * 0.58, 0.26 + f * 0.6);
+      const tgt = K.stage(kr, 0.04 + f * 0.58, 0.26 + f * 0.6);
       this.rise[i] = damp(this.rise[i], tgt, tgt > this.rise[i] ? 0.6 + f * 1.6 : 1.2, dt);   // back rows lag even on a jump
     }
 
     // one soft ripple per beat, from the front row backwards
     const bm = d.beatMotion, barFire = this.bar.update(a, dt);
-    if (d.beat) { if (bm > 0.01) this.ripple.trigger(-2, k * d.accent * bm, 9); this.micPulse.trigger(0.6 * k); }   // the crowd's bow follows Feel; the mic light stays
-    if (barFire && bm < 1 && k > 0.05) this.ripple.trigger(-2, k * d.accent * 0.5 * (1 - bm), 3.5);       // Gentle: slower, smaller wave once per bar
+    if (d.beat) { if (bm > 0.01) this.ripple.trigger(-2, k * d.accent * bm * m.rippleGate, 9); this.micPulse.trigger(0.6 * k); }   // the crowd's bow follows Feel; the mic light stays
+    if (barFire && bm < 1 && k > 0.05) this.ripple.trigger(-2, k * d.accent * 0.5 * (1 - bm) * m.rippleGate, 3.5);       // Gentle: slower, smaller wave once per bar
     this.ripple.update(dt);
     this.micPulse.update(dt);
 
     const t = this.time, motion = d.motion, en = this.energy;
+    // drop: a slow ripple rolling front to back through the standing rows (steady, never on beats)
+    const wv = m.wave * K.stage(k, 0.1, 0.6) * 0.7;
+    this.waveP += dt * 1.1;
     const counts = [0, 0, 0, 0];
     for (const g of this.figs) {
       const rise = clamp(this.rise[g.row] * (1 + g.lag * 2) - g.lag);
-      const rp = this.ripple.at(g.row) * motion;
+      let rp = this.ripple.at(g.row) * motion;
+      if (wv > 0.001) { const w = Math.max(0, Math.sin(this.waveP - g.row * 0.45 + g.x * 0.04)); rp += wv * w * w * w; }
       const idleDrift = Math.sin(t * 0.35 + g.ph) * 0.035 * (1 - rise);       // slumped ones breathe
       const sway = Math.sin(t * 0.9 + g.x * 0.35 + g.row * 0.6) * (0.015 + 0.05 * en) * rise;
       const tiltX = -g.slump * (1 - rise) + idleDrift + rp * 0.2;         // ripple = a small bow toward the mic
@@ -241,12 +266,12 @@ export class PaperCrowd {
     }
     for (let v = 0; v < VARIANTS; v++) this.figInst[v].upload(counts[v]);
 
-    this.dust.update(dt, [0, 3, 13], { amount: lerp(0.15, 0.8, K.stage(k, 0.3, 0.9)), speed: 0.5 + en * 0.6 });
+    this.dust.update(dt, [0, 3, 13], { amount: lerp(0.15, 0.8, K.stage(this.kh, 0.3, 0.9)), speed: 0.5 + en * 0.6 });
   }
 
   render(r) {
-    const { col, k } = this, P = this.pal, d = K.drive(this.a, k);
-    const dim = lerp(0.6, 1, k), warm = K.stage(k, 0.1, 0.9);
+    const { col, k } = this, P = this.pal, d = K.drive(this.a, k), m = this.mv, kh = this.kh;
+    const dim = lerp(0.6, 1, kh), warm = K.stage(kh, 0.1, 0.9);
 
     // maroon-tinted fog that brightens a little with the swell
     mixColor(col.fog, P.role('fog'), P.color(R(0, 0)), 0.35);
@@ -254,14 +279,14 @@ export class PaperCrowd {
     scaleColor(col.fog, col.fog, dim * (0.9 + this.br * 0.08 * k));
     r.clear(col.fog);
     this.cam.apply(r);
-    r.setFog(col.fog, 4, lerp(24, 36, k));
+    r.setFog(col.fog, 4, lerp(24, 36, kh));
 
     // cold dim light at idle, warm hall light when the crowd is up
     mixColor(col.light, P.color(R(1, 2)), P.color(R(1, 3)), warm);
     mixColor(col.light, col.light, P.color(R(2, 3)), 0.3 * warm);
-    scaleColor(col.light, col.light, lerp(0.42, 0.95, k));
+    scaleColor(col.light, col.light, lerp(0.42, 0.95, kh));
     mixColor(col.amb, P.color(R(0, 2)), P.color(R(1, 2)), 0.35);
-    scaleColor(col.amb, col.amb, lerp(0.42, 0.7, k));
+    scaleColor(col.amb, col.amb, lerp(0.42, 0.7, kh));
     r.setLight([0.25, -0.65, 0.7], col.light, col.amb);
     col.tint[0] = col.tint[1] = col.tint[2] = dim;
 
@@ -271,7 +296,7 @@ export class PaperCrowd {
     r.draw(this.ceilMesh, I, { texture: this.ceilTex, tint: col.tint });
 
     // mic light pool and stand (the one thing lit at idle)
-    const micLvl = lerp(0.45, 0.85, k) + this.micPulse.v * 0.35 + this.br * 0.08;
+    const micLvl = lerp(0.45, 0.85, k) + this.micPulse.v * 0.35 + this.br * 0.08 + m.micLift * k;
     scaleColor(col.pool, P.role('glow'), micLvl * 0.3);
     r.draw(this.poolMesh, I, { texture: this.poolTex, unlit: true, additive: true, depthWrite: false, tint: col.pool });
     r.draw(this.micMesh, I, { texture: this.metalTex, tint: col.tint });
@@ -287,7 +312,7 @@ export class PaperCrowd {
     // wall sconces warm up front to back
     const n = this.sconces.length;
     this.sconces.forEach((s, i) => {
-      const on = 0.12 + 0.88 * K.stage(k, 0.08 + s.order * 0.5, 0.3 + s.order * 0.5);
+      const on = m.sconceIdle + (1 - m.sconceIdle) * K.stage(kh,0.08 + s.order * 0.5, 0.3 + s.order * 0.5);
       const flick = on * (0.94 + 0.06 * Math.sin(this.time * 7 + i * 2.3));
       this.sconceInst.set(i, s.x, s.y, s.z, 1, 0, 0.8, 0, 1);
       const sz = 0.8 + on * 0.9;
@@ -306,7 +331,7 @@ export class PaperCrowd {
     r.drawInstanced(this.quad, this.micGlow, { texture: this.glowTex, billboard: 2, unlit: true, additive: true, depthWrite: false, tint: col.tmp });
 
     // overhead shafts over the crowd, only near the top of the swell
-    const sh = K.stage(k, 0.55, 0.95) * (0.85 + this.br * 0.15) + this.micPulse.v * 0.1 * k;
+    const sh = K.stage(kh, 0.55, 0.95) * (0.85 + this.br * 0.15) + this.micPulse.v * 0.1 * k;
     if (sh > 0.005) {
       for (let i = 0; i < 3; i++) this.shafts.set(i, (i - 1) * 4.2, rowY(4 + i * 3), rowZ(4 + i * 3), 2.2, 0, 1, 0, (HALL_H - rowY(4 + i * 3)) / 2.2);
       this.shafts.upload(3);

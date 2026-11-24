@@ -13,6 +13,10 @@
 // smoothed energy and eased. Beat = a gust: a velocity burst through the
 // storm and a push on the towers, scaled by audio.accent / motion.
 // Page "print" is abstract dithered blocks and lines only: no text, no mastheads.
+// Song sections (K.Moods, Conductor on): intro / breakdown / outro hold the storm back (a few
+// pages float, the stacks stand still); a build sets the stacks swaying and gathers more pages
+// into the flocks, circling tighter round the central stacks; the drop whips the page storm up around the camera,
+// whose orbit eases in (slowly, never inside today's k = 1 reach). Conductor off = base.
 import { mat4, lerp, clamp, damp, smoothstep } from '../gfx/math.js';
 import { scaleColor } from '../gfx/color.js';
 import { GeoBuilder } from '../gfx/geometry.js';
@@ -238,17 +242,36 @@ export class Newsprint {
     this.m = mat4.create();
     this.time = 0; this.k = 0; this.a = SILENT;
     this.col = { fog: [0, 0, 0], tint: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], page: [0, 0, 0] };
+
+    // song sections: stormGate multiplies the k fed into today's storm stage (clamped 0..1): pages,
+    // swirl, gusts, flocks, tower sway. camGate does the same for the camera's share of it (orbit
+    // radius / height: a camera position, so slow and eased twice; at most today's k = 1 framing).
+    // Mood-only: sway = extra tower sway (× k), flockR = the flocks' circling radius, flockMore =
+    // extra pages in the flapping flock (× k).
+    this.moods = new K.Moods({
+      still:  { stormGate: 0.35, camGate: 0.5, sway: 0,   flockR: 1,    flockMore: 0 },
+      base:   { stormGate: 1,    camGate: 1,   sway: 0,   flockR: 1,    flockMore: 0 },
+      gather: { stormGate: 1.2,  camGate: 1.1, sway: 1,   flockR: 0.75, flockMore: 1 },
+      full:   { stormGate: 1.7,  camGate: 1.7, sway: 0.6, flockR: 1,    flockMore: 0 },
+    }, { dropEase: 4, slow: ['camGate'] });
+    this.camG = null;
   }
 
   update(a, k, dt) {
     this.a = a; this.k = k; this.time += dt;
+    const m = this.moods.update(a, dt);
     const d = K.drive(a, k), t = this.time;
     // slow, eased energy: what the stacks and storm follow (never the raw kick)
     this.eS = damp(this.eS, clamp(a.energy ?? a.level ?? 0), 1.2, dt);
-    const storm = K.stage(k, 0.3, 1), big = storm * (0.45 + 0.55 * this.eS);
+    const ksg = clamp(k * m.stormGate), storm = K.stage(ksg, 0.3, 1), big = storm * (0.45 + 0.55 * this.eS);
 
-    this.cam.radius = lerp(ORBIT, ORBIT - 3, big);
-    this.cam.height = lerp(3, 2.2, big);
+    // camera: its own gate, eased a second time so a section change starts softly (radius ≥ ORBIT - 3,
+    // today's k = 1 framing: the ring of towers is kept clear 6.5 either side of ORBIT)
+    if (this.camG === null) this.camG = m.camGate;
+    this.camG = damp(this.camG, m.camGate, 2, dt);
+    const bigC = K.stage(clamp(k * this.camG), 0.3, 1) * (0.45 + 0.55 * this.eS);
+    this.cam.radius = lerp(ORBIT, ORBIT - 3, bigC);
+    this.cam.height = lerp(3, 2.2, bigC);
     this.cam.update(a, k, dt);
     const eye = this.cam.eye;
 
@@ -267,19 +290,22 @@ export class Newsprint {
     this.lean = damp(this.lean, d.groove * (1 - bm) * 0.3 * storm, 0.6, dt);   // groove leans the towers slowly
     this.towerPush.update(dt);
     this.windA = damp(this.windA, this.windTo, 1.5, dt);   // eased, so the towers' lean turns, never jumps
-    this.swayAmt = damp(this.swayAmt, big, 1.5, dt);
+    this.swayAmt = damp(this.swayAmt, big + m.sway * K.stage(k, 0.05, 0.5) * 0.45, 1.5, dt);   // build: the stacks sway (× k)
 
     const wind = 0.25 + big * 1.5;
     this.storm.update(dt, eye, {
       amount: 0.06 + 0.94 * storm * (0.6 + 0.4 * this.eS),
-      swirl: lerp(0.25, 1.6, K.stage(k, 0.15, 0.6)) + 7.5 * big,
+      swirl: lerp(0.25, 1.6, K.stage(ksg, 0.15, 0.6)) + 7.5 * big,
       fall: lerp(0.45, 0.8, storm), flutter: lerp(0.45, 1.3, storm),
       wind: [Math.cos(this.windA) * wind, Math.sin(this.windA) * wind],
       gust, ring: lerp(8, 6, storm), spin: lerp(0.7, 1.6, storm),
     });
 
     // flocks circle the central stacks, high above at idle, lower and quicker as it swells
-    const flockH = lerp(13, 9, storm);
+    // build: more pages gather into the flocks, circling tighter round the central stacks (eased by
+    // the mood, × k; the flocks stay at today's height, above the tallest central stack)
+    const more = m.flockMore * K.stage(k, 0.05, 0.5);
+    const flockH = lerp(13, 9, storm), fr = lerp(1, m.flockR, K.stage(k, 0.05, 0.5));
     const centre = (g, tt, out, rad) => {
       const ang = tt * 0.25 + g * (TAU / 4);
       out[0] = Math.cos(ang) * rad + Math.sin(tt * 0.13 + g) * 2;
@@ -287,8 +313,8 @@ export class Newsprint {
       out[1] = flockH + Math.sin(tt * 0.31 + g * 1.7) * 1.5 - g * 0.6;
       return out;
     };
-    this.glide.update(dt, (g, tt, out) => centre(g, tt, out, 9), { amount: lerp(0.5, 0.25, storm), speed: lerp(0.35, 0.7, storm), flap: 0 });
-    this.flock.update(dt, (g, tt, out) => centre(g + 0.5, tt, out, 7), { amount: storm * (0.5 + 0.5 * this.eS), speed: 0.6 + big * 0.9, flap: 0.55 });
+    this.glide.update(dt, (g, tt, out) => centre(g, tt, out, 9 * fr), { amount: lerp(0.5, 0.25, storm), speed: lerp(0.35, 0.7, storm), flap: 0 });
+    this.flock.update(dt, (g, tt, out) => centre(g + 0.5, tt, out, 7 * fr), { amount: clamp(storm * (0.5 + 0.5 * this.eS) + more * 0.4), speed: 0.6 + big * 0.9, flap: 0.55 });
 
 
     this._towers(t);
