@@ -212,13 +212,14 @@ errors), governor tiers + the saturation cap with synthetic frame times, every s
   `operator.js`, `output-page.js`. Spec + plan: `docs/superpowers/specs/2026-11-23-projector-output-design.md`.
 - `kiosk.bat dual` → `?kiosk&dual` (operator view + "Open projector output", cursor visible, not saved), `--disable-popup-blocking`,
   and `tools/grant-window-management.js` pre-grants window-management in the kiosk profile. Plain `kiosk.bat` unchanged.
-  The operator still clicks twice: the open button, then the projector once (Chrome refuses fullscreen requested from the
-  opener; `--kiosk` does not make the popup fullscreen). Details in the spec.
+  The projector opens by itself 1.5 s after load (only with `&dual`; skipped if an existing projector reattached, so a
+  reload never reloads it; blocked -> the big button). The operator's one click is on the projector for fullscreen (Chrome
+  refuses it from the opener; `--kiosk` does not make the popup fullscreen). Details in the spec.
 - Self-test has an INFO "Projector" line (screens, window-management permission; never prompts).
 - Either window's rAF drives the frame (guard), reload reconnects automatically, "no input" turns red only after 3 s gone.
   Single-mode CPU +0.03-0.09 ms/frame vs before, fps unchanged.
 - Verified (pane + real Chrome, one 1080p display): single mode, ?kiosk&dual operator view, popup opens / is guarded,
-  pre-grant makes the permission state "granted", kiosk.bat command lines (dry run). **Not verified:** true fullscreen
+  pre-grant makes the permission state "granted", kiosk.bat command lines (dry run), auto-open on fresh start, reload reattach without a second window. **Not verified:** true fullscreen
   and placement on a real second screen, pulling the HDMI cable, real MIDI opening the projector, the input-gone red
   with a real interface, operator view readability from 2 m, `?selftest` and `?bench` on the gig laptop with dual on.
 

@@ -521,6 +521,9 @@ if (kiosk) {
   setUiVisible(false);
   document.body.classList.add('kiosk');
   if (params.has('dual')) { s.output = 'dual'; syncOperator(); }   // kiosk.bat dual: operator view + "Open projector output" up front (this session only, not saved)
+  // kiosk.bat dual allows popups: open the projector by itself unless an existing one reattached meanwhile
+  // (never window.open before that wait: it would reload the live projector page). Blocked -> the button stays.
+  if (params.has('dual')) setTimeout(() => { if (output.state === 'none') openOutput(); }, 1500);
   if (!(s.deviceLabel || s.deviceId)) { liveWanted = true; refreshDevices().then(startLive); }   // otherwise the saved device opens below
 }
 

@@ -36,8 +36,9 @@ automatically (that profile only), no panel and no cursor. **H** shows the panel
 
 **With a projector (Windows):** double-click `kiosk.bat dual`. The laptop shows the **operator view** (what is on the
 projector, state, input, next up, big Hold / Freeze / Blackout / Big moment / Next buttons) and the cursor stays visible.
-Click **Open projector output** (or press **W**, or the MIDI `output` action once mapped), then **click the projector
-window once**: Chrome only allows fullscreen from a click inside that window. The window goes to the other screen by
+The projector window opens by itself about 1.5 s after load (if it is blocked, press **Open projector output**; **W** or
+the MIDI `output` action also open it). Then **click the projector window once**: Chrome only allows fullscreen from a
+click inside that window. The window goes to the other screen by
 itself (this profile has the window-management permission pre-granted, popups allowed). The projector shows only the
 picture; "Click to go fullscreen" is on it until you do. A red **PROJECTOR LOST** badge on the laptop means the window or
 screen went away: the picture is back on the laptop, press **W** to reopen. Reloading the laptop page reconnects the

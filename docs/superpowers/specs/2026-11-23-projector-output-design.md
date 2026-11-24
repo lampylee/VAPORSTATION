@@ -207,10 +207,13 @@ Shown instead of the picture on the laptop. Readable from ~2 m: large type, few 
   `window_placement` (tried alone, enough). No flag or policy needed. `kiosk.bat dual` writes it for the kiosk profile
   through `tools/grant-window-management.js` (needs node, which the launcher already uses; if Chrome is already running
   with that profile it overwrites the file and the one-time prompt appears instead). (c) `--disable-popup-blocking` kept
-  (this profile only) so W / MIDI reopen works with no click. **Result:** double-click `kiosk.bat dual` → click "Open
-  projector output" → click the projector once. That is two clicks, one over the "at most one beyond single kiosk" goal,
-  because the fullscreen click has to be inside the projector window. Auto-opening the projector on load in dual kiosk
-  would make it one click; not done (untestable here without a second screen and it would double-open on reload).
+  (this profile only) so W / MIDI reopen works with no click. **Auto-open:** only with `?kiosk&dual`, 1.5 s after load, `output.open()`
+  is called once if the projector has not reattached by then (the projector page's 250 ms poll reattaches an existing
+  window after a reload; `window.open` with the existing name before that wait would reload it). Blocked popup -> the
+  "Open projector output" button as before. **Result:** double-click `kiosk.bat dual` → the projector opens by itself →
+  click it once for fullscreen = one click, meeting the goal. Checked in real Chrome with the dual flags: fresh start opens
+  it; reloading the laptop page keeps 2 pages, same `output.html` `timeOrigin` (not reloaded), state `open`; without
+  `--disable-popup-blocking` nothing opens and the button state stays `none`.
   **Not verified:** that the pre-granted permission puts the window on the second screen and that its fullscreen click
   lands there (one display only).
 - **Screen removed** (`screenschange`): the projector window is also closed, so Windows doesn't drop it onto the laptop
