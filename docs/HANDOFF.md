@@ -74,6 +74,8 @@ Number keys reach 0–9; the rest via N / Shift+N, the dropdown, auto-switch, a 
 6. Moonshot, not scheduled: a crossfaded **PS2 mode** toggle (640×448, perspective-correct, filtered textures, feedback
    haze, ~100k-tri budget, kit detail scaling). Needs the user's sign-off on a scoped hard-rule exemption first.
    Design: `docs/superpowers/specs/2026-11-23-ps2-mode-design.md`.
+7. Parked idea, next after the projector output: a **live camera feed** (band as palette-mapped PS1 video on in-world
+   screens). Not designed yet; notes and open questions: `docs/superpowers/specs/2026-11-23-camera-feed-notes.md`.
 
 ## Systems in brief
 
