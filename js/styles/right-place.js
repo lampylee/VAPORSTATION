@@ -167,7 +167,7 @@ export class RightPlace {
       gather: { countGate: 1.12, stepGate: 1.05, glowGate: 1.1,  minBlocks: IDLE_BLOCKS, loose: 0, lock: 0.5, rowBias: 0.6,  camD: 0 },
       full:   { countGate: 1.6,  stepGate: 1.6,  glowGate: 1.4,  minBlocks: IDLE_BLOCKS, loose: 0, lock: 1,   rowBias: 0.85, camD: -1.5 },
     }, { dropEase: 4, slow: ['camD'] });
-    this.mv = this.moods.v; this.camD = null; this.kg = 0; this.loose = 0; this.lock = 0;
+    this.mv = this.moods.v; this.camD = null; this.kg = 0; this.loose = null; this.lock = 0;
   }
 
   // ------------------------------------------------------------ helpers
@@ -266,7 +266,11 @@ export class RightPlace {
     this.mid = damp(this.mid, d.mid, 0.6, dt);
     const ks = clamp(k * m.stepGate);
     this.kg = clamp(k * m.glowGate);
-    this.loose = m.loose * K.stage(k, 0.02, 0.3); this.lock = m.lock * K.stage(k, 0.02, 0.3);
+    // × k, but with their own slow settle (tau 2 s): the k ramp at a song's start / end is fast, and
+    // loose is a large position offset, so it must still spread / gather over ~6 s, never jump
+    const kl = K.stage(k, 0.02, 0.3);
+    if (this.loose === null) { this.loose = m.loose * kl; this.lock = m.lock * kl; }   // first frame: already there (style switch mid-song)
+    this.loose = damp(this.loose, m.loose * kl, 2, dt); this.lock = damp(this.lock, m.lock * kl, 2, dt);
 
     // -- how many blocks are out: joins and leaves trickle one at a time, never all at once
     const want = Math.round(lerp(m.minBlocks, MAX_BLOCKS, smoothstep(clamp((k * 0.75 + this.energy * 0.4) * m.countGate))));

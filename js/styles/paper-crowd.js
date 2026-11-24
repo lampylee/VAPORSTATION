@@ -312,7 +312,7 @@ export class PaperCrowd {
     // wall sconces warm up front to back
     const n = this.sconces.length;
     this.sconces.forEach((s, i) => {
-      const on = m.sconceIdle + (1 - m.sconceIdle) * K.stage(kh,0.08 + s.order * 0.5, 0.3 + s.order * 0.5);
+      const on = m.sconceIdle + (1 - m.sconceIdle) * K.stage(kh, 0.08 + s.order * 0.5, 0.3 + s.order * 0.5);
       const flick = on * (0.94 + 0.06 * Math.sin(this.time * 7 + i * 2.3));
       this.sconceInst.set(i, s.x, s.y, s.z, 1, 0, 0.8, 0, 1);
       const sz = 0.8 + on * 0.9;

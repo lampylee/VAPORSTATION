@@ -254,7 +254,7 @@ export class Newsprint {
       gather: { stormGate: 1.2,  camGate: 1.1, sway: 1,   flockR: 0.75, flockMore: 1 },
       full:   { stormGate: 1.7,  camGate: 1.7, sway: 0.6, flockR: 1,    flockMore: 0 },
     }, { dropEase: 4, slow: ['camGate'] });
-    this.camG = null;
+    this.camG = null; this.fr = null; this.more = 0;
   }
 
   update(a, k, dt) {
@@ -304,8 +304,11 @@ export class Newsprint {
     // flocks circle the central stacks, high above at idle, lower and quicker as it swells
     // build: more pages gather into the flocks, circling tighter round the central stacks (eased by
     // the mood, × k; the flocks stay at today's height, above the tallest central stack)
-    const more = m.flockMore * K.stage(k, 0.05, 0.5);
-    const flockH = lerp(13, 9, storm), fr = lerp(1, m.flockR, K.stage(k, 0.05, 0.5));
+    // (their × k share has its own slow settle, like the mood itself: a song's start / end ramp is fast)
+    const kf = K.stage(k, 0.05, 0.5), moreT = m.flockMore * kf, frT = lerp(1, m.flockR, kf);
+    if (this.fr === null) { this.more = moreT; this.fr = frT; }
+    this.more = damp(this.more, moreT, 2, dt); this.fr = damp(this.fr, frT, 2, dt);
+    const more = this.more, fr = this.fr, flockH = lerp(13, 9, storm);
     const centre = (g, tt, out, rad) => {
       const ang = tt * 0.25 + g * (TAU / 4);
       out[0] = Math.cos(ang) * rad + Math.sin(tt * 0.13 + g) * 2;
