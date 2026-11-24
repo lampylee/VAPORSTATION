@@ -17,6 +17,7 @@ All work is committed on `main`, **local only: no git remote yet**, nothing push
 | 3: environment library | done: **36 environments** + 3 hidden reference scenes |
 | 4: UI pass, MIDI, tap tempo, show control, Feel setting | done; real MIDI hardware untested |
 | 5: gig hardening | **in progress** (2026-11-22): gig-safety layer, see below |
+| Projector output + operator view | built (2026-11-23), single-screen only tested; see "Landed (2026-11-23): projector output" |
 
 ## Styles on main (`js/styles/index.js`)
 
@@ -64,7 +65,7 @@ Number keys reach 0–9; the rest via N / Shift+N, the dropdown, auto-switch, a 
 1. **Gig-safety layer (Phase 5)**: built (governor, watchdog, offline PWA, kiosk launcher, pre-show check; see the last
    section). Left: try it on the gig laptop. Design: `docs/superpowers/specs/2026-11-22-gig-safety-design.md`.
 2. **Add a GitHub remote and push** (the user has to create the repo; everything lives on one disk until then).
-3. Run the "not verified" checks above on the gig laptop.
+3. Run the "not verified" checks above on the gig laptop, plus the projector ones (see "Landed (2026-11-23): projector output").
 4. **The Conductor** (2026-11-23): built. Intensity follows the song's shape, sections, auto tempo, optional world change on
    drops (off). Left: try it with real songs in a visible window (thresholds were tuned on synthetic songs and the demo track).
    Design + build notes: `docs/superpowers/specs/2026-11-23-conductor-design.md`. Test: `node tools/test-conductor.mjs`.
@@ -204,6 +205,31 @@ errors), governor tiers + the saturation cap with synthetic frame times, every s
 - Pauses auto-switch and the governor while it runs and restores both. `Bench` now takes `{ idle, active, quiet }`.
 - Tested in the pane: full run on the dev laptop (GTX 1660 Ti, 120 Hz: all 39 at 120 fps, report renders, Close works);
   `finish()` with fake results marks the right style heavy and ignores the hidden test scene.
+
+**Landed (2026-11-23): projector output + operator view**
+- Optional second window (`output.html`, W key / Show card / MIDI `output`) with only the picture; laptop shows the operator
+  view. Code: `js/show/output.js` (sink / window), `output-logic.js` (frame guard, health, screen pick; `node tools/test-output.mjs`),
+  `operator.js`, `output-page.js`. Spec + plan: `docs/superpowers/specs/2026-11-23-projector-output-design.md`.
+- `kiosk.bat dual` → `?kiosk&dual` (operator view + "Open projector output", cursor visible; the output mode is saved with the settings, but kiosk sets it
+  from the URL on every launch, so plain `kiosk.bat` stays single), `--disable-popup-blocking`,
+  and `tools/grant-window-management.js` pre-grants window-management in the kiosk profile. Plain `kiosk.bat` unchanged.
+  The projector opens by itself 1.5 s after load (only with `&dual`; skipped if an existing projector reattached, so a
+  reload never reloads it; blocked -> the big button). The operator's one click is on the projector for fullscreen (Chrome
+  refuses it from the opener; `--kiosk` does not make the popup fullscreen). Details in the spec.
+- Self-test has an INFO "Projector" line (screens, window-management permission; never prompts).
+- Either window's rAF drives the frame (guard), reload reconnects automatically, "no input" turns red only after 3 s gone.
+  Single-mode CPU +0.025-0.065 ms/frame vs before, fps unchanged; the operator view with the projector open about +0.085 ms.
+- Final review fixes: attach always syncs the watchdog cover (a reload under it left the projector fogged), the frame guard
+  hands the lead back to the projector after a hitch the laptop covered (also when the laptop runs faster: one
+  skipped projector frame per hitch), operator view above the laptop fog cover,
+  projector cursor hidden only in fullscreen, grant script never overwrites an unreadable Preferences file.
+- Verified (pane + real Chrome, one 1080p display): single mode, ?kiosk&dual operator view, popup opens / is guarded,
+  pre-grant makes the permission state "granted", kiosk.bat command lines (dry run), auto-open on fresh start, reload reattach without a second window, reload while the cover is on (context lost, no
+  restore, watchdog reload: projector reattaches and the fog clears; also cover(false) missed while marked lost),
+  operator view + red "graphics reset" above the laptop fog. Projector hitch, then hand-back: node test only (7 rate pairs x 5 phase offsets) (both windows
+  share one thread, so a projector-only hitch can't be made in Chrome). **Not verified:** true fullscreen
+  and placement on a real second screen, pulling the HDMI cable, real MIDI opening the projector, the input-gone red
+  with a real interface, operator view readability from 2 m, `?selftest` and `?bench` on the gig laptop with dual on.
 
 **Phase 5 remaining:** run the not-verified checks on the gig laptop (kiosk.bat for real, Scarlett unplug / replug, a
 pre-show check there), and add the GitHub remote.

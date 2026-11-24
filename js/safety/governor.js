@@ -76,7 +76,7 @@ export class Governor {
 
   _stepDown(fps) {
     const f = fps.toFixed(0);
-    if (this.tier === 0 && (window.devicePixelRatio || 1) > 1) {
+    if (this.tier === 0 && (this.r.out.dpr || 1) > 1) {   // the current sink's pixel ratio
       this.tier = 1; this.r.params.maxDpr = 1; this.r.resize();
       this._log(`${f} fps: backbuffer capped at 1x`);
     } else if (this.tier <= 1) {

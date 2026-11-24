@@ -7,7 +7,7 @@ const CACHE = 'vaporstation-v1';
 const TIMEOUT = 2500;   // ms before a hanging network request gives way to the cache
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(['./', 'index.html', 'css/style.css', 'js/main.js'])).catch(() => {}));
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(['./', 'index.html', 'css/style.css', 'js/main.js', 'output.html', 'js/show/output-page.js'])).catch(() => {}));
   self.skipWaiting();
 });
 

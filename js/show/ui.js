@@ -34,7 +34,7 @@ function check(s, key, label, onSet, title = '') {
 const HOLD_STEPS = [0.2, 0.4, 0.6, 0.8, 1];
 
 export class ShowUI {
-  /** h: onPad(id) (hold/freeze/blackout/flash/tempoLock), onTap(), onTempo(cmd: 'clear' | +1 | -1), onSetting() */
+  /** h: onPad(id) (hold/freeze/blackout/flash/tempoLock), onTap(), onTempo(cmd: 'clear' | +1 | -1), onSetting(), onOutput() */
   constructor(show, s, h) {
     this.show = show; this.s = s; this.h = h;
     const pad = (id, label, ic, title) => {
@@ -63,6 +63,10 @@ export class ShowUI {
 
     this.tapBtn = el('button', { className: 'tap', title: 'Tap along to the beat (T). Shift+T clears.', onclick: () => { h.onTap(); this.tapBtn.blur(); } },
       this.tapDot = el('i', { className: 'dot' }), this.bpm = el('span', { textContent: 'Tap tempo' }), el('span', { className: 'hint-key', textContent: 'tap T' }));
+    // projector window: off / on / lost (W opens or reopens it; this button also turns it off)
+    this.outputBtn = el('button', { className: 'output-btn', title: 'Show the picture in its own window for the projector (W). Click again to turn it off.',
+      onclick: () => { h.onOutput?.(); this.outputBtn.blur(); } }, el('span', { textContent: 'Projector output' }), this.outputSt = el('span', { className: 'st' }));
+    this.setOutput('none');
     this.lockBtn = el('button', { className: 'lock', title: 'Lock the environments’ beats to the tapped tempo (L)', onclick: () => { h.onPad('tempoLock'); this.lockBtn.blur(); } });
 
     this.rows = {
@@ -77,6 +81,9 @@ export class ShowUI {
       el('div', { className: 'seg-row', title: 'Reactivity (R)' }, el('span', { textContent: 'Feel' }), el('div', { className: 'seg seg3' }, ...this.feelSegs)),
       el('div', { className: 'seg-row' }, el('span', { textContent: 'Hold at' }), el('div', { className: 'seg' }, ...this.segs)),
       el('div', { className: 'tempo' }, this.tapBtn, this.lockBtn),
+      this.outputBtn,
+      this.healthLine = el('div', { className: 'health-line', title: 'Health: input signal, graphics, projector, detail level, skipped environments, audio' },
+        el('i'), this.healthText = el('span', { textContent: 'OK' })),
       this.rows.conductor, this.rows.dropSwitch,
       fold('Fine-tune: flash, fade, tempo',
         this.rows.strobeSafe, this.rows.flashAmount, this.rows.blackoutTime,
@@ -88,6 +95,20 @@ export class ShowUI {
   }
 
   refresh() { for (const [k, r] of Object.entries(this.rows)) r.set(this.s[k]); this.update(); }
+
+  /** Health light (the operator view's, for when the panel is up). hl: { level: 'ok' | 'amber' | 'red', text } */
+  setHealth(hl) {
+    if (this.healthLine.dataset.level !== hl.level) this.healthLine.dataset.level = hl.level;
+    if (this.healthText.textContent !== hl.text) this.healthText.textContent = hl.text;
+  }
+
+  /** Projector output state: 'none' | 'open' | 'lost'. */
+  setOutput(state) {
+    const txt = state === 'open' ? 'on' : state === 'lost' ? 'lost · reopen' : 'off';
+    this.outputSt.textContent = txt;
+    this.outputBtn.classList.toggle('on', state === 'open');
+    this.outputBtn.classList.toggle('lost', state === 'lost');
+  }
 
   /** Per-frame (cheap): pad states, hold step, tempo blink. */
   update() {

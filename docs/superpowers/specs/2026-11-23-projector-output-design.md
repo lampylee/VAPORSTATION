@@ -178,5 +178,43 @@ Shown instead of the picture on the laptop. Readable from ~2 m: large type, few 
 
 - Module layout (suggest `js/show/output.js` for the sink / window logic, `js/show/operator.js` for the view).
 - Exact operator-view proportions and type sizes within the sketch.
-- The fullscreen and kiosk spikes named above.
+- ~~The fullscreen and kiosk spikes named above.~~ Done, see below.
 - How the fog cover during context loss reaches the current sink.
+
+**Decided (Task 4, 2026-11-23):**
+- **Fullscreen spike** (Chrome 157, Windows, one display, driven over the DevTools protocol): (a) calling
+  `win.document.documentElement.requestFullscreen()` on the projector window from the opener's click handler is refused
+  (`TypeError: Permissions check failed`; the opener had transient activation, the popup did not). (b) a click in the
+  projector window goes fullscreen. **Kept (b):** the window shows "Click to go fullscreen" until it is fullscreen; any
+  click or key in it requests fullscreen (and keys are still forwarded). Not tried: Chrome's fullscreen-popup /
+  fullscreen-companion-window paths that need the `window-management` permission already granted (revisit with the
+  kiosk spike in Task 6).
+- **Placement without a blocked popup:** when the `window-management` permission is not yet granted, the window opens at
+  once on this screen and `getScreenDetails()` is asked afterwards (a permission prompt can outlast the click's
+  activation); if it is granted the window is moved / resized onto the other screen. Once granted, the screen is picked
+  first and the window opens there directly.
+- **Fog cover:** the watchdog's cover is mirrored via `output.cover(on, fog)`; the projector page also covers itself
+  with the last fog colour sent with each frame. When the opener unloads (reload) it tells the projector to cover
+  immediately: a same-origin popup shares the opener's thread, so its own 0.5 s stall timer can't run while the
+  reloading page loads (measured ~0.8 s blocked).
+- **W / MIDI `output` only open or reopen; the Show card button also turns the projector off** (back to single mode).
+  A stray pedal press can't close the projector mid-show.
+- **Kiosk spike (Task 6, Chrome 157, Windows, one 1920x1080 display, real Chrome driven over CDP, throwaway profile):**
+  (a) with `--kiosk` + `--disable-popup-blocking`, `window.open(..., 'popup,...')` from the page opens a normal window
+  (bounds 616x473, `windowState: normal`), **not** fullscreen; `--kiosk` does not carry over to popups. (b) Pre-granting
+  works: a profile `Preferences` entry `profile.content_settings.exceptions.window_placement["http://localhost:PORT,*"] = {setting: 1}`
+  (written before launch) makes `permissions.query({name:'window-management'})` return `granted`. The key must be
+  `window_placement` (tried alone, enough). No flag or policy needed. `kiosk.bat dual` writes it for the kiosk profile
+  through `tools/grant-window-management.js` (needs node, which the launcher already uses; if Chrome is already running
+  with that profile it overwrites the file and the one-time prompt appears instead). (c) `--disable-popup-blocking` kept
+  (this profile only) so W / MIDI reopen works with no click. **Auto-open:** only with `?kiosk&dual`, 1.5 s after load, `output.open()`
+  is called once if the projector has not reattached by then (the projector page's 250 ms poll reattaches an existing
+  window after a reload; `window.open` with the existing name before that wait would reload it). Blocked popup -> the
+  "Open projector output" button as before. **Result:** double-click `kiosk.bat dual` → the projector opens by itself →
+  click it once for fullscreen = one click, meeting the goal. Checked in real Chrome with the dual flags: fresh start opens
+  it; reloading the laptop page keeps 2 pages, same `output.html` `timeOrigin` (not reloaded), state `open`; without
+  `--disable-popup-blocking` nothing opens and the button state stays `none`.
+  **Not verified:** that the pre-granted permission puts the window on the second screen and that its fullscreen click
+  lands there (one display only).
+- **Screen removed** (`screenschange`): the projector window is also closed, so Windows doesn't drop it onto the laptop
+  screen over the picture.
