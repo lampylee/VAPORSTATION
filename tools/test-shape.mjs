@@ -69,6 +69,19 @@ const near = (a, b, e) => Math.abs(a - b) <= e;
   check('phrase ticks every 16 s (bpm 0)', o.phrase - q0 === 2, 'got ' + (o.phrase - q0));
 }
 
+// phrase counter restarts when the section changes
+{
+  const sh = new SongShape(); const p0 = sh.update({ section: 'groove', bpm: 0, bar: 0 }, DT).phrase;
+  let o;
+  for (let i = 0; i < 15 * 60; i++) o = sh.update({ section: 'groove', bpm: 0, bar: 0 }, DT);
+  for (let i = 0; i < 90; i++) o = sh.update({ section: 'build', bpm: 0, bar: 0 }, DT);   // 16.5 s total, 1.5 s into build
+  check('phrase does not tick at 16 s total after a section change', o.phrase === p0, 'phrase +' + (o.phrase - p0));
+  for (let i = 0; i < 14 * 60; i++) o = sh.update({ section: 'build', bpm: 0, bar: 0 }, DT);   // 15.5 s after the switch
+  check('phrase has not ticked just before 16 s after the switch', o.phrase === p0);
+  for (let i = 0; i < 60; i++) o = sh.update({ section: 'build', bpm: 0, bar: 0 }, DT);       // 16.5 s after the switch
+  check('phrase ticks 16 s after the switch', o.phrase === p0 + 1, 'phrase +' + (o.phrase - p0));
+}
+
 // THUMB_AUDIO shaped input
 {
   let o, threw = false;
@@ -90,7 +103,7 @@ const near = (a, b, e) => Math.abs(a - b) <= e;
   for (let i = 0; i < 480; i++) {
     const a = { ...base };
     if (i >= 240) { a.autoBpm = 120; a.autoPhase = ph; a.autoBar = 0; ph = (ph + DT * 2) % 1; }
-    a.beat = i % 30 === 0;
+    a.beat = false;   // beatPulse stays 0: only the cos <-> pulse source switch is measured
     const out = sc.process(a, 1, true, DT, s).audio;
     if (i > 0) worst = Math.max(worst, Math.abs(out.groove - prev));
     prev = out.groove;
