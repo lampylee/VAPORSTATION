@@ -295,7 +295,7 @@ export class GraveyardHill {
     this.mistRoll = 0;
 
     // ---- camera: slow orbit around the chapel, radius breathing in and out
-    this.cam = new K.OrbitRig({ center: [0, crest + 2.5, 0], radius: ORBIT, height: 0, bob: 0, pushIn: 2.5, idleSpeed: 0.035, activeSpeed: 0.1, bassBoost: 0.05, fov: 62, nudge: 0.3, rollKick: 0.04, far: 200 });
+    this.cam = new K.OrbitRig({ center: [0, crest + 2.5, 0], radius: ORBIT, height: 0, bob: 0, pushIn: 2.5, idleSpeed: 0.035, activeSpeed: 0.1, bassBoost: 0.05, fov: 62, nudge: 0.3, rollKick: 0.04, far: 200, shapeAmount: 0.5 });   // half: full close / wide framing would cross the inner and outer tree rings
     this.cam.angle = 0.4;
 
     this.flash = new K.Envelope(0.12);

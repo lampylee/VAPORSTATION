@@ -1,8 +1,11 @@
-// Camera rigs. Every rig moves slowly when idle, faster with intensity + bass,
-// and gets beat reactions for free: a vertical nudge, a roll kick and an FOV punch
-// (all scaled by K.feel.motion, so they nearly vanish at Gentle reactivity).
-// With the Conductor, a build-up slowly narrows the FOV (tension) and the drop releases it
-// with a bigger punch.
+// Camera rigs. Every rig moves slowly when idle, faster with intensity + the song's energy
+// (eased over ~1.5 s, times the section's audio.shape.pace), and gets for free: beat reactions
+// (a vertical nudge, a roll kick and an FOV punch, × K.feel.beatMotion, so none at Gentle),
+// a small continuous sway phrased on the bar (options sway / swayLift, × intensity), and the
+// song shape: `close` narrows / widens the FOV (±10 %) and, per rig, moves the eye along a safe
+// axis; `reframe` (-1..1) eases to a new framing on every phrase. shapeAmount (default 1,
+// 0 = off) scales both, for styles where they would clip. With the Conductor, a build-up slowly
+// narrows the FOV (tension) and the drop releases it with a soft punch (× feel.motion).
 //
 //   const cam = new DollyRig(spline, { idleSpeed: 1, activeSpeed: 4 });
 //   update:  cam.update(audio, k, dt)
@@ -33,41 +36,69 @@ export class Spline {
 }
 
 export class CameraRig {
-  constructor({ fov = 60, near = 0.1, far = 200, fovPunch = 5, nudge = 0.35, rollKick = 0.06, idleSpeed = 1, activeSpeed = 3, bassBoost = 2 } = {}) {
-    Object.assign(this, { fov, near, far, fovPunch, nudgeAmt: nudge, rollKick, idleSpeed, activeSpeed, bassBoost });
+  constructor({ fov = 60, near = 0.1, far = 200, fovPunch = 5, nudge = 0.35, rollKick = 0.06, idleSpeed = 1, activeSpeed = 3, bassBoost = 2, sway = 0.012, swayLift = 0.04, shapeAmount = 1 } = {}) {
+    // `sway` is stored as swayRoll (DriftRig has its own lateral `sway`)
+    Object.assign(this, { fov, near, far, fovPunch, nudgeAmt: nudge, rollKick, idleSpeed, activeSpeed, bassBoost, swayRoll: sway, swayLift, shapeAmount });
     this.eye = [0, 2, 5];
     this.target = [0, 0, 0];
     this.roll = 0;
     this.speed = idleSpeed;
     this.time = 0;
+    this.k = 0;
     this.nudge = new Spring(6);
     this.rollSpring = new Spring(5);
-    this.punch = new Envelope(0.18);
+    this.punch = new Envelope(0.18);   // beat zoom (× feel.beatMotion: none at Gentle)
+    this.dropT = 0; this.dropV = 0; this.dropHold = 0;   // drop zoom: eases in (~0.3 s), then decays
     this.tension = 0;   // 0..1, eased audio.build (narrows the FOV)
+    // song shape (audio.shape), eased once more here so the eye never changes direction abruptly
+    this.close = 0; this._close = 0;      // -1 wide … +1 close framing (× shapeAmount)
+    this.reframe = 0; this._reframe = 0; this._reframeT = 0; this._phrase = 0;   // -1..1, new framing each phrase
+    this.swayV = 0; this.swayY = 0;       // bar sway (roll / lift): continuous, never a kick
   }
 
   /** Common reactions; subclasses call super.update() then position the camera. */
   update(audio, k, dt) {
     this.time += dt;
-    this.speed = damp(this.speed, lerp(this.idleSpeed, this.activeSpeed, k) + audio.bass * k * this.bassBoost, 0.35, dt);
-    if (audio.beat && k > 0.05) {
-      this.nudge.kick(this.nudgeAmt * 6 * k);
-      this.rollSpring.kick((Math.random() < 0.5 ? -1 : 1) * this.rollKick * 6 * k);
-      this.punch.trigger(k * feel.motion);   // a zoom is motion too: near-still at Gentle reactivity
+    this.k = k;
+    const sh = audio.shape, amt = this.shapeAmount;
+    // travel follows the song's energy (not each kick) and the section's pace, slowly
+    const energy = audio.energy ?? audio.level;
+    this.speed = damp(this.speed, lerp(this.idleSpeed, this.activeSpeed, k) * (sh?.pace ?? 1) + energy * k * this.bassBoost, 1.5, dt);
+    // close / reframe: two cascaded eases (tau 2 s each) so a section or phrase change starts and ends softly
+    this._close = damp(this._close, (sh?.close ?? 0) * amt, 2, dt);
+    this.close = damp(this.close, this._close, 2, dt);
+    const ph = sh?.phrase ?? 0;
+    if (ph !== this._phrase) { this._phrase = ph; this._reframeT = ((ph * 0.618) % 1) * 2 - 1; }
+    this._reframe = damp(this._reframe, this._reframeT * amt, 2, dt);
+    this.reframe = damp(this.reframe, this._reframe, 2, dt);
+    // beat reactions × feel.beatMotion: none at Gentle, so the camera never lurches on beats
+    const bm = feel.beatMotion;
+    if (audio.beat && k > 0.05 && bm > 0) {
+      this.nudge.kick(this.nudgeAmt * 6 * k * bm);
+      this.rollSpring.kick((Math.random() < 0.5 ? -1 : 1) * this.rollKick * 6 * k * bm);
+      this.punch.trigger(k * feel.motion * bm);   // a zoom is motion too
     }
     if (audio.drop && k > 0.05) {
-      this.punch.trigger(1.6 * k * feel.motion);
-      this.nudge.kick(this.nudgeAmt * 9 * k * feel.motion);
+      this.dropT = Math.max(this.dropT, 0.6 * 1.6 * k * feel.motion); this.dropHold = 0.3;
+      this.nudge.kick(this.nudgeAmt * 9 * k * feel.motion * 0.6);
     }
+    if (this.dropHold > 0) this.dropHold -= dt;
+    else this.dropT *= Math.exp(-dt / (0.18 * feel.decay));
+    this.dropV = this.dropV < this.dropT ? damp(this.dropV, this.dropT, 0.3, dt) : this.dropT;
     const tt = (audio.build ?? 0) * k * (0.35 + 0.65 * feel.motion);
     this.tension = damp(this.tension, tt, tt > this.tension ? 1.2 : 0.35, dt);
+    // bar sway: phrased on the 4-beat bar when a tempo is known, else a slow free-running sway
+    const phase = audio.bpm > 0 ? ((audio.bar ?? 0) + (audio.beatPhase ?? 0)) / 4 : this.time / 8;
+    this.swayV = damp(this.swayV, Math.sin(2 * Math.PI * phase), 0.6, dt);
+    this.swayY = damp(this.swayY, Math.cos(2 * Math.PI * phase), 0.6, dt);
     this.nudge.update(dt); this.rollSpring.update(dt); this.punch.update(dt);
   }
 
   apply(r) {
-    const e = this.eye;
-    _eye[0] = e[0]; _eye[1] = e[1] + this.nudge.x; _eye[2] = e[2];
-    r.setCamera(_eye, this.target, { fov: this.fov * (1 - 0.07 * this.tension) + this.punch.v * this.fovPunch, near: this.near, far: this.far, roll: this.roll + this.rollSpring.x });
+    const e = this.eye, k = this.k;
+    _eye[0] = e[0]; _eye[1] = e[1] + this.nudge.x + this.swayLift * this.swayY * k; _eye[2] = e[2];
+    const fov = this.fov * (1 - 0.07 * this.tension) * (1 - 0.1 * this.close) + (this.punch.v + this.dropV) * this.fovPunch;
+    r.setCamera(_eye, this.target, { fov, near: this.near, far: this.far, roll: this.roll + this.rollSpring.x + this.swayRoll * this.swayV * k });
   }
 }
 const _eye = [0, 0, 0];
@@ -85,7 +116,8 @@ export class DollyRig extends CameraRig {
     const L = this.path.length;
     this.path.at(this.s / L, this.eye);
     this.path.at((this.s + this.lookAhead) / L, this.target);
-    this.eye[1] += this.heightOffset; this.target[1] += this.heightOffset * 0.8;
+    const h = this.heightOffset - 0.5 * this.close;   // close framing: a little lower (the ground clamp below still applies)
+    this.eye[1] += h; this.target[1] += h * 0.8;
     if (this.groundFn) {
       const g = this.groundFn(this.eye[0], this.eye[2]) + this.minClearance;
       if (this.eye[1] < g) this.eye[1] = g;
@@ -93,7 +125,7 @@ export class DollyRig extends CameraRig {
   }
 }
 
-/** Circles a point; radius pulls in with bass. */
+/** Circles a point; radius pulls in with the song's energy and close framing; each phrase eases the angle to a new view. */
 export class OrbitRig extends CameraRig {
   constructor({ center = [0, 0, 0], radius = 8, height = 2, bob = 0.6, pushIn = 1, ...o } = {}) {
     super({ idleSpeed: 0.08, activeSpeed: 0.25, bassBoost: 0.3, ...o });
@@ -103,11 +135,11 @@ export class OrbitRig extends CameraRig {
   update(audio, k, dt) {
     super.update(audio, k, dt);
     this.angle += this.speed * dt;
-    this.r = damp(this.r, this.radius - audio.bass * k * this.pushIn, 0.2, dt);
-    const c = this.center;
-    this.eye[0] = c[0] + Math.sin(this.angle) * this.r;
+    this.r = damp(this.r, this.radius * (1 - 0.25 * this.close) - (audio.energy ?? audio.level) * k * this.pushIn, 1.5, dt);
+    const c = this.center, a = this.angle + 0.6 * this.reframe;
+    this.eye[0] = c[0] + Math.sin(a) * this.r;
     this.eye[1] = c[1] + this.height + Math.sin(this.time * 0.17) * this.bob;
-    this.eye[2] = c[2] + Math.cos(this.angle) * this.r;
+    this.eye[2] = c[2] + Math.cos(a) * this.r;
     this.target[0] = c[0]; this.target[1] = c[1]; this.target[2] = c[2];
   }
 }
@@ -163,14 +195,17 @@ export class OrbitFocusRig extends CameraRig {
   constructor({ center = [0, 3, 0], rx = 30, rz = 15, focus = [0, 0, 0], lookMix = 0.7, lookDist = 12, lookDrop = 1, bob = 0.25, rollSway = 0.02, start = 0, ...o } = {}) {
     super({ nudge: 0.07, rollKick: 0.01, fovPunch: 1.2, idleSpeed: 1, activeSpeed: 2.3, bassBoost: 0.3, ...o });
     Object.assign(this, { center, rx, rz, focus, lookMix, lookDist, lookDrop, bob, rollSway });
-    this.th = start; this._p = [0, 0, 0];
+    this.th = start; this._p = [0, 0, 0]; this._sc = 1;
   }
-  pos(th, out) { const c = this.center; out[0] = c[0] + Math.sin(th) * this.rx; out[1] = c[1]; out[2] = c[2] - Math.cos(th) * this.rz; return out; }
+  /** Point on the ellipse at angle th (radii × the current close-framing scale). */
+  pos(th, out) { const c = this.center, sc = this._sc; out[0] = c[0] + Math.sin(th) * this.rx * sc; out[1] = c[1]; out[2] = c[2] - Math.cos(th) * this.rz * sc; return out; }
   update(audio, k, dt) {
     super.update(audio, k, dt);
     const local = Math.hypot(this.rx * Math.cos(this.th), this.rz * Math.sin(this.th));   // keep speed in world units
     this.th += (this.speed * dt) / Math.max(1, local);
-    const e = this.pos(this.th, this.eye), p = this.pos(this.th + 0.1, this._p);
+    this._sc = 1 - 0.2 * this.close;
+    const th = this.th + 0.5 * this.reframe;
+    const e = this.pos(th, this.eye), p = this.pos(th + 0.1, this._p);
     e[1] = this.center[1] + (Math.sin(this.time * 0.37) * 0.65 + Math.sin(this.time * 0.23 + 1) * 0.35) * this.bob;
     let ax = p[0] - e[0], az = p[2] - e[2]; const al = Math.hypot(ax, az) || 1; ax /= al; az /= al;
     const F = typeof this.focus === 'function' ? this.focus(e) : this.focus;
@@ -191,7 +226,8 @@ export class OrbitFocusRig extends CameraRig {
  */
 export class DriftRig extends CameraRig {
   constructor({ origin = [0, 1.7, 0], yaw = 0, reach = 20, sway = 1.1, glance = 0.16, lookUp = 0, lookDist = 20, ...o } = {}) {
-    super({ nudge: 0.05, rollKick: 0.005, fovPunch: 0.6, idleSpeed: 0.02, activeSpeed: 0.06, bassBoost: 0.02, ...o });
+    // `sway` here is the lateral sway (units); the base bar-sway roll is set smaller (rig.swayRoll)
+    super({ nudge: 0.05, rollKick: 0.005, fovPunch: 0.6, idleSpeed: 0.02, activeSpeed: 0.06, bassBoost: 0.02, sway: 0.006, swayLift: 0.02, ...o });
     Object.assign(this, { origin, yaw, reach, sway, glance, lookUp, lookDist });
     this.phase = 0;
   }
@@ -199,10 +235,10 @@ export class DriftRig extends CameraRig {
     super.update(audio, k, dt);
     this.phase += this.speed * dt;
     const p = this.phase, o = this.origin, e = this.eye, t = this.target;
-    const fwd = this.reach * 0.5 * (1 - Math.cos(p)), lat = Math.sin(p * 1.7) * this.sway;
+    const fwd = this.reach * (1 - 0.3 * this.close) * 0.5 * (1 - Math.cos(p)), lat = Math.sin(p * 1.7) * this.sway;
     const sy = Math.sin(this.yaw), cy = Math.cos(this.yaw);
     e[0] = o[0] + sy * fwd + cy * lat; e[1] = o[1]; e[2] = o[2] - cy * fwd + sy * lat;
-    const yaw = this.yaw + Math.sin(this.time * 0.031) * this.glance + Math.sin(p * 0.9) * this.glance * 0.5;
+    const yaw = this.yaw + Math.sin(this.time * 0.031) * this.glance + Math.sin(p * 0.9) * this.glance * 0.5 + 0.2 * this.reframe;
     t[0] = e[0] + Math.sin(yaw) * this.lookDist; t[1] = e[1] + this.lookUp; t[2] = e[2] - Math.cos(yaw) * this.lookDist;
   }
 }
@@ -219,7 +255,7 @@ export class DriftRig extends CameraRig {
 export const GRID_DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]];
 export class GridWanderRig extends CameraRig {
   constructor(passable, { cell = 6, eyeHeight = 1.6, start = [0, 0], dir = 0, straightCalm = 2.8, straightActive = 0.9, glance = 0.22, bob = 0.022, lookAhead = 3.2, ...o } = {}) {
-    super({ nudge: 0.04, rollKick: 0.004, fovPunch: 0.8, idleSpeed: 0.9, activeSpeed: 2.2, bassBoost: 0.3, ...o });
+    super({ nudge: 0.04, rollKick: 0.004, fovPunch: 0.8, idleSpeed: 0.9, activeSpeed: 2.2, bassBoost: 0.3, sway: 0.006, swayLift: 0.02, ...o });
     Object.assign(this, { passable, cell, eyeHeight, straightCalm, straightActive, glance, bobAmt: bob, lookAhead });
     this.pieces = []; this.s = 0; this.walk = 0; this.k = 0;
     this.look = [GRID_DIRS[dir][0], GRID_DIRS[dir][1]];

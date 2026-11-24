@@ -132,6 +132,18 @@ Number keys reach 0–9; the rest via N / Shift+N, the dropdown, auto-switch, a 
 - Before/after pixel diffs: render both versions with a seeded `Math.random` and identical audio, copy each frame with
   `r.snapshot(ctx)` right after `present()`, and compare `getImageData`. A control run (same class twice) must give 0%.
 - `viz.selectPalette(id)` **persists** to localStorage. Reset with `viz.selectPalette('', 0)` afterwards.
+- **Camera smoothness** (`js/dev/motion-check.js`, dev only): steps a style by hand with synthetic audio (a beat every 0.5 s,
+  scripted Conductor sections) fed through a real `ShowControl`, and returns the largest eye acceleration and FOV step:
+  ```js
+  const { motionCheck, motionCheckRig } = await import('/js/dev/motion-check.js');
+  await motionCheck(viz, { index: 6, frames: 1440, reactivity: 0,   // 0 Gentle, 1 Punchy
+    sections: [['groove', 6], ['build', 6], ['drop', 6], ['breakdown', 6]], bpmToggleAt: 10 });
+  // → { maxAccel, maxFovStep, frames, maxAccelAt, maxFovStepAt }
+  ```
+  Gentle target: `maxAccel` ≤ 0.01 units/frame², `maxFovStep` ≤ 0.3°. Extra options: `k`, `bpm`, `shape: { close: 1 }`
+  (forces `audio.shape` fields, e.g. to check framing extremes for clipping; then `renderer.present()` and screenshot),
+  `present`, `warmup`. `motionCheckRig(rig, opts)` measures a bare kit rig no style uses yet. Seed `Math.random` for
+  repeatable numbers. `maxAccelAt` is the frame of the worst spike (after the 30 warm-up frames).
 
 ## Building a wave of environments
 

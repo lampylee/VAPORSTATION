@@ -229,7 +229,7 @@ export class Newsprint {
     this.glide = new K.School(r, { kind: 'bird', groups: 3, perGroup: 6, size: 1.1, spread: [1.5, 4], lift: 1, texture: fold });
     this.flock = new K.School(r, { kind: 'bird', groups: 4, perGroup: 10, size: 1.0, spread: [1.2, 3.6], lift: 1.2, texture: fold });
 
-    this.cam = new K.OrbitRig({ center: CENTER.slice(), radius: ORBIT, height: 3, bob: 0.7, pushIn: 0, idleSpeed: 0.025, activeSpeed: 0.09, bassBoost: 0, fov: 62, fovPunch: 1.5, nudge: 0.1, rollKick: 0.015 });
+    this.cam = new K.OrbitRig({ center: CENTER.slice(), radius: ORBIT, height: 3, bob: 0.7, pushIn: 0, idleSpeed: 0.025, activeSpeed: 0.09, bassBoost: 0, fov: 62, fovPunch: 1.5, nudge: 0.1, rollKick: 0.015, shapeAmount: 0.5 });   // half: close framing would pull the orbit into the inner stacks
     this.cam.angle = 0.6;
     this.towerPush = new K.Spring(1.6);   // beat gusts lean every tower, then they settle
     this.eS = 0; this.swayAmt = 0; this.windA = 0.4; this.windTo = 0.4;
