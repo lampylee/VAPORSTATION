@@ -2,6 +2,7 @@
 //   import * as K from '../kit/index.js';
 export * from './noise.js';
 export * from './swell.js';
+export * from './moods.js';
 export * from './camera.js';
 export * from './sky.js';
 export * from './terrain.js';

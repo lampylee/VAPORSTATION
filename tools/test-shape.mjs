@@ -3,6 +3,7 @@
 import { SongShape, SHAPE_TABLE } from '../js/show/shape.js';
 import { ShowControl } from '../js/show/control.js';
 import { feel } from '../js/kit/swell.js';
+import { Moods } from '../js/kit/moods.js';
 import { DEFAULTS } from '../js/settings.js';
 
 const DT = 1 / 60;
@@ -117,6 +118,31 @@ for (const [r, want] of [[0, 0], [0.5, 0.4], [1, 1]]) {
   let out;
   for (let i = 0; i < 300; i++) out = sc.process({ level: 0.1, bass: 0.1, mid: 0.1, high: 0.1, beat: false }, 1, true, DT, s).audio;
   check(`beatMotion at reactivity ${r}`, near(out.beatMotion, want, 0.02) && feel.beatMotion === out.beatMotion, `got ${out.beatMotion} feel ${feel.beatMotion}`);
+}
+
+// ---- K.Moods ----
+{
+  const S = { still: { a: 0, x: 0 }, base: { a: 1, x: 10 }, gather: { a: 2, x: 20 }, full: { a: 5, x: 50 } };
+  { const m = new Moods(S); m.update({ section: 'drop' }, DT);
+    check('moods: first update snaps', m.v.a === 5 && m.v.x === 50 && m.mood === 'full', JSON.stringify(m.v)); }
+  { const m = new Moods({ base: { a: 1, x: 10 }, still: { a: 0 } });
+    m.update({ section: 'intro' }, DT);
+    check('moods: missing key falls back to base', m.v.a === 0 && m.v.x === 10, JSON.stringify(m.v));
+    const n = new Moods({ base: { a: 1, x: 10 } }); n.update({ section: '' }, DT);
+    check('moods: empty section targets base', n.mood === 'base' && n.v.a === 1); }
+  { const m = new Moods(S, { map: { breakdown: 'base' } }); m.update({ section: 'breakdown' }, DT);
+    check('moods: map override', m.mood === 'base' && m.v.a === 1); }
+  { const m = new Moods(S, { slow: ['x'] });
+    for (let i = 0; i < 600; i++) m.update({ section: 'groove' }, DT);
+    for (let i = 0; i < 90; i++) m.update({ section: 'drop' }, DT);
+    const fa = (m.v.a - 1) / 4, fx = (m.v.x - 10) / 40;
+    check('moods: drop ease fast, slow keys slow', fa >= 0.95 && fx <= 0.6, `a ${fa.toFixed(2)} x ${fx.toFixed(2)}`); }
+  { const m = new Moods(S); let ok = true;
+    for (let i = 0; i < 3600; i++) {
+      m.update({ section: Math.floor(i * DT / 4) % 2 ? 'build' : 'groove' }, DT);
+      for (const k of ['a', 'x']) if (m.v[k] < S.base[k] - 1e-9 || m.v[k] > S.gather[k] + 1e-9) ok = false;
+    }
+    check('moods: flicker stays within base..gather', ok); }
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
