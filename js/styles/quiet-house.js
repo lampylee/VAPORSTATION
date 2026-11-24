@@ -11,6 +11,9 @@
 // toward secondary/accent shades, the composite pass dithers it).
 // Beat: one small glint per beat at most (a fence post, a window corner, a star),
 // a glockenspiel twinkle that eases in and rings out. Idle: the odd star twinkles.
+// Song sections (K.Moods, Conductor on): intro / breakdown / outro pull back to one lit window with
+// the camera closest to the house; a build lets the green creep into the fog and wakes more windows;
+// the drop lights every window and the camera eases back to show the street. Conductor off = base.
 // Light (Kit v7): the street lamp and the lit ground-floor windows are point lights (K.LightSet);
 // the lawn, path, pavement and road near the house are subdivided so their light pools read.
 import { mat4, lerp, clamp, damp } from '../gfx/math.js';
@@ -253,6 +256,20 @@ export class QuietHouse {
     this.m = mat4.create(); this.mLawn = mat4.create();
     this.col = { fog: [0, 0, 0], wrong: [0, 0, 0], tmp: [0, 0, 0], zen: [0, 0, 0], tint: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], glass: [1, 1, 1], halo: [0, 0, 0], pool: [0, 0, 0], tw: [1, 1, 1], lamp: [0, 0, 0], win: [0, 0, 0], focus: [0, 2, 4] };
     this.lights = new K.LightSet({ reach: 12 });
+    // window order for the drop's "every window lit" (one by one as allWin rises)
+    this.win.forEach((w, i) => { w.rank = K.rand2(i, 9, 23) * 0.8; });
+
+    // song sections: gates multiply the k fed into today's stage() curves (clamped 0..1);
+    // camDolly (+ = toward the house along the view line) and camLift are camera positions (slow, eased twice)
+    this.moods = new K.Moods({
+      still:  { winGate: 0.2,  greenGate: 0.4, lampGate: 0.5, allWin: 0, camDolly: 3,  camLift: -0.15 },
+      base:   { winGate: 1,    greenGate: 1,   lampGate: 1,   allWin: 0, camDolly: 0,  camLift: 0 },
+      gather: { winGate: 1.35, greenGate: 1.6, lampGate: 1.2, allWin: 0, camDolly: -1, camLift: 0.15 },
+      full:   { winGate: 1.6,  greenGate: 1.4, lampGate: 1.6, allWin: 1, camDolly: -5, camLift: 0.7 },
+    }, { dropEase: 4, slow: ['camDolly', 'camLift'] });
+    this.camD = null; this.camL = 0;
+    const dx = 0 - CAM[0], dz = 0.5 - CAM[2], dl = Math.hypot(dx, dz);
+    this.camDir = [dx / dl, dz / dl];   // toward the house along the view line (the yaw stays the same)
   }
 
   _twinkle(spot, amp) {
@@ -263,23 +280,30 @@ export class QuietHouse {
 
   update(a, k, dt) {
     this.a = a; this.k = k; this.time += dt; this.dt = dt;
+    const m = this.moods.update(a, dt);
     const d = K.drive(a, k);
     const b = this.breath.update(a, dt);
+    // camera: along the view line, eased a second time so a section change starts softly
+    if (this.camD === null) { this.camD = m.camDolly; this.camL = m.camLift; }
+    this.camD = damp(this.camD, m.camDolly, 2, dt); this.camL = damp(this.camL, m.camLift, 2, dt);
+    const cp = this.cam.position;
+    cp[0] = CAM[0] + this.camDir[0] * this.camD; cp[1] = CAM[1] + this.camL; cp[2] = CAM[2] + this.camDir[1] * this.camD;
     this.cam.update(a, k, dt);
     this.cam.eye[1] += b * 0.06;                         // the faintest breathing
 
     // big, slow things follow the song's energy, never the kick drum
     this.energy = damp(this.energy, a.energy ?? a.level ?? 0, 2.5, dt);
-    this.green = damp(this.green, K.stage(k, 0.15, 0.95) * (0.6 + 0.4 * this.energy), 3, dt);
-    this.lampLevel = damp(this.lampLevel, K.stage(k, 0.35, 0.65), 1.5, dt);
+    this.green = damp(this.green, K.stage(clamp(k * m.greenGate), 0.15, 0.95) * (0.6 + 0.4 * this.energy), 3, dt);
+    this.lampLevel = damp(this.lampLevel, K.stage(clamp(k * m.lampGate), 0.35, 0.65), 1.5, dt);
     // foliage sway: the mid band eased (0.5 s) unless the Feel allows beat-sized movement
     this.midS = damp(this.midS, d.mid, 0.5, dt);
     this.swayMid = lerp(this.midS, d.mid, d.beatMotion);
     this.bm = d.beatMotion;
 
-    // windows: one is always on; the rest come on one by one with the swell
+    // windows: one is always on; the rest come on one by one with the swell (in the drop, all of them)
+    const kw = clamp(k * m.winGate), kAll = K.stage(k, 0.05, 0.4);
     for (const w of this.win) {
-      const target = Math.max(w.idle ? 0.8 : 0, K.stage(k, w.on, w.on + 0.18));
+      const target = Math.max(w.idle ? 0.8 : 0, K.stage(kw, w.on, w.on + 0.18), K.stage(m.allWin, w.rank, w.rank + 0.2) * kAll);
       w.base = damp(w.base ?? target, target, 0.8, dt);
       w.level = w.base * (0.93 + 0.07 * b);
       this.winInst.set(w.n, w.x, w.y, w.z, 1, w.ry, 0.1 + w.level * 0.95, 0, 1);
@@ -309,7 +333,7 @@ export class QuietHouse {
     }
     this.tw.forEach((t, i) => {
       const v = t.env.update(dt);
-      this.twinkles.set(i, t.x, t.y, t.z, t.s * (0.5 + v * 0.7 * lerp(0.3, 1, this.bm)), v * 1.6, v, 0, 1);   // the glint's size swell is a beat movement; its light stays
+      this.twinkles.set(i, t.x, t.y, t.z, t.s * (0.5 + v * 0.7 * this.bm), v * 1.6, v, 0, 1);   // the glint's size swell is a beat movement; its light stays
     });
     this.twinkles.upload(N_TWINKLES);
   }
