@@ -6,7 +6,9 @@
 <title>Vaporstation · projector</title>
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <style>
-  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; cursor: none; }
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  /* cursor stays until fullscreen: the operator has to find and click this window first */
+  html:fullscreen, html:fullscreen * { cursor: none; }
   canvas#out { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
   #cover { position: fixed; inset: 0; pointer-events: none; opacity: 0; z-index: 5; image-rendering: pixelated;
     background-size: 8px 8px; transition: opacity 0.3s linear; }

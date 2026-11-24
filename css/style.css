@@ -260,8 +260,11 @@ body.kiosk.ui-hidden, body.kiosk.ui-hidden * { cursor: none; }   /* H shows the 
   --op-amber: #f0c060; --op-red: #ff6b78;
   position: fixed; inset: 0; background: #0e0d14; color: var(--text); display: flex;
   font-size: clamp(14px, 2.2vh, 26px); padding: clamp(12px, 2.4vh, 32px);
+  z-index: 6;   /* above the watchdog's fog cover (#glcover, 5): the red "graphics reset" stays readable */
 }
 #operator[hidden] { display: none; }
+/* while it shows, the panel (H), debug (D) and overlay join it at 6 and win by DOM order (single mode: unchanged) */
+body:has(> #operator:not([hidden])) :is(#panel, #debug, #overlay) { z-index: 6; }
 #operator, #operator * { cursor: default; }   /* also in kiosk: the operator taps here */
 #operator button { cursor: pointer; }
 .op-main { flex: 1; min-width: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: clamp(10px, 2.4vh, 32px); }
