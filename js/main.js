@@ -230,7 +230,7 @@ ui.makeCollapsible();
 // One thumbnail per frame on load, then one every 0.4 s, only while the panel is
 // visible. Each is the style at idle (k = 0) with its current palette, rendered
 // through the full pipeline before the real frame (which then overwrites it).
-const THUMB_AUDIO = { level: 0, bass: 0, mid: 0, high: 0, beat: false, beatPulse: 0, beatCount: 0, bpm: 0, beatPhase: 0, bar: 0, rmsDb: -100, rmsDbSmooth: -100 };
+const THUMB_AUDIO = { level: 0, bass: 0, mid: 0, high: 0, beat: false, beatPulse: 0, beatCount: 0, bpm: 0, beatPhase: 0, bar: 0, rmsDb: -100, rmsDbSmooth: -100, shape: { close: 0, pace: 1, fog: 1, weather: 1, phrase: 0 }, groove: 0, beatMotion: 1 };
 const thumbs = { pending: STYLES.map((_, i) => i), last: STYLES.map(() => -1), timer: 0, rr: 0, captureCur: false };
 function thumbFrame(dt, now) {
   thumbs.captureCur = false;
@@ -655,7 +655,8 @@ function frame(now) {
       audio, fps, intensity: k, playing, state: bench && !bench.done ? bench.label : state.label, thresholdDb: s.thresholdDb,
       res: `${renderer.width}x${renderer.height}`, draws: renderer.stats.draws, tris: renderer.stats.tris,
       style: styles.name(styles.cur), transition: styles.transitioning ? styles.name(styles.next) : '',
-      autoSwitch: s.autoSwitch, idle: styles.idleTime, setlist: setlist.label, show: show.label, song: s.conductor === false ? 'song: follow off' : conductor.label, safety: `${governor.label} · ${watchdog.label}`,
+      autoSwitch: s.autoSwitch, idle: styles.idleTime, setlist: setlist.label, show: show.label, song: s.conductor === false ? 'song: follow off' : conductor.label,
+      shape: audio.shape ? `shape: ${audio.shape.section || '-'} close ${audio.shape.close.toFixed(2)} pace ${audio.shape.pace.toFixed(2)} fog ${audio.shape.fog.toFixed(2)} wx ${audio.shape.weather.toFixed(2)} ph ${audio.shape.phrase}` : '', safety: `${governor.label} · ${watchdog.label}`,
       source: engine.mode === 'live' ? `live: ${engine.deviceLabel || 'default'}` : engine.mode === 'file' ? 'file playback' : 'no input',
     });
   }

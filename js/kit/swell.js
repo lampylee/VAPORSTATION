@@ -26,6 +26,8 @@ export function drive(audio, k) {
     decay: audio.decay ?? 1,     // multiply hand-rolled flash decay times by this
     build: (audio.build ?? 0) * k,   // Conductor: 0..1 anticipation during a build-up
     drop: !!audio.drop && k > 0.05,  // Conductor: true on the frame a drop lands
+    groove: (audio.groove ?? audio.beatPulse) * k,   // smooth 0..1 swing on the beat (no kick)
+    beatMotion: audio.beatMotion ?? feel.beatMotion, // 0 Gentle ... 1 Punchy: scale for beat-driven motion
   };
 }
 
@@ -37,9 +39,10 @@ export function drive(audio, k) {
  *   motion  scales Spring kicks (camera nudges, rolls, bounces)
  *   attack  s: Envelopes ease in instead of jumping (0 = instant)
  *   decay   multiplies every Envelope's decay time (longer = softer glow)
+ *   beatMotion  0..1: how much beats may move the camera (0 at Gentle)
  * Hand-rolled beat reactions should multiply by audio.accent / audio.motion.
  */
-export const feel = { accent: 1, motion: 1, attack: 0, decay: 1 };
+export const feel = { accent: 1, motion: 1, attack: 0, decay: 1, beatMotion: 1 };
 
 /** Beat flash / impulse that decays exponentially. trigger(), then read .v */
 export class Envelope {
