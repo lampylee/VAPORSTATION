@@ -4,6 +4,7 @@ import { SongShape, SHAPE_TABLE } from '../js/show/shape.js';
 import { ShowControl } from '../js/show/control.js';
 import { feel } from '../js/kit/swell.js';
 import { Moods } from '../js/kit/moods.js';
+import { OrbitRig } from '../js/kit/camera.js';
 import { DEFAULTS } from '../js/settings.js';
 
 const DT = 1 / 60;
@@ -68,6 +69,14 @@ const near = (a, b, e) => Math.abs(a - b) <= e;
   const s2 = new SongShape(); const q0 = s2.update({ section: 'groove', bpm: 0, bar: 0 }, DT).phrase;
   for (let i = 0; i < 40 * 60; i++) o = s2.update({ section: 'groove', bpm: 0, bar: 0 }, DT);
   check('phrase ticks every 16 s (bpm 0)', o.phrase - q0 === 2, 'got ' + (o.phrase - q0));
+}
+
+// a re-tap that jumps the bar 2 -> 0 still counts as a bar
+{
+  const sh = new SongShape(); const p0 = sh.update({ section: 'groove', bpm: 120, bar: 0 }, DT).phrase;
+  // 8 bars, each 0 1 2 then back to 0 (no 3): every wrap is a 2 -> 0 jump
+  for (let b = 0; b < 8; b++) for (const bar of [1, 2, 0]) sh.update({ section: 'groove', bpm: 120, bar }, DT);
+  check('phrase counts a 2 -> 0 bar jump (re-tap)', sh.out.phrase - p0 === 1, 'got ' + (sh.out.phrase - p0));
 }
 
 // phrase counter restarts when the section changes
@@ -143,6 +152,31 @@ for (const [r, want] of [[0, 0], [0.5, 0.4], [1, 1]]) {
       for (const k of ['a', 'x']) if (m.v[k] < S.base[k] - 1e-9 || m.v[k] > S.gather[k] + 1e-9) ok = false;
     }
     check('moods: flicker stays within base..gather', ok); }
+  { const m = new Moods(S);
+    for (let i = 0; i < 600; i++) m.update({ section: 'groove' }, DT);
+    m.update({ section: 'breakdown' }, DT);
+    check('moods: eases without snap', m.v.a > 0.9, JSON.stringify(m.v));
+    m.snap(); m.update({ section: 'breakdown' }, DT);
+    check('moods: snap() makes the next update jump', m.v.a === 0 && m.v.x === 0 && m.mood === 'still', JSON.stringify(m.v));
+    m.update({ section: 'drop' }, DT);
+    check('moods: eases again after the snap', m.v.a > 0 && m.v.a < 1, JSON.stringify(m.v)); }
+  { const m = new Moods({ base: { a: 1 }, full: { b: 2 } }); m.update({ section: 'drop' }, DT);
+    check('moods: key union per state', m.v.a === 1 && m.v.b === 2, JSON.stringify(m.v)); }
+}
+
+// ---- CameraRig.snapShape ----
+{
+  const shape = (close, phrase) => ({ section: 'breakdown', energy: 0, level: 0, bpm: 0, shape: { close, pace: 0.5, fog: 1, weather: 1, phrase } });
+  const rig = new OrbitRig({ radius: 10 });
+  rig.update(shape(0.8, 3), 0.5, DT);
+  check('rig: first update takes the shape', rig.close === 0.8 && rig._phrase === 3 && near(rig.r, 10 * 0.8, 1e-9), `close ${rig.close} r ${rig.r}`);
+  for (let i = 0; i < 600; i++) rig.update(shape(0, 0), 0, DT);
+  rig.update(shape(0.8, 5), 0, DT);
+  check('rig: eases without snapShape', rig.close < 0.05 && rig.reframe !== rig._reframeT, `close ${rig.close}`);
+  rig.snapShape(); rig.update(shape(0.8, 5), 0, DT);
+  check('rig: snapShape() jumps close / reframe / radius', rig.close === 0.8 && rig.reframe === rig._reframeT && near(rig.r, 8, 1e-9), `close ${rig.close} reframe ${rig.reframe} r ${rig.r}`);
+  rig.update(shape(0, 5), 0, DT);
+  check('rig: eases again after the snap', rig.close > 0.7 && rig.close < 0.8, `close ${rig.close}`);
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

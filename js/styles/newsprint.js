@@ -257,6 +257,9 @@ export class Newsprint {
     this.camG = null; this.fr = null; this.more = 0;
   }
 
+  /** Coming on screen (StyleManager.enter, after its moods / rig snap): the mood keys it eases a second time start at the current mood. */
+  enter() { this.camG = null; this.fr = null; }
+
   update(a, k, dt) {
     this.a = a; this.k = k; this.time += dt;
     const m = this.moods.update(a, dt);

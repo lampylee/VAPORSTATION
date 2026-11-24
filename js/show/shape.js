@@ -40,7 +40,8 @@ export class SongShape {
     if (section !== o.section) { o.section = section; this.bars = 0; this.clock = 0; }
     const bar = audio.bar || 0;
     if (audio.bpm > 0) {
-      if (this.lastBar === 3 && bar === 0 && ++this.bars >= PHRASE_BARS) { this.bars = 0; this.clock = 0; o.phrase++; }
+      // a bar wraps when the bar index goes down (3 -> 0, or 2 -> 0 after a re-tap), as K.BarClock
+      if (bar < this.lastBar && ++this.bars >= PHRASE_BARS) { this.bars = 0; this.clock = 0; o.phrase++; }
     } else if ((this.clock += dt) >= PHRASE_SECONDS) { this.clock = 0; this.bars = 0; o.phrase++; }
     this.lastBar = bar;
     return o;

@@ -3,6 +3,8 @@
 // and gives every style a live, crossfading palette.
 import { smoothstep } from '../gfx/math.js';
 import { LivePalette } from '../palette/palette.js';
+import { Moods } from '../kit/moods.js';
+import { CameraRig } from '../kit/camera.js';
 
 export class StyleManager {
   constructor(renderer, classes, startIndex = 1) {
@@ -68,7 +70,27 @@ export class StyleManager {
     if (this.next >= 0) { this.queued = i === this.next ? -1 : i; return; }
     if (i === this.cur) return;
     this.next = i; this.t = 0;
+    this.enter(i);
     this.onChange?.(i);
+  }
+
+  /**
+   * Style i is coming on screen (crossfade target, or shown directly by bench / selftest): its
+   * K.Moods and camera rigs (own properties) jump to the current section on their next update,
+   * then style.enter?.() resets anything else the style eases from the song's sections. Off-screen
+   * styles keep whatever they had (thumbnails update them with sectionless audio), so without
+   * this a mid-song switch would arrive in `base` and drift to the section's mood.
+   */
+  enter(i) {
+    const st = this.styles[i];
+    if (!st || this.broken.has(i)) return;
+    try {
+      for (const v of Object.values(st)) {
+        if (v instanceof Moods) v.snap();
+        else if (v instanceof CameraRig) v.snapShape();
+      }
+      st.enter?.();
+    } catch (e) { this._fail(i, e, 'enter'); }
   }
 
   /** Indices in the rotation: the setlist song's pool if set, else styles without meta.hidden. */

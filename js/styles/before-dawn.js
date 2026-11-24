@@ -232,6 +232,9 @@ export class BeforeDawn {
     this.drift = null; this.uMin = 0; this.mv = { preGate: 1 };
   }
 
+  /** Coming on screen (StyleManager.enter, after its moods / rig snap): the mood keys it eases a second time start at the current mood. */
+  enter() { this.drift = null; }
+
   update(a, k, dt) {
     this.k = k; this.time += dt;
     const m = this.moods.update(a, dt); this.mv = m;

@@ -13,7 +13,9 @@ export const DEFAULT_MAP = { intro: 'still', outro: 'still', breakdown: 'still',
  *
  * Every key eases with tau = ease / 3 (about `ease` seconds to settle). Entering a drop is fast
  * (`dropEase`) except keys in `slow` (camera positions), which never ease faster than 6 s.
- * The first update snaps to the target.
+ * The first update snaps to the target, and so does the first one after snap(): the style
+ * manager calls it when a world comes on screen, so a mid-song switch arrives in the current
+ * section's mood instead of easing there on top of the crossfade.
  */
 export class Moods {
   constructor(states, { map = {}, ease = 6, dropEase = 1.5, slow = [] } = {}) {
@@ -21,13 +23,19 @@ export class Moods {
     this.map = { ...DEFAULT_MAP, ...map };
     this.ease = ease; this.dropEase = dropEase; this.slow = new Set(slow);
     this.v = {}; this.mood = 'base'; this._init = false;
+    // key union per state (base + its own keys), so update() allocates nothing
+    this._keys = {};
+    const base = states.base || {};
+    for (const name of new Set([...Object.keys(states), 'base'])) this._keys[name] = [...new Set([...Object.keys(base), ...Object.keys(states[name] || {})])];
   }
+  /** The next update() jumps straight to the current section's mood (no ease). */
+  snap() { this._init = false; }
   _state(name) { return this.states[name] || this.states.base || {}; }
   update(audio, dt) {
     const sec = audio?.section || '';
     this.mood = this.map[sec] || this.map[''] || 'base';
     const base = this.states.base || {}, st = this._state(this.mood);
-    const keys = new Set([...Object.keys(base), ...Object.keys(st)]);
+    const keys = this._keys[this.states[this.mood] ? this.mood : 'base'];
     const fast = sec === 'drop';
     for (const k of keys) {
       const target = k in st ? st[k] : base[k];

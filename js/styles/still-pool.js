@@ -146,9 +146,16 @@ export class StillPool {
 
   /** Spawn a ring somewhere in view on the water. */
   _ring(size, amp = 1) {
-    const sp = this.spread, x = (Math.random() - 0.5) * 9 * sp, z = -2.5 - Math.random() * 8 * sp;
+    // a wide spread (build / drop) reaches past the far bank: retry a few times, then pull it onto the water
+    const sp = this.spread;
+    let x = 0, z = 0, e = 2;
+    for (let i = 0; i < 4 && e > 0.95; i++) { x = (Math.random() - 0.5) * 9 * sp; z = -2.5 - Math.random() * 8 * sp; e = poolE(x, z); }
+    if (e > 0.95) { const s = 0.95 / e; x *= s; z = PCZ + (z - PCZ) * s; }
     this.ripples.spawn(x, W, z, size, amp);
   }
+
+  /** Coming on screen (StyleManager.enter, after its moods / rig snap): the mood keys it eases a second time start at the current mood. */
+  enter() { this.camSink = null; }
 
   update(a, k, dt) {
     this.a = a; this.k = k; this.time += dt;

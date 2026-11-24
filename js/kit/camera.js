@@ -1,11 +1,14 @@
-// Camera rigs. Every rig moves slowly when idle, faster with intensity + the song's energy
-// (eased over ~1.5 s, times the section's audio.shape.pace), and gets for free: beat reactions
+// Camera rigs. Every rig moves slowly when idle, faster with intensity (its idle → active speed,
+// times the section's audio.shape.pace) plus the song's energy (eased over ~1.5 s), and gets for free: beat reactions
 // (a vertical nudge, a roll kick and an FOV punch, × K.feel.beatMotion, so none at Gentle),
 // a small continuous sway phrased on the bar (options sway / swayLift, × intensity), and the
 // song shape: `close` narrows / widens the FOV (±10 %) and, per rig, moves the eye along a safe
 // axis; `reframe` (-1..1) eases to a new framing on every phrase. shapeAmount (default 1,
 // 0 = off) scales both, for styles where they would clip. With the Conductor, a build-up slowly
 // narrows the FOV (tension) and the drop releases it with a soft punch (× feel.motion).
+// snapShape(): the next update takes the current shape (close, phrase / reframe, speed, tension)
+// with no ease. The first update after construction does too; the style manager calls it when a
+// world comes on screen, so a mid-song switch arrives already framed for the current section.
 //
 //   const cam = new DollyRig(spline, { idleSpeed: 1, activeSpeed: 4 });
 //   update:  cam.update(audio, k, dt)
@@ -54,23 +57,33 @@ export class CameraRig {
     this.close = 0;                       // -1 wide … +1 close framing (× shapeAmount)
     this.reframe = 0; this._reframe = 0; this._reframeT = 0; this._phrase = 0;   // -1..1, new framing each phrase
     this.swayV = 0; this.swayY = 0;       // bar sway (roll / lift): continuous, never a kick
+    this._snap = true; this.snapped = false;   // snapped: this update jumped (subclasses snap their own eases too)
   }
+
+  /** The next update() jumps to the current song shape instead of easing there. */
+  snapShape() { this._snap = true; }
 
   /** Common reactions; subclasses call super.update() then position the camera. */
   update(audio, k, dt) {
     this.time += dt;
     this.k = k;
-    const sh = audio.shape, amt = this.shapeAmount;
+    const sh = audio.shape, amt = this.shapeAmount, snap = this.snapped = this._snap;
+    this._snap = false;
     // travel follows the song's energy (not each kick) and the section's pace, slowly
     const energy = audio.energy ?? audio.level;
-    this.speed = damp(this.speed, lerp(this.idleSpeed, this.activeSpeed, k) * (sh?.pace ?? 1) + energy * k * this.bassBoost, 1.5, dt);
+    const speedT = lerp(this.idleSpeed, this.activeSpeed, k) * (sh?.pace ?? 1) + energy * k * this.bassBoost;
+    this.speed = snap ? speedT : damp(this.speed, speedT, 1.5, dt);
     // close: shape.close is already eased once (2 s); one more ease here so a section change starts softly.
     // reframe steps inside the rig, so it gets two cascaded eases (tau 2 s each).
-    this.close = damp(this.close, (sh?.close ?? 0) * amt, 2, dt);
+    const closeT = (sh?.close ?? 0) * amt;
+    this.close = snap ? closeT : damp(this.close, closeT, 2, dt);
     const ph = sh?.phrase ?? 0;
-    if (ph !== this._phrase) { this._phrase = ph; this._reframeT = ((ph * 0.618) % 1) * 2 - 1; }
-    this._reframe = damp(this._reframe, this._reframeT * amt, 2, dt);
-    this.reframe = damp(this.reframe, this._reframe, 2, dt);
+    if (ph !== this._phrase || snap) { this._phrase = ph; this._reframeT = ((ph * 0.618) % 1) * 2 - 1; }
+    if (snap) this._reframe = this.reframe = this._reframeT * amt;
+    else {
+      this._reframe = damp(this._reframe, this._reframeT * amt, 2, dt);
+      this.reframe = damp(this.reframe, this._reframe, 2, dt);
+    }
     // beat reactions × feel.beatMotion: none at Gentle, so the camera never lurches on beats
     const bm = feel.beatMotion;
     if (audio.beat && k > 0.05 && bm > 0) {
@@ -86,7 +99,7 @@ export class CameraRig {
     else this.dropT *= Math.exp(-dt / (0.18 * feel.decay));
     this.dropV = this.dropV < this.dropT ? damp(this.dropV, this.dropT, 0.3, dt) : this.dropT;
     const tt = (audio.build ?? 0) * k * (0.35 + 0.65 * feel.motion);
-    this.tension = damp(this.tension, tt, tt > this.tension ? 1.2 : 0.35, dt);
+    this.tension = snap ? tt : damp(this.tension, tt, tt > this.tension ? 1.2 : 0.35, dt);
     // bar sway: phrased on the 4-beat bar when a tempo is known, else a slow free-running sway
     const phase = audio.bpm > 0 ? ((audio.bar ?? 0) + (audio.beatPhase ?? 0)) / 4 : this.time / 8;
     this.swayV = damp(this.swayV, Math.sin(2 * Math.PI * phase), 0.6, dt);
@@ -146,7 +159,8 @@ export class OrbitRig extends CameraRig {
   update(audio, k, dt) {
     super.update(audio, k, dt);
     this.angle += this.speed * dt;
-    this.r = damp(this.r, this.radius * (1 - 0.25 * this.close) - (audio.energy ?? audio.level) * k * this.pushIn, 1.5, dt);
+    const rT = this.radius * (1 - 0.25 * this.close) - (audio.energy ?? audio.level) * k * this.pushIn;
+    this.r = this.snapped ? rT : damp(this.r, rT, 1.5, dt);
     const c = this.center, a = this.angle + 0.6 * this.reframe;
     this.eye[0] = c[0] + Math.sin(a) * this.r;
     this.eye[1] = c[1] + this.height + Math.sin(this.time * 0.17) * this.bob;
@@ -217,7 +231,8 @@ export class OrbitFocusRig extends CameraRig {
     const e = this.pos(th, this.eye), p = this.pos(th + 0.1, this._p);
     // close framing: scale the eye's offset from the focus (wide = strictly farther from what it looks at)
     const F0 = typeof this.focus === 'function' ? this.focus(e) : this.focus, sc = 1 - 0.2 * this.close;
-    for (const q of [e, p]) { q[0] = F0[0] + (q[0] - F0[0]) * sc; q[2] = F0[2] + (q[2] - F0[2]) * sc; }
+    e[0] = F0[0] + (e[0] - F0[0]) * sc; e[2] = F0[2] + (e[2] - F0[2]) * sc;
+    p[0] = F0[0] + (p[0] - F0[0]) * sc; p[2] = F0[2] + (p[2] - F0[2]) * sc;
     e[1] = this.center[1] + (Math.sin(this.time * 0.37) * 0.65 + Math.sin(this.time * 0.23 + 1) * 0.35) * this.bob;
     let ax = p[0] - e[0], az = p[2] - e[2]; const al = Math.hypot(ax, az) || 1; ax /= al; az /= al;
     const F = typeof this.focus === 'function' ? this.focus(e) : this.focus;

@@ -356,6 +356,9 @@ export class BackRoadLights {
     return out;
   }
 
+  /** Coming on screen (StyleManager.enter, after its moods / rig snap): the mood keys it eases a second time start at the current mood. */
+  enter() { this.camZ = null; }
+
   update(a, k, dt) {
     dt = Math.min(dt, 0.1);
     this.a = a; this.k = k; this.time += dt; this.dt = dt;

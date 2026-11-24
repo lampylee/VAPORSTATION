@@ -191,6 +191,9 @@ export class MothLamp {
     this.camIn = null; this.flCam = 0;
   }
 
+  /** Coming on screen (StyleManager.enter, after its moods / rig snap): the mood keys it eases a second time start at the current mood. */
+  enter() { this.camIn = null; }
+
   update(a, k, dt) {
     dt = Math.min(dt, 0.1);
     this.k = k; this.time += dt;
@@ -206,7 +209,7 @@ export class MothLamp {
     // camera orbit: the flood's pull-in and the mood's camIn, both eased once more (never a step)
     if (this.camIn === null) { this.camIn = m.camIn; this.flCam = fl; }
     this.camIn = damp(this.camIn, m.camIn, 2, dt); this.flCam = damp(this.flCam, fl, 2, dt);
-    this.cam.radius = lerp(CAM_R, CAM_R - 1.5, k * 0.5 + this.flCam * 0.5) - this.camIn;   // ≥ 9.5: the grass is clear out to 6
+    this.cam.radius = lerp(CAM_R, CAM_R - 1.5, k * 0.5 + this.flCam * 0.5) - this.camIn;   // ≥ 9.5, and OrbitRig's close factor (× 1 - 0.25 · 0.8 in a breakdown) takes the orbit to ≥ 7.6: the grass is clear out to 6
     this.cam.update(a, k, dt);
     this.cam.eye[1] += b * 0.35;
     this.ground.follow(this.cam.eye[0], this.cam.eye[2]);

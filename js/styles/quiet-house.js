@@ -278,6 +278,9 @@ export class QuietHouse {
     t.env.trigger(amp);
   }
 
+  /** Coming on screen (StyleManager.enter, after its moods / rig snap): the mood keys it eases a second time start at the current mood. */
+  enter() { this.camD = null; }
+
   update(a, k, dt) {
     this.a = a; this.k = k; this.time += dt; this.dt = dt;
     const m = this.moods.update(a, dt);

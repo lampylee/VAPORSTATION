@@ -197,7 +197,8 @@ export class SearchlightTown {
 
     // ---- camera: a high, slow orbit looking down at the middle of town
     this.cam = new K.OrbitRig({ center: [0, 0, 0], radius: 38, height: 29, bob: 1.0, pushIn: 0, fov: 50, far: 260,
-      idleSpeed: 0.022, activeSpeed: 0.055, bassBoost: 0, fovPunch: 1.5, nudge: 0.12, rollKick: 0.01 });
+      idleSpeed: 0.022, activeSpeed: 0.055, bassBoost: 0, fovPunch: 1.5, nudge: 0.12, rollKick: 0.01,
+      shapeAmount: 0.25 });   // a quarter: the moods' camR / camH carry the framing (a full close would undo the quiet sections' high wide view and flip the drop's pull-in)
 
     this.m = mat4.create();
     this.time = 0; this.k = 0; this.a = null;
@@ -226,6 +227,9 @@ export class SearchlightTown {
     const t = this.time;
     return (Math.sin(Math.hypot(x, z) * 0.2 - t * 1.6) * 0.6 + Math.sin(x * 0.12 + z * 0.09 + t * 1.05) * 0.4) * this.amp * 1.8;
   }
+
+  /** Coming on screen (StyleManager.enter, after its moods / rig snap): the mood keys it eases a second time start at the current mood. */
+  enter() { this.camR = null; }
 
   update(a, k, dt) {
     this.a = a; this.k = k; this.time += dt;

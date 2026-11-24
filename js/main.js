@@ -645,7 +645,7 @@ function frame(now) {
     overlay.hidden = false; overlay.textContent = selftest ? selftest.label : bench.label;
   } else if (selftest && !selftest.finished) {
     overlay.hidden = true; bench = null;
-    styles.cur = selftest.back; styles.next = -1;   // under the report dialog
+    styles.cur = selftest.back; styles.next = -1; styles.enter(styles.cur);   // under the report dialog
     selftest.finish().catch((e) => console.error('[selftest]', e));
   }
   else if (bench && bench.done && overlay.textContent !== bench.label) overlay.textContent = bench.label;

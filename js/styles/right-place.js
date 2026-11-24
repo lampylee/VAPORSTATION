@@ -143,7 +143,9 @@ export class RightPlace {
     }
 
     // ---- camera + atmosphere
-    this.cam = new K.CameraRig({ fov: 58, fovPunch: 2, nudge: 0.12, rollKick: 0.015, idleSpeed: 1, activeSpeed: 1, bassBoost: 0, far: 220 });
+    // shapeAmount 0: the shape's close only narrows the FOV here, which would cancel half the mood's camD
+    // (quiet sections step back, the drop comes closer); the mood carries the framing instead
+    this.cam = new K.CameraRig({ fov: 58, fovPunch: 2, nudge: 0.12, rollKick: 0.015, idleSpeed: 1, activeSpeed: 1, bassBoost: 0, far: 220, shapeAmount: 0 });
     this.snow = new K.Particles(r, 'snow');
     this.pulses = new K.History(48);
     this.flare = new K.Envelope(0.6);
@@ -256,6 +258,9 @@ export class RightPlace {
     if (fire) this.sinceStep = 0;
     return fire;
   }
+
+  /** Coming on screen (StyleManager.enter, after its moods / rig snap): camD and loose / lock start at the current mood. */
+  enter() { this.camD = null; this.loose = null; }
 
   // ------------------------------------------------------------ update
   update(a, k, dt) {

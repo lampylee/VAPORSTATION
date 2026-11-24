@@ -90,7 +90,7 @@ export async function motionCheck(viz, { index, frames = 1200, sections, bpmTogg
   if (!styles.styles[index]) throw new Error(`motionCheck: no style at index ${index}`);
   const saved = { auto: s.autoSwitch, feel: { ...feel }, fogScale: P.fogScale, weather: P.weather };
   s.autoSwitch = false;
-  styles.cur = index; styles.next = -1;
+  styles.cur = index; styles.next = -1; styles.enter(index);
   const step = audioSource({ sections, bpmToggleAt, bpm, reactivity, k });
   const tr = tracker(), dt = 1 / 60;
   try {
