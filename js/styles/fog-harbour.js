@@ -219,6 +219,7 @@ export class FogHarbour {
     this.lampInst.upload(this.lamps.length);
     this.lights = new K.LightSet({ reach: 10 });
     this.beatSwing = [new K.Pendulum(1.45, 0.32, 0.45), new K.Pendulum(1.3, 0.36, 0.4)];
+    this.bar = new K.BarClock({ minGap: 1 });   // Gentle: the reef ripple opens once per bar, not per beat
     this.breeze = [new K.Pendulum(1.6, 0.4, 0.25), new K.Pendulum(1.5, 0.45, 0.25)];
 
     // ---- glows (lamps, house halos, eyes) + glints, one draw each
@@ -292,21 +293,24 @@ export class FogHarbour {
 
   update(a, k, dt) {
     this.a = a; this.k = k; this.time += dt; this.dt = dt;
-    const d = K.drive(a, k), t = this.time;
+    const d = K.drive(a, k), t = this.time, bm = d.beatMotion;
+    const bass = lerp(d.energy, d.bass, bm);   // Gentle: slow energy, Punchy: the raw bass
+    const barFire = this.bar.update(a, dt);
     this.cam.update(a, k, dt);
     const eye = this.cam.eye;
     this.ground.follow(eye[0], eye[2]);
-    this.heave = damp(this.heave, d.bass * 0.22 + (d.energy || 0) * 0.08, 0.45, dt);
+    this.heave = damp(this.heave, bass * 0.22 + (d.energy || 0) * 0.08, 0.45, dt);
     this._wave[0] = 0.035 + this.heave;
 
     // ---- beat: the pier lamp swings, a ripple opens at the reef
-    if (d.beat) {
-      for (const p of this.beatSwing) p.push((Math.sign(p.v) || 1) * 0.32 * d.motion * k);
+    if (d.beat) for (const p of this.beatSwing) p.push((Math.sign(p.v) || 1) * 0.32 * d.motion * k * bm);
+    if (bm >= 0.5 ? d.beat : barFire && k > 0.05) {   // ripple at the reef: every beat at Punchy / Medium, once per bar at Gentle
       const rx = -30 + K.rand2(a.beatCount | 0, 3, 7) * 50, rz = 29 + (K.rand2(a.beatCount | 0, 4, 7) - 0.5) * 8;
       this.ripples.spawn(rx, WATER + 0.02, rz, 4 + 3 * k, (0.45 + 0.55 * k) * Math.min(1, d.accent));
     }
-    for (const p of this.beatSwing) { p.push((Math.sign(p.v) || 1) * d.bass * 0.06 * dt); p.push(Math.sin(t * 0.6) * 0.02 * dt); p.update(dt); }
-    for (const p of this.breeze) { p.push(Math.sin(t * 0.45 + p.w) * 0.03 * dt + (Math.sign(p.v) || 1) * d.bass * 0.03 * dt); p.update(dt); }
+    for (const p of this.beatSwing) { p.push((Math.sign(p.v) || 1) * (bass * 0.06 + d.groove * (1 - bm) * 0.1) * dt);   // groove pays back the removed beat swing
+      p.push(Math.sin(t * 0.6) * 0.02 * dt); p.update(dt); }
+    for (const p of this.breeze) { p.push(Math.sin(t * 0.45 + p.w) * 0.03 * dt + (Math.sign(p.v) || 1) * bass * 0.03 * dt); p.update(dt); }
     // idle: now and then something stirs out by the reef
     if ((this.nextIdleRipple -= dt) <= 0) {
       this.nextIdleRipple = 4 + Math.random() * 6;
@@ -343,7 +347,7 @@ export class FogHarbour {
       this.lanternInst.set(i, L.hx, L.hy, L.hz, 1, L.rot, 0.25 + L.level * 0.9, 0, 1, rx, rz);
       const g = K.rotPoint([0, -0.64, 0], rx, L.rot, rz);
       L.gx = L.hx + g[0]; L.gy = L.hy + g[1]; L.gz = L.hz + g[2];
-      if (L.level > 0.01) this.glows.set(ng++, L.gx, L.gy, L.gz, 2.4 + d.pulse * 0.5, 0, L.level, 0, 1);
+      if (L.level > 0.01) this.glows.set(ng++, L.gx, L.gy, L.gz, 2.4 + d.pulse * 0.5 * bm, 0, L.level, 0, 1);
       const gl = L.level * d.high * (0.6 + 0.4 * Math.sin(t * 13 + i * 2));
       if (gl > 0.02) this.glints.set(nt++, L.gx, L.gy, L.gz, 0.9 + d.high * 0.8, 0, gl, 0, 1, 0, t * 0.8 + i);
     });

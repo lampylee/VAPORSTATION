@@ -306,7 +306,7 @@ export class Backrooms {
       this.buzz.trigger(0.35 + 0.65 * k);
     }
     this._build(eye);
-    this.dust.update(dt, [eye[0], 1.4, eye[2]], { amount: lerp(0.35, 0.8, k), speed: 0.6 + d.level * 0.6 });
+    this.dust.update(dt, [eye[0], 1.4, eye[2]], { amount: lerp(0.35, 0.8, k), speed: 0.6 + lerp(d.energy, d.level, d.beatMotion) * 0.6 });
   }
 
   /** Fill every instance buffer from the cells around the camera. */
@@ -371,7 +371,7 @@ export class Backrooms {
     const far = lerp(22, 44, K.stage(k, 0.05, 0.9));
     r.setFog(col.fog, 2.5, far);
     r.setLight([0.35, -0.8, 0.45], scaleColor(col.light, P.role('light'), 0.38 * dim), scaleColor(col.amb, P.role('ambient'), 0.72 * dim));
-    r.setJitterBoost(d.bass * 0.35 + k * 0.04);       // the hum
+    r.setJitterBoost(lerp(d.energy, d.bass, d.beatMotion) * 0.35 + k * 0.04);       // the hum
     // the nearest tubes light the walls round them; their flicker / buzz rides on b
     const L = this.lights, eye = this.cam.eye;
     scaleColor(col.tube, P.color(R(2, 3)), 0.85);
