@@ -115,7 +115,7 @@ export class Output {
   /** Adopt a loaded projector window (from open(), or the window reattaching after this page reloaded). */
   attach(win) {
     if (!win || win.closed || !win.__vaporOutput?.canvas) return false;
-    if (win === this._win && this._state === 'open') return true;
+    if (win === this._win && this._state === 'open') { this._syncCover(win); return true; }
     let sink;
     try { sink = new Sink(win.__vaporOutput.canvas); } catch (e) { console.warn('[output]', e); return false; }
     this._detach();
@@ -127,7 +127,7 @@ export class Output {
     const refit = () => { if (this._win === win) this.h.onSinkChange(this._sink); };
     win.addEventListener('resize', refit, { signal: ac.signal });
     watchDpr(win, refit, ac.signal);
-    if (this._coverFog) win.__vaporOutput.cover(true, this._coverFog);
+    this._syncCover(win);
     this._pending = null;
     // second rAF chain: the projector window's display drives frames while it's alive
     const chain = ++this._chain;
@@ -143,6 +143,12 @@ export class Output {
     this.h.onSinkChange(sink);
     this.h.onState('open');
     return true;
+  }
+
+  /** Tell the window whether the watchdog cover is on right now, on or off: it may still hold a cover
+   *  from before this page reloaded, or from while it was marked lost and missed the cover(false). */
+  _syncCover(win) {
+    try { win.__vaporOutput.cover(!!this._coverFog, this._coverFog); } catch (e) { /* window going */ }
   }
 
   /** Call after each frame shown on the projector: lets its page know frames arrive, and the fog to cover with. */

@@ -57,7 +57,13 @@ function update() {
 }
 
 function attach() {
+  // a successful attach drops any cover left by an earlier opener page (the opener sends its
+  // current cover during the attach), so a reload under the cover can't leave the fog up for good
+  const prev = openerCover;
+  openerCover = null;
   try { attached = !!window.opener && !window.opener.closed && !!window.opener.__vaporOutputAttach?.(window); } catch (e) { attached = false; }
+  if (!attached) openerCover = prev;
+  update();
 }
 
 setInterval(update, 100);
