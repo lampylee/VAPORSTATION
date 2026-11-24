@@ -32,7 +32,7 @@ for %%P in ("%ProgramFiles%\Google\Chrome\Application\chrome.exe" "%ProgramFiles
   if not defined CHROME if exist %%P set CHROME=%%P
 )
 if not defined CHROME (
-  echo Chrome or Edge not found. Open %URL% yourself and press F for fullscreen.
+  echo Chrome or Edge not found. Open "%URL%" yourself and press F for fullscreen.
   pause
   exit /b 1
 )
