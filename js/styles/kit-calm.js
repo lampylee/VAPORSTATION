@@ -13,6 +13,11 @@
 // Swell: lanterns light up around the pond, petals and pollen drift in, birds
 // arrive, sky lanterns rise. Beats: a soft pulse runs around the lantern ring
 // and a ripple opens under a lantern. Nothing here is fast: it's for ballads.
+//
+// Beat motion follows Feel (d.beatMotion: Gentle 0 ... Punchy 1): the pulse always
+// brightens the lanterns, but only swells their halos at Punchy; the ring opens
+// every beat at Punchy and once a bar at Gentle; particle speeds and sway ease to
+// d.energy at Gentle (lerp(d.energy, raw, d.beatMotion), so Punchy is the raw band).
 import { mat4, lerp, clamp } from '../gfx/math.js';
 import { scaleColor } from '../gfx/color.js';
 import { plane } from '../gfx/geometry.js';
@@ -95,13 +100,14 @@ export class KitCalm {
     this.cam = new K.OrbitRig({ center: [0, 0.6, 0], radius: 30, height: 3.2, bob: 0.4, pushIn: 0.6, idleSpeed: 0.018, activeSpeed: 0.05, bassBoost: 0.02, fovPunch: 1.5, nudge: 0.08, rollKick: 0.01, fov: 58, far: 260 });
     this.breath = new K.Breath({ beats: 8, period: 11 });
     this.time = 0; this.k = 0; this.a = null; this.nextIdleRipple = 2;
+    this.d = K.drive({ level: 0, bass: 0, mid: 0, high: 0, beatPulse: 0 }, 0);
     this.m = mat4.create();
     this.col = { fog: [0, 0, 0], tint: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], glow: [0, 0, 0], water: [0, 0, 0], refl: [0, 0, 0] };
   }
 
   update(a, k, dt) {
     this.a = a; this.k = k; this.time += dt;
-    const d = K.drive(a, k), t = this.time;
+    const d = this.d = K.drive(a, k), t = this.time;
     const b = this.breath.update(a, dt);
     this.cam.update(a, k, dt);
     this.cam.eye[1] += b * 0.5;                       // the whole view breathes up and down, slowly
@@ -111,7 +117,7 @@ export class KitCalm {
     if (d.beat) {
       const i = Math.floor(K.rand2(a.beatCount || 0, t, 3) * N_LANTERNS), L = this.lant[i];
       this.pulses.trigger(i, 0.6 + k * 0.4, 4);
-      this.ripples.spawn(L.x, WATER, L.z, 3 + k * 2);
+      if (d.beatMotion > 0.5 || ((a.bpm || 0) > 0 && Number.isFinite(a.bar) ? (a.bar | 0) === 0 : (a.beatCount || 0) % 4 === 0)) this.ripples.spawn(L.x, WATER, L.z, 3 + k * 2);   // every beat at Punchy, once a bar at Gentle
     }
     // idle life: now and then a fish rises somewhere on the pond
     if ((this.nextIdleRipple -= dt) <= 0) {
@@ -125,10 +131,12 @@ export class KitCalm {
     // lanterns bob on the water; light comes on one by one with the swell
     this.lant.forEach((L, i) => {
       const lit = Math.max(L.idle ? 0.55 : 0.08, K.stage(k, L.on, L.on + 0.15));
-      L.level = lit * (0.75 + 0.25 * b) + this.pulses.at(i) * 0.8;
+      const pl = this.pulses.at(i) * 0.8;
+      L.level = lit * (0.75 + 0.25 * b) + pl;
+      const lvSize = L.level - pl * (1 - d.beatMotion);   // the pulse brightens; it only swells the halo at Punchy
       const y = WATER + 0.35 + Math.sin(t * 0.8 + L.ph) * 0.06;
       this.lanterns.set(i, L.x, y, L.z, 0.75, 0, 0.6 + L.level * 0.6, 0, 1.5);
-      this.glows.set(i, L.x, y + 0.5, L.z, 1.2 + L.level * 0.9, 0, L.level, 0, 1);
+      this.glows.set(i, L.x, y + 0.5, L.z, 1.2 + lvSize * 0.9, 0, L.level, 0, 1);
     });
     this.lanterns.upload(N_LANTERNS); this.glows.upload(N_LANTERNS);
 
@@ -138,8 +146,8 @@ export class KitCalm {
       { amount: K.stage(k, 0.3, 0.8), speed: 1, flap: K.stage(k, 0.4, 0.6) * 0.6 });   // flap can change every frame (Kit v4)
 
     const eye = this.cam.eye;
-    this.petals.update(dt, eye, { amount: K.stage(k, 0.2, 0.7) * 0.8, speed: 0.6 + d.mid * 0.5, wind: [0.3, 0.1] });
-    this.pollen.update(dt, eye, { amount: K.swell(k, 0.15, 0.8), speed: 0.5 + d.high });
+    this.petals.update(dt, eye, { amount: K.stage(k, 0.2, 0.7) * 0.8, speed: 0.6 + lerp(d.energy, d.mid, d.beatMotion) * 0.5, wind: [0.3, 0.1] });
+    this.pollen.update(dt, eye, { amount: K.swell(k, 0.15, 0.8), speed: 0.5 + lerp(d.energy, d.high, d.beatMotion) });
     this.mist.update(dt, [0, WATER + 1.4, 0], { amount: K.swell(k, 1, 0.45), speed: 0.4 });
     // sky lanterns rise over the pond, kept well above the camera so none drifts past the lens
     this.skyLanterns.update(dt, [0, 26, 0], { amount: K.stage(k, 0.55, 1) * 0.9, speed: 0.6 });
@@ -149,7 +157,7 @@ export class KitCalm {
   _world(r, col, glowLevel) {
     this.sky.draw(r, this.cam.eye, { horizon: col.fog, zenith: this.pal.color(R(3, 0)), brightness: col.tint[0], starLevel: 0.5 + this.breath.v * 0.2, cloudDrift: this.time * 0.004 });
     this.ground.draw(r, { texture: this.groundTex, tint: col.tint });
-    const sway = 0.015 + this.breath.v * 0.02 + K.drive(this.a, this.k).mid * 0.05;
+    const sway = 0.015 + this.breath.v * 0.02 + lerp(this.d.energy, this.d.mid, this.d.beatMotion) * 0.05;
     r.drawInstanced(this.quad, this.willows, { texture: this.willowTex, billboard: 1, sway, tint: col.tint });
     r.drawInstanced(this.quad, this.blossoms, { texture: this.blossomTex, billboard: 1, sway: sway * 0.6, tint: col.tint });
     r.drawInstanced(this.quad, this.reeds, { texture: this.reedTex, billboard: 1, sway: sway * 1.5, tint: col.tint });

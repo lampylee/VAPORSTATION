@@ -303,7 +303,7 @@ export class EmberVigil {
     this.rise = damp(this.rise, K.stage(k, 0.74, 1), 5, dt);
     // fire: breathes at idle, roars with the song; beats throw ember bursts
     const burst = audio.beat && k > 0.05 ? (0.35 + 0.65 * k) * (audio.accent ?? 1) : 0;
-    this.fire.update(dt, { level: lerp(0.72, 1.3, Math.max(k * 0.7, this.energy)) + a.bass * 0.15, burst });
+    this.fire.update(dt, { level: lerp(0.72, 1.3, Math.max(k * 0.7, this.energy)) + lerp(a.energy, a.bass, a.beatMotion) * 0.15, burst });
     // candles: cluster 0 always lit, the rest in order down the nave
     this.candleStage.update(k, dt);
     this.clusters.forEach(([s, e], g) => {
@@ -323,7 +323,7 @@ export class EmberVigil {
     if (this.bellClock.update(audio, dt) && k > 0.35) {
       this.bellEnv.trigger(k);
       this.ash.gust(1.2 * k * (audio.accent ?? 1), [0.3, 1]);
-      this.cam.nudge.kick(-0.06 * k * (audio.motion ?? 1));
+      this.cam.nudge.kick(-0.06 * k * (audio.motion ?? 1) * a.beatMotion);
     }
     this.bellEnv.update(dt);
     // lightning behind the keep: at most once a bar, only near the top of the swell
@@ -337,7 +337,8 @@ export class EmberVigil {
       this.dripT = lerp(2.6, 0.9, k) * (0.5 + Math.random());
       this.ripples.spawn(lerp(POOL.x0 + 0.6, POOL.x1 - 0.6, Math.random()), POOL_W, lerp(POOL.z1 + 0.6, POOL.z0 - 0.6, Math.random()), 1.2 + Math.random(), 0.6);
     }
-    if (audio.beat && k > 0.3) this.ripples.spawn((POOL.x0 + POOL.x1) / 2 + (Math.random() - 0.5) * 3, POOL_W, (POOL.z0 + POOL.z1) / 2 + (Math.random() - 0.5) * 4, 3.5 * k, k * (audio.accent ?? 1));
+    // the ring: every beat at Punchy, once a bar at Gentle
+    if (audio.beat && k > 0.3 && (a.beatMotion > 0.5 || ((audio.bpm || 0) > 0 && Number.isFinite(audio.bar) ? (audio.bar | 0) === 0 : (audio.beatCount || 0) % 4 === 0))) this.ripples.spawn((POOL.x0 + POOL.x1) / 2 + (Math.random() - 0.5) * 3, POOL_W, (POOL.z0 + POOL.z1) / 2 + (Math.random() - 0.5) * 4, 3.5 * k, k * (audio.accent ?? 1));
     this.ripples.update(dt);
     // the colossus rises behind the crag, eyes kindling as it clears it
     const cy = lerp(-COLOSSUS_H * 0.25, COLOSSUS_H * 0.62, this.rise) + Math.sin(this.t * 0.2) * 0.8 * this.rise;
@@ -348,7 +349,7 @@ export class EmberVigil {
     this.colossusEyes.set(1, W * 0.08, eyeY, COLOSSUS_Z + 1, 7 * eyeL, 0, 1);
     this.colossusEyes.upload(2);
     // cape stirs in the fire's updraft, more as the song builds
-    const gust = 0.04 + k * 0.08 + this.fire.burst * 0.05, t = this.t, V = this.capeV;
+    const gust = 0.04 + k * 0.08 + this.fire.burst * 0.05 * a.beatMotion, t = this.t, V = this.capeV;
     this.cape.update((x, y, z, out, i) => {
       const v = V[i * 2 + 1], w = v * v * gust;
       out[0] = x + Math.sin(t * 1.3 + v * 4 + x * 3) * w;

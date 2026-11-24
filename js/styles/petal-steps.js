@@ -82,14 +82,14 @@ export class PetalSteps {
       { lookAhead: 9, idleSpeed: 0.55, activeSpeed: 0.7, bassBoost: 0, bob: 0, fovPunch: 0.6, nudge: 0.03, rollKick: 0.005, fov: 58, far: 220 });
     this.cam.s = 30;
     this.breath = new K.Breath({ beats: 8, period: 11 });
-    this.time = 0; this.k = 0; this.a = null; this.nBlossom = 0; this.nWood = 0;
+    this.time = 0; this.k = 0; this.a = null; this.d = K.drive({ level: 0, bass: 0, mid: 0, high: 0, beatPulse: 0 }, 0); this.nBlossom = 0; this.nWood = 0;
     this.m = mat4.create();
     this.col = { fog: [0, 0, 0], tint: [0, 0, 0], light: [0, 0, 0], amb: [0, 0, 0], glow: [0, 0, 0], g2: [0, 0, 0], shaft: [0, 0, 0] };
   }
 
   update(a, k, dt) {
     this.a = a; this.k = k; this.time += dt;
-    const d = K.drive(a, k), t = this.time;
+    const d = this.d = K.drive(a, k), t = this.time;
     const b = this.breath.update(a, dt);
     this.cam.update(a, k, dt);
     this.cam.eye[1] += b * 0.12;
@@ -117,7 +117,8 @@ export class PetalSteps {
       const z = pi * POST_GAP + 2, dist = z - cs;
       const on = 0.12 + clamp(dist / 90) * 0.62;
       const base = pi % 4 === 0 ? 0.55 : 0.05;
-      const level = (Math.max(base, K.stage(k, on, on + 0.18)) * (0.78 + 0.22 * b) + this.pulses.at(pi) * 0.8) * K.fadeOut(dist, 70, 96);
+      const pl = this.pulses.at(pi) * 0.8, lv0 = Math.max(base, K.stage(k, on, on + 0.18)) * (0.78 + 0.22 * b);
+      const level = (lv0 + pl) * K.fadeOut(dist, 70, 96), lvSize = (lv0 + pl * d.beatMotion) * K.fadeOut(dist, 70, 96);   // the pulse brightens; it only swells the halo at Punchy
       const gl = lerp(0.3, 1, K.fadeIn(dist, 3, 20));   // near glows stay soft: they sit right beside the lens
       const yaw = Math.atan(pathDX(z)), cy = Math.cos(yaw), sy = Math.sin(yaw);
       for (const side of [-1, 1]) {
@@ -125,7 +126,7 @@ export class PetalSteps {
         const sw = Math.sin(t * 0.9 + pi * 1.7 + side) * 0.03;
         this.posts.set(np, x, y, zz, 1, yaw, 0.9, 0, 1);
         this.lanterns.set(np, x, y + POST_H + 0.4 + sw, zz, 0.7, 0, 0.55 + level * 0.65, 0, 1.5);
-        this.glows.set(np, x, y + POST_H + 0.55 + sw, zz, 0.9 + level * 0.6, 0, level * gl, 0, 1);
+        this.glows.set(np, x, y + POST_H + 0.55 + sw, zz, 0.9 + lvSize * 0.6, 0, level * gl, 0, 1);
         np++;
       }
     }
@@ -160,8 +161,8 @@ export class PetalSteps {
 
     // petals thicken with the swell and drift on a slow breeze, pollen only when the song is up
     const ahead = [eye[0], eye[1] + 1, eye[2] + 6];
-    this.petals.update(dt, ahead, { amount: lerp(0.12, 0.85, K.stage(k, 0.15, 0.8)), speed: 0.55 + d.mid * 0.4, wind: [0.35, 0.1] });
-    this.pollen.update(dt, ahead, { amount: K.swell(k, 0.1, 0.7), speed: 0.5 + d.high * 0.5 });
+    this.petals.update(dt, ahead, { amount: lerp(0.12, 0.85, K.stage(k, 0.15, 0.8)), speed: 0.55 + lerp(d.energy, d.mid, d.beatMotion) * 0.4, wind: [0.35, 0.1] });
+    this.pollen.update(dt, ahead, { amount: K.swell(k, 0.1, 0.7), speed: 0.5 + lerp(d.energy, d.high, d.beatMotion) * 0.5 });
   }
 
   render(r) {
@@ -180,7 +181,7 @@ export class PetalSteps {
     r.drawInstanced(this.slabMesh, this.steps, { texture: this.stoneTex, tint: col.tint });
     r.drawInstanced(this.postMesh, this.posts, { texture: this.postTex, tint: col.tint });
 
-    const sway = 0.015 + this.breath.v * 0.02 + (a ? K.drive(a, k).mid * 0.06 : 0);
+    const sway = 0.015 + this.breath.v * 0.02 + (a ? lerp(this.d.energy, this.d.mid, this.d.beatMotion) * 0.06 : 0);
     r.drawInstanced(this.quad, this.woods, { texture: this.leafTex, billboard: 1, sway: sway * 0.5, tint: col.tint });
     r.drawInstanced(this.quad, this.blossoms, { texture: this.blossomTex, billboard: 1, sway, tint: col.tint });
     r.drawInstanced(this.quad, this.lanterns, { texture: this.lanternTex, billboard: 1, unlit: true, tint: col.glow });
