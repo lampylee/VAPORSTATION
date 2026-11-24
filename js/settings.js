@@ -54,6 +54,8 @@ export const DEFAULTS = {
   // midi
   midiOn: false,            // reopen MIDI on load (Chrome remembers the permission)
   midiProgram: true,        // Program Change n selects setlist song n + 1
+  // output
+  output: 'single',         // 'single' | 'dual' (projector window; never reopened by itself on load)
   // ui
   debug: false,
 };

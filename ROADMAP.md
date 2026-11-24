@@ -91,8 +91,12 @@ Plus v1's Fogway, Monoliths and Relic. More can be added any time from the same 
 - [x] Chrome kiosk launch script (`kiosk.bat`: own profile, `--kiosk`, autoplay, auto-accepted input permission) + `?kiosk` mode + screen wake lock.
 - [x] Performance governor, style crash guard, WebGL context-loss recovery, audio resume / input reopen watchdog.
 - [x] Pre-show check (`?selftest` / button): per-style fps on this machine feeds the heavy list; GPU, audio, MIDI, offline, power checks.
+- [x] Projector output window + operator view on the laptop (`kiosk.bat dual`, W key, lost badge); real second-screen test still open. Design: `docs/superpowers/specs/2026-11-23-projector-output-design.md`.
 - [ ] Auto-reconnect test with the Scarlett unplug/replug; low-battery / sleep prevention checklist.
 - [ ] Profile on the actual gig laptop.
+
+## Next idea — live camera feed
+- [ ] Band on screen as palette-mapped PS1 video (in-world screens, optional big-moment layer). Parked notes: `docs/superpowers/specs/2026-11-23-camera-feed-notes.md`.
 
 ## Moonshot — PS2 mode
 - [ ] Global, crossfaded PS2 look toggle. Design and phases: `docs/superpowers/specs/2026-11-23-ps2-mode-design.md`.

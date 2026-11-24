@@ -19,19 +19,31 @@ import { ShowUI, MidiUI, EnvBrowser } from './show/ui.js';
 import { Governor } from './safety/governor.js';
 import { Watchdog } from './safety/watchdog.js';
 import { SelfTest } from './safety/selftest.js';
+import { Sink, Output, watchDpr } from './show/output.js';
+import { FrameGuard, health } from './show/output-logic.js';
+import { OperatorView } from './show/operator.js';
 
 const s = loadSettings();
 const canvas = document.getElementById('view');
 const overlay = document.getElementById('overlay');
 
-let renderer;
+let renderer, sink;
 try {
-  renderer = new PS1Renderer(canvas);
+  renderer = new PS1Renderer();   // draws off-screen; frames go to the sink
+  sink = new Sink(canvas);        // the laptop #view (single mode)
 } catch (e) {
   overlay.textContent = 'Could not start WebGL2: ' + e.message;
   overlay.hidden = false;
   throw e;
 }
+/** Size the renderer's backbuffer to the current sink. */
+function fitOutput() {
+  const z = sink.size;
+  renderer.setOutputSize(z.w, z.h, z.dpr);
+  renderer.resize();
+}
+fitOutput();
+const laptopSink = sink;
 
 const engine = new AudioEngine();
 const analyser = new Analyser();
@@ -168,6 +180,7 @@ function showAction(id, v) {
     case 'prevStyle': styles.goNext(-1); break;
     case 'nextPalette': stepPalette(1); break;
     case 'prevPalette': stepPalette(-1); break;
+    case 'output': openOutput(); break;   // opens / reopens; never closes (a stray pedal press can't kill the projector)
     default: return;
   }
   if (id === 'tempoLock' || id === 'holdLevel' || id === 'reactivity' || id === 'conductor' || id === 'dropSwitch') { showUI.refresh(); saveSettings(s); }
@@ -179,6 +192,7 @@ const showUI = new ShowUI(show, s, {
   onTap: () => showAction('tap'),
   onTempo(cmd) { if (cmd === 'clear') show.tempo.clear(); else show.tempo.nudge(cmd); showUI.update(); },
   onSetting: () => saveSettings(s),
+  onOutput: () => { if (output.state === 'open') closeOutput(); else openOutput(); },
 });
 ui.insertSectionBefore(showUI.section, 'Setlist');
 
@@ -220,7 +234,9 @@ const THUMB_AUDIO = { level: 0, bass: 0, mid: 0, high: 0, beat: false, beatPulse
 const thumbs = { pending: STYLES.map((_, i) => i), last: STYLES.map(() => -1), timer: 0, rr: 0, captureCur: false };
 function thumbFrame(dt, now) {
   thumbs.captureCur = false;
-  if (!uiVisible || bench || show.freeze || renderer.lost) return;
+  // panel hidden behind the operator view: only the queued ones (load, the "next" tile), no round robin
+  const opOnly = !uiVisible && operator.visible && thumbs.pending.length > 0;
+  if (!(uiVisible || opOnly) || bench || show.freeze || renderer.lost) return;
   thumbs.timer -= dt;
   let i = -1;
   if (thumbs.pending.length) i = thumbs.pending.shift();
@@ -337,9 +353,10 @@ function toggleFullscreen() {
 }
 document.addEventListener('fullscreenchange', () => {
   setUiVisible(!document.fullscreenElement);   // hidden by default in fullscreen
-  renderer.resize();
+  fitOutput();
 });
-addEventListener('resize', () => renderer.resize());
+addEventListener('resize', () => fitOutput());
+watchDpr(window, () => fitOutput());   // dpr-only change (window moved to a screen with another scale)
 
 addEventListener('keydown', (e) => {
   if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -367,6 +384,7 @@ addEventListener('keydown', (e) => {
   else if (k === 't') { if (e.shiftKey) show.tempo.clear(); else if (!e.repeat) showAction('tap'); }
   else if (k === 'l') { showAction('tempoLock'); }
   else if (k === 'r') showAction('reactivity');   // Gentle → Medium → Punchy
+  else if (k === 'w') showAction('output');       // projector window: open / reopen
   else handled = false;
   if (handled) {
     e.preventDefault();
@@ -375,12 +393,111 @@ addEventListener('keydown', (e) => {
   }
 });
 
+// ---------------- projector output ----------------
+// Optional second window with only the picture (output.html). Both windows' rAF drive frame();
+// the guard runs one tick per display frame, so either window alone keeps the show running.
+const guard = new FrameGuard();
+const badge = document.createElement('div');
+badge.id = 'outputBadge';
+badge.textContent = 'projector lost · W to reopen';
+document.body.appendChild(badge);
+let badgeTimer = 0;
+const output = new Output({
+  laptopSink,
+  onSinkChange(next) { sink = next; fitOutput(); },
+  onState(st) {
+    showUI.setOutput(st);
+    clearTimeout(badgeTimer);
+    badge.classList.toggle('show', st === 'lost');
+    if (st === 'lost') badgeTimer = setTimeout(() => badge.classList.remove('show'), 5000);
+    if (st === 'open') { guard.prefer('projector'); if (s.output !== 'dual') { s.output = 'dual'; saveSettings(s); } }
+    else guard.prefer('laptop');
+    syncOperator();
+  },
+  onFrame(t, src, first) {
+    if (first) guard.prefer(src);   // the projector's display rate drives while it's alive
+    if (guard.tick(t, src)) frame(t);
+  },
+  onStatus: (text, err) => ui.setStatus(text, err),
+});
+// the projector page calls these on load, and again after this page reloads (no click needed)
+window.__vaporOutputAttach = (w) => output.attach(w);
+window.__vaporOutputGone = (w) => output.gone(w);
+function openOutput() { output.open().catch((e) => ui.setStatus(`Could not open the projector window: ${e.message}`, true)); }
+function closeOutput() { output.close(); s.output = 'single'; saveSettings(s); syncOperator(); }
+
+// ---------------- operator view ----------------
+// Covers the laptop while the projector window shows the picture (the laptop #view then holds a
+// stale frame). Also, with dual mode saved and no window yet, one big "Open projector output"
+// button (a popup needs a click). After a loss it hides: the laptop shows the live picture.
+const operator = new OperatorView(document.getElementById('operator'), {
+  onAction(id) { showAction(id); opTimer = 1; },
+  onNextSong() { if (setlist.active) stepSong(1); else showAction('nextStyle'); opTimer = 1; },
+  onOpenOutput: () => openOutput(),
+  onSingle() { s.output = 'single'; saveSettings(s); syncOperator(); },   // rehearsal without a projector
+});
+let opTimer = 1, opThumb = -1, inputOkAt = performance.now();   // grace while the input opens
+function syncOperator() {
+  const want = output.state === 'open' ||
+    (output.state === 'none' && s.output === 'dual' && !params.has('bench') && !params.has('selftest'));
+  if (want && !operator.visible) { setUiVisible(false); opTimer = 1; }   // H brings the panel back over it
+  operator.visible = want;
+}
+const paletteName = (id) => (id ? store.get(id)?.name || 'missing palette' : 'own palette');
+/** What a footswitch press would bring: the cued / next song, or the next environment (setlists off). */
+function nextInfo() {
+  const thumb = (i) => (i >= 0 ? envBrowser.ctx(i).canvas : null);
+  if (setlist.active) {
+    const songs = setlist.list.songs, cued = setlist.cued >= 0;
+    const i = cued ? setlist.cued : setlist.pos + 1;
+    if (i >= songs.length) return { label: 'end of setlist', envName: '', paletteName: '', thumb: null, env: -1 };
+    const song = songs[i], pool = songPool(song);
+    const env = pool.length ? pool[0] : styles.target;
+    const pal = song.palette === null ? paletteName(s.paletteId) : paletteName(song.palette);
+    return { label: `${i + 1}/${songs.length}  ${song.label || 'untitled'}`, cued, envName: styles.name(env), paletteName: pal, thumb: thumb(env), env };
+  }
+  const up = styles.upcoming;
+  return { label: '', envName: styles.name(up), paletteName: paletteName(s.paletteId), thumb: thumb(up), env: up };
+}
+function currentHealth() {
+  return health({
+    wantLive: watchdog.wantLive(), inputSignal: performance.now() - inputOkAt < 3000, ctxLost: renderer.lost,
+    projector: output.state, governorTier: governor.tier, broken: styles.broken.size, audioSuspended: engine.needsResume,
+  });
+}
+/** ~10 Hz: the operator view and the panel's health line. */
+function updateOperator(audio, k, playing) {
+  const hl = currentHealth();
+  if (uiVisible) showUI.setHealth(hl);
+  if (!operator.visible) return;
+  const next = nextInfo();
+  // panel hidden: thumbnails don't refresh by themselves; render the "next" one when it changes
+  if (next.env >= 0 && next.env !== opThumb) {
+    opThumb = next.env;
+    if (!uiVisible && !thumbs.pending.includes(next.env)) thumbs.pending.push(next.env);
+  }
+  const songs = setlist.active ? setlist.list.songs : null;
+  operator.update({
+    songLine: songs ? `${setlist.pos + 1}/${songs.length}  ${setlist.song.label || 'untitled'}` : styles.name(styles.target),
+    playing,
+    section: s.conductor === false ? null : audio.section || '',
+    intensity: k,
+    next,
+    nextAction: setlist.active ? 'song' : 'world',
+    meterDb: audio.rmsDbSmooth, thresholdDb: s.thresholdDb, inputOn: state.playing,
+    health: hl,
+    buttons: { hold: show.hold, freeze: show.freeze, blackout: show.blackout },
+    outputState: output.state, dual: s.output === 'dual',
+  });
+}
+
 // ---------------- gig safety ----------------
 const governor = new Governor(renderer, styles, styleKey);
 const watchdog = new Watchdog({
-  canvas, renderer, styles, engine, governor,
+  canvas: renderer.canvas, renderer, styles, engine, governor,
   wantLive: () => liveWanted,
   reopenLive: () => startLive(),
+  onCover: (on, fog) => output.cover(on, fog),
 });
 try {
   const why = sessionStorage.getItem('vaporstation.recovered');
@@ -392,7 +509,7 @@ const params = new URLSearchParams(location.search);
 if ('serviceWorker' in navigator && location.protocol.startsWith('http') && !params.has('bench') && !params.has('nosw')) {
   navigator.serviceWorker.register('sw.js').then(async () => {
     const reg = await navigator.serviceWorker.ready;
-    const urls = [location.pathname, 'manifest.webmanifest', 'icon.svg', 'demo/demo.wav',
+    const urls = [location.pathname, 'manifest.webmanifest', 'icon.svg', 'demo/demo.wav', 'output.html', 'js/show/output-page.js', 'js/show/output-logic.js',
       ...performance.getEntriesByType('resource').map((e) => e.name)];
     reg.active?.postMessage({ type: 'warm', urls: [...new Set(urls)] });
   }).catch((e) => console.warn('[offline] service worker not registered', e));
@@ -403,6 +520,14 @@ const kiosk = params.has('kiosk');
 if (kiosk) {
   setUiVisible(false);
   document.body.classList.add('kiosk');
+  // Kiosk decides the output mode from the URL on every launch (saveSettings may persist it with other settings, so a
+  // saved 'dual' must not leak into a plain kiosk.bat start: that would show the operator view with no picture).
+  // kiosk.bat dual: operator view + "Open projector output" up front.
+  s.output = params.has('dual') ? 'dual' : 'single';
+  syncOperator();
+  // kiosk.bat dual allows popups: open the projector by itself unless an existing one reattached meanwhile
+  // (never window.open before that wait: it would reload the live projector page). Blocked -> the button stays.
+  if (params.has('dual')) setTimeout(() => { if (output.state === 'none') openOutput(); }, 1500);
   if (!(s.deviceLabel || s.deviceId)) { liveWanted = true; refreshDevices().then(startLive); }   // otherwise the saved device opens below
 }
 
@@ -441,9 +566,14 @@ function startSelfTest() {
   setUiVisible(false);
 }
 if (params.has('selftest') && !bench) startSelfTest();
+syncOperator();
 let lastIn = null;   // last good analysis result, reused if a frame's analysis throws
 function frame(now) {
-  requestAnimationFrame(frame);
+  try {
+    output.checkAlive();   // projector window closed / its page replaced -> back to the laptop before drawing
+    // backstop for the dpr watchers (their change event doesn't always come, e.g. under emulation)
+    if ((sink.canvas.ownerDocument.defaultView?.devicePixelRatio || 1) !== renderer.out.dpr) fitOutput();
+  } catch (e) { frameError('output', e); }
   const rawMs = now - last;
   const dt = Math.min(0.1, Math.max(0.0001, rawMs / 1000));
   last = now;
@@ -492,11 +622,21 @@ function frame(now) {
     if (!renderer.lost) {
       styles.render();
       renderer.present();
-      if (thumbs.captureCur && !P.fade && P.flash < 0.01) renderer.snapshot(envBrowser.ctx(styles.cur));
+      // the thumbnail must never cost the real frame
+      if (thumbs.captureCur && !P.fade && P.flash < 0.01) try { renderer.snapshot(envBrowser.ctx(styles.cur)); } catch (e) { frameError('thumbnail', e); }
+      // operator preview: same task, before takeFrame; it must never cost the real frame either
+      if (operator.showsPreview) try { operator.drawPreview(renderer.canvas, renderer.shown, renderer.canvas.height); } catch (e) { frameError('preview', e); }
+      const bmp = renderer.takeFrame();
+      sink.show(bmp);
+      if (bmp && output.state === 'open') output.shown(renderer.fogColor);
     }
   } catch (e) { frameError('render', e); }
   markEnvs();
   if (uiVisible) showUI.update();
+  // health: red "no input signal" only when the input is gone (not open / reopening / dead stream) for 3 s;
+  // quiet passages, gaps between songs and silent line inputs raise nothing
+  if (!watchdog.inputGone) inputOkAt = performance.now();
+  if ((opTimer += dt) >= 0.1) { opTimer = 0; try { updateOperator(audio, k, playing); } catch (e) { frameError('operator', e); } }
   if (bench && !bench.done) {
     bench.record(dt, performance.now() - cpuStart);
     selftest?.tick(dt);
@@ -520,7 +660,12 @@ function frame(now) {
     });
   }
 }
-requestAnimationFrame(frame);
+function laptopLoop(now) {
+  requestAnimationFrame(laptopLoop);
+  if (guard.tick(now, 'laptop')) frame(now);
+}
+requestAnimationFrame(laptopLoop);
 
 // handy for poking at things from the console
-window.viz = { s, engine, analyser, state, conductor, styles, renderer, store, selectPalette, paletteUI, setlists, setlist, setlistUI, show, showUI, midi, midiUI, envBrowser, showAction, governor, watchdog };
+window.viz = { s, engine, analyser, state, conductor, styles, renderer, get sink() { return sink; }, output, store, selectPalette, paletteUI, setlists, setlist, setlistUI, show, showUI, midi, midiUI, envBrowser, showAction, governor, watchdog, operator,
+  frame };   // frame(now): one tick by hand (the Claude pane is often hidden, so rAF never fires)

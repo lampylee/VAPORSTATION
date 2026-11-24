@@ -34,6 +34,20 @@ Chrome (or Edge) fullscreen in its own profile, with audio running without a cli
 automatically (that profile only), no panel and no cursor. **H** shows the panel, **Alt+F4** quits. Open
 `http://localhost:8080/?kiosk` in any browser for the same mode without the launcher.
 
+**With a projector (Windows):** double-click `kiosk.bat dual`. The laptop shows the **operator view** (what is on the
+projector, state, input, next up, big Hold / Freeze / Blackout / Big moment / Next buttons) and the cursor stays visible.
+The projector window opens by itself about 1.5 s after load (if it is blocked, press **Open projector output**; here,
+with pop-ups allowed in this profile, **W** or the MIDI `output` action also open it). It should open on the other
+screen (this profile has the window-management permission pre-granted); if it doesn't, drag it over. Then **click the
+projector window once**: Chrome only allows fullscreen from a click inside that window. The projector shows only the
+picture; "Click to go fullscreen" and the cursor are on it until you do. A small note "projector lost · W to reopen" in
+the laptop's top right corner (5 s, and the operator view's status line) means the window or screen went away: the
+picture is back on the laptop, press **W** to reopen. Reloading the laptop page reconnects the
+projector by itself. W only opens or reopens; the Show card button turns the projector off again. Plain `kiosk.bat`
+is unchanged (one screen). Outside the launcher, in a normal Chrome window: open the app, use the Show card's **Projector output** button or **W**
+(MIDI can't open a pop-up there) and allow window management once.
+Design: `docs/superpowers/specs/2026-11-23-projector-output-design.md`.
+
 **Offline / safety:** after the first visit a service worker caches the whole app (including the demo track), so a
 reload still works if the server window is closed, or with no network at all. The screen is kept awake in fullscreen
 and kiosk. If the GPU driver resets, the picture fades to fog and comes back by itself. If an environment crashes, it

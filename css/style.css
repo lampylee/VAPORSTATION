@@ -116,6 +116,12 @@ button.danger:hover { border-color: var(--hot); color: var(--hot); }
 .seg button.on { background: var(--acc); color: var(--acc-ink); }
 .seg.seg3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .tempo { display: flex; gap: 6px; }
+.output-btn { height: 34px; display: flex; align-items: center; gap: 8px; padding: 0 10px; }
+.output-btn .st { margin-left: auto; color: var(--dim); }
+.output-btn.on { border-color: var(--acc); }
+.output-btn.on .st { color: var(--acc); }
+.output-btn.lost { border-color: var(--hot); }
+.output-btn.lost .st { color: var(--hot); }
 .tap { flex: 1; height: 34px; display: flex; align-items: center; gap: 8px; padding: 0 10px; text-align: left; }
 .tap .hint-key { margin-left: auto; color: var(--dim); font-size: 11px; }
 .tap .dot { width: 8px; height: 8px; background: var(--acc); flex: none; }
@@ -222,6 +228,14 @@ input[type=color] { width: 100%; height: 26px; padding: 0; border: 1px solid var
 .chip { padding: 1px 6px; font-size: 11px; }
 .chip:hover { border-color: var(--hot); color: var(--hot); }
 
+/* projector lost: small corner note on the laptop picture, 5 s (often duplicated onto the projector) */
+#outputBadge {
+  position: fixed; top: 8px; right: 8px; z-index: 6; pointer-events: none; padding: 4px 8px;
+  background: rgba(27, 26, 36, 0.85); border: 1px solid var(--hot); color: var(--hot); font-size: 11px;
+  opacity: 0; transition: opacity 0.6s linear;
+}
+#outputBadge.show { opacity: 1; transition: opacity 0.2s linear; }
+
 /* kiosk (?kiosk): no cursor over the show */
 body.kiosk.ui-hidden, body.kiosk.ui-hidden * { cursor: none; }   /* H shows the panel and the cursor */
 
@@ -238,3 +252,75 @@ body.kiosk.ui-hidden, body.kiosk.ui-hidden * { cursor: none; }   /* H shows the 
 .selftest table { width: 100%; border-collapse: collapse; margin-top: 6px; }
 .selftest th, .selftest td { text-align: left; padding: 2px 6px; border-bottom: 1px solid var(--line); color: var(--dim); }
 .selftest tr.slow td { color: var(--hot); }
+
+/* ---------- operator view (laptop while the projector window shows the picture) ----------
+   Read from ~2 m in a glance: large type, few numbers, colour only for trouble. Opaque: the laptop
+   #view under it holds a stale frame while the projector is open. */
+#operator {
+  --op-amber: #f0c060; --op-red: #ff6b78;
+  position: fixed; inset: 0; background: #0e0d14; color: var(--text); display: flex;
+  font-size: clamp(14px, 2.2vh, 26px); padding: clamp(12px, 2.4vh, 32px);
+  z-index: 6;   /* above the watchdog's fog cover (#glcover, 5): the red "graphics reset" stays readable */
+}
+#operator[hidden] { display: none; }
+/* while it shows, the panel (H), debug (D) and overlay join it at 6 and win by DOM order (single mode: unchanged) */
+body:has(> #operator:not([hidden])) :is(#panel, #debug, #overlay) { z-index: 6; }
+#operator, #operator * { cursor: default; }   /* also in kiosk: the operator taps here */
+#operator button { cursor: pointer; }
+.op-main { flex: 1; min-width: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: clamp(10px, 2.4vh, 32px); }
+.op-main[hidden], .op-open[hidden] { display: none; }
+.op-label { color: var(--mid); font-size: 1.1em; letter-spacing: 3px; }
+
+.op-top { display: flex; align-items: center; gap: 0.8em; font-size: clamp(24px, 5vh, 60px); line-height: 1.15; }
+.op-songline { flex: 1; min-width: 0; display: flex; gap: 0.5em; align-items: baseline; }
+.op-play { color: var(--text); flex: none; }
+.op-play.idle { color: var(--dim); }
+.op-song { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.op-secline { flex: none; display: flex; align-items: center; gap: 0.5em; }
+.op-section { color: var(--mid); letter-spacing: 2px; font-size: 0.8em; }
+.op-kbar { width: clamp(120px, 16vw, 300px); height: 0.6em; background: var(--sunk); border: 1px solid var(--line2); }
+.op-kbar i { display: block; height: 100%; width: 0; background: var(--text); }
+
+.op-mid { display: grid; grid-template-columns: 38fr 32fr 30fr; gap: clamp(12px, 2.4vw, 40px); min-height: 0; }
+.op-prevbox { min-width: 0; min-height: 0; }
+.op-preview { display: block; width: 100%; height: 100%; object-fit: contain; object-position: center top; image-rendering: pixelated; }
+.op-next { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 0.4em; }
+.op-nsong { font-size: 1.7em; font-weight: 600; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: none; }
+.op-nsong.cued { color: var(--acc); }
+.op-nthumb { flex: 0 1 auto; min-height: 0; width: 100%; max-width: 100%; aspect-ratio: 4 / 3; object-fit: contain; object-position: left top;
+  image-rendering: pixelated; background: #000; align-self: flex-start; }
+.op-nsub { color: var(--mid); font-size: 1.4em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: none; }
+.op-status { min-width: 0; display: flex; flex-direction: column; gap: 0.4em; }
+.op-meter { position: relative; height: clamp(18px, 3.4vh, 40px); background: var(--sunk); border: 1px solid var(--line2); flex: none; }
+.op-meter .fill { display: block; height: 100%; width: 0; background: var(--dim); }
+.op-meter .fill.on { background: var(--text); }
+.op-meter .thresh { position: absolute; top: -4px; bottom: -4px; width: 3px; background: var(--mid); }
+.op-health { margin-top: auto; display: flex; align-items: center; gap: 0.5em; font-size: clamp(26px, 5vh, 60px); font-weight: 600; line-height: 1.1; }
+.op-hdot { flex: none; width: 0.8em; height: 0.8em; background: var(--acc); }
+.op-htext { min-width: 0; overflow-wrap: anywhere; }
+.op-health[data-level=amber] .op-hdot { background: var(--op-amber); }
+.op-health[data-level=amber] .op-htext { color: var(--op-amber); }
+.op-health[data-level=red] .op-hdot { background: var(--op-red); }
+.op-health[data-level=red] .op-htext { color: var(--op-red); }
+
+.op-btns { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr 1.4fr; gap: clamp(8px, 1.2vw, 20px); }
+.op-btn { height: clamp(72px, 13vh, 150px); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.35em;
+  font-size: clamp(16px, 2.6vh, 30px); padding: 0 6px; background: var(--btn); border: 2px solid var(--line2); }
+.op-btn:hover { border-color: var(--mid); }
+.op-btn.on { background: var(--acc); border-color: var(--acc); color: var(--acc-ink); font-weight: 600; }
+.op-blackout.on { background: var(--hot); border-color: var(--hot); color: var(--hot-ink); }
+.op-btn .ic { width: 1.4em; height: 1.4em; }
+
+.op-open { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.2em; }
+.op-openbtn { font-size: clamp(24px, 5vh, 56px); padding: 0.8em 1.6em; min-height: 120px; border: 2px solid var(--acc); color: var(--acc); background: var(--btn); }
+.op-openbtn:hover { background: #1f2c2f; }
+.op-hint { color: var(--mid); margin: 0; text-align: center; font-size: 1.1em; }
+.op-single { margin-top: 2em; min-height: 64px; padding: 0 1.5em; font-size: 1em; color: var(--dim); background: none; }
+
+/* small health line in the Show card (the operator view's light, for when the panel is up) */
+.health-line { display: flex; align-items: center; gap: 6px; color: var(--dim); }
+.health-line i { width: 8px; height: 8px; flex: none; background: var(--acc); }
+.health-line[data-level=amber] { color: #f0c060; }
+.health-line[data-level=amber] i { background: #f0c060; }
+.health-line[data-level=red] { color: #ff6b78; }
+.health-line[data-level=red] i { background: #ff6b78; }

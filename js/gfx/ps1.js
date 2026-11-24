@@ -329,8 +329,13 @@ const NO_FADE = [0, 0];
 const NO_WAVE = [0, 0.15, 1];
 
 export class PS1Renderer {
-  constructor(canvas) {
-    this.canvas = canvas;
+  /**
+   * Renders into an OffscreenCanvas it owns. Frames leave via takeFrame() (after present())
+   * and go to a Sink (js/show/output.js). The output size comes from setOutputSize().
+   */
+  constructor() {
+    const canvas = this.canvas = new OffscreenCanvas(1, 1);
+    this.out = { w: 1, h: 1, dpr: 1 };   // current sink size: CSS px + its devicePixelRatio
     const gl = canvas.getContext('webgl2', {
       antialias: false, alpha: false, depth: false, stencil: false,
       premultipliedAlpha: false, preserveDrawingBuffer: false, powerPreference: 'high-performance',
@@ -504,11 +509,16 @@ export class PS1Renderer {
     this.targets = {};
   }
 
+  /** The current sink's size: CSS pixels and its devicePixelRatio. Call resize() after. */
+  setOutputSize(cssW, cssH, dpr) {
+    this.out.w = cssW; this.out.h = cssH; this.out.dpr = dpr || 1;
+  }
+
   /** Call on window resize and whenever resolution settings change. */
   resize() {
-    const dpr = Math.min(window.devicePixelRatio || 1, this.params.maxDpr || Infinity);
-    const cw = Math.max(1, Math.round(this.canvas.clientWidth * dpr));
-    const ch = Math.max(1, Math.round(this.canvas.clientHeight * dpr));
+    const dpr = Math.min(this.out.dpr || 1, this.params.maxDpr || Infinity);
+    const cw = Math.max(1, Math.round(this.out.w * dpr));
+    const ch = Math.max(1, Math.round(this.out.h * dpr));
     if (this.canvas.width !== cw || this.canvas.height !== ch) { this.canvas.width = cw; this.canvas.height = ch; }
     let res = RESOLUTIONS[this.params.resolution];
     if (res === undefined) res = RESOLUTIONS['320x240'];
@@ -759,13 +769,20 @@ export class PS1Renderer {
 
   /**
    * Copy the frame just presented into a 2D canvas (thumbnails). Must be called in
-   * the same task as present(), before anything else draws to the canvas.
+   * the same task as present(), before takeFrame() and before anything else draws.
    */
   snapshot(ctx) {
     const [x, y, w, h] = this.shown || [0, 0, this.canvas.width, this.canvas.height];
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(this.canvas, x, this.canvas.height - y - h, w, h, 0, 0, ctx.canvas.width, ctx.canvas.height);
   }
+
+  /**
+   * The frame just presented, for a Sink. Call after present() / snapshot(); never while lost.
+   * Returns null in the gap between a context loss and its (async) webglcontextlost event,
+   * where transferToImageBitmap would throw.
+   */
+  takeFrame() { return this.gl.isContextLost() ? null : this.canvas.transferToImageBitmap(); }
 
   resetStats() { this.stats.draws = 0; this.stats.tris = 0; }
 }
