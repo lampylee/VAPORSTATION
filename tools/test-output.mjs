@@ -71,12 +71,21 @@ for (const off of [3, 8, 12]) {
     n++;
   }
   check('prefer(projector): laptop adds nothing', lap === 0, `laptop=${lap}`);
-  check('prefer(projector): projector accepted at its rate', proj >= n - 2, `proj=${proj}/${n}`);
+  check('prefer(projector): projector accepted at its rate', proj === n, `proj=${proj}/${n}`);
   let first = -1, after = 0;
   for (let i = 0; i < 120; i++, nextLap += F) {
     if (g.tick(nextLap, 'laptop')) { after++; if (first < 0) first = i; }
   }
   check('projector stops -> laptop takes over', first >= 0 && first <= 1 && after >= 118, `first=${first} accepts=${after}`);
+}
+// (g) single source: a 100 ms hitch, then steady 60 Hz -> every steady tick accepted
+{
+  const g = new FrameGuard();
+  let t = 1000, n = 0;
+  for (let i = 0; i < 60; i++, t += F) g.tick(t, 'laptop');
+  t += 100;
+  for (let i = 0; i < 60; i++, t += F) if (g.tick(t, 'laptop')) n++;
+  check('hitch: every steady tick after a 100 ms gap accepted', n === 60, `accepts=${n}/60`);
 }
 // (f) prefer() on a source that never ticks: the other source is not locked out
 {

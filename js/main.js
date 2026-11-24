@@ -491,9 +491,11 @@ function startSelfTest() {
 if (params.has('selftest') && !bench) startSelfTest();
 let lastIn = null;   // last good analysis result, reused if a frame's analysis throws
 function frame(now) {
-  output.checkAlive();   // projector window closed -> back to the laptop before drawing
-  // backstop for the dpr watchers (their change event doesn't always come, e.g. under emulation)
-  if ((sink.canvas.ownerDocument.defaultView?.devicePixelRatio || 1) !== renderer.out.dpr) fitOutput();
+  try {
+    output.checkAlive();   // projector window closed / its page replaced -> back to the laptop before drawing
+    // backstop for the dpr watchers (their change event doesn't always come, e.g. under emulation)
+    if ((sink.canvas.ownerDocument.defaultView?.devicePixelRatio || 1) !== renderer.out.dpr) fitOutput();
+  } catch (e) { frameError('output', e); }
   const rawMs = now - last;
   const dt = Math.min(0.1, Math.max(0.0001, rawMs / 1000));
   last = now;

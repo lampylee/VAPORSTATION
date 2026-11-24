@@ -60,11 +60,8 @@ function attach() {
   try { attached = !!window.opener && !window.opener.closed && !!window.opener.__vaporOutputAttach?.(window); } catch (e) { attached = false; }
 }
 
-let n = 0;
-setInterval(() => {
-  update();
-  if (++n % 3 === 0 && (!attached || performance.now() - out.lastFrameAt > RECONNECT_MS)) attach();
-}, 100);
+setInterval(update, 100);
+setInterval(() => { if (!attached || performance.now() - out.lastFrameAt > RECONNECT_MS) attach(); }, 250);
 attach();
 update();
 

@@ -20,7 +20,7 @@ export class Sink {
   /** CSS size of the canvas and its window's devicePixelRatio (feeds renderer.setOutputSize). */
   get size() {
     const c = this.canvas;
-    return { w: c.clientWidth, h: c.clientHeight, dpr: c.ownerDocument.defaultView.devicePixelRatio || 1 };
+    return { w: c.clientWidth, h: c.clientHeight, dpr: c.ownerDocument.defaultView?.devicePixelRatio || 1 };
   }
 }
 
@@ -160,9 +160,15 @@ export class Output {
     try { this._win.__vaporOutput.cover(on, this._coverFog); } catch (e) { /* window going */ }
   }
 
-  /** Per frame: a closed window is lost (cheap). */
+  /** Per frame (cheap): a closed window, or one whose page was replaced without telling us, is lost. */
   checkAlive() {
-    if (this._state === 'open' && (!this._win || this._win.closed)) this._lose('window closed');
+    if (this._state !== 'open') return;
+    const w = this._win;
+    let dead = !w || w.closed;
+    if (!dead) {
+      try { dead = !this._sink.canvas.ownerDocument.defaultView || w.__vaporOutput?.canvas !== this._sink.canvas; } catch (e) { dead = true; }
+    }
+    if (dead) this._lose(w && !w.closed ? 'page replaced' : 'window closed');
   }
 
   /** The projector page reports pagehide. */

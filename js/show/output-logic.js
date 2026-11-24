@@ -11,10 +11,13 @@ export class FrameGuard {
     this._src = new Map();      // source -> { interval, prev }
     this._pref = null;
     this._lastAccepted = -Infinity;
+    this._lastSrc = null;       // source accepted last
   }
   /** Make `source` the preferred one now (the projector window on attach, so its rate drives). */
   prefer(source) {
-    if (!this._src.has(source)) this._src.set(source, { interval: 16.7, prev: undefined });
+    const st = this._src.get(source);
+    if (!st) this._src.set(source, { interval: 16.7, prev: undefined });
+    else st.prev = undefined;   // a reattached window must not start from a stale gap
     this._pref = source;
   }
   get interval() { return this._pref ? this._src.get(this._pref).interval : 16.7; }
@@ -28,12 +31,16 @@ export class FrameGuard {
     st.prev = now;
     let ok;
     if (this._pref === null) ok = true;
+    // the source accepted last keeps going: one rAF chain fires at most once per display frame,
+    // so a normal frame right after a hitch (GC, hidden tab) is never dropped
+    else if (source === this._pref && source === this._lastSrc) ok = true;
+    // newly preferred (prefer()): don't double up with the frame the other source just ran
     else if (source === this._pref) ok = now - this._lastAccepted >= 0.6 * st.interval;
     else {
       const p = this._src.get(this._pref);
       ok = p.prev === undefined || now - p.prev > 1.5 * p.interval;   // preferred never ticked: don't wait on it
     }
-    if (ok) { this._pref = source; this._lastAccepted = now; }
+    if (ok) { this._pref = source; this._lastAccepted = now; this._lastSrc = source; }
     return ok;
   }
 }
