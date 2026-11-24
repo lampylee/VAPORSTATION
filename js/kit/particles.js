@@ -7,6 +7,7 @@
 //
 // Kit v4: overrides.texture = your own indexed generator (pages, confetti, feathers),
 // and gust(strength) = a wind burst that whips the field and eases off (beats, bass hits).
+import { clamp } from '../gfx/math.js';
 import { R } from '../palette/palette.js';
 import { GeoBuilder } from '../gfx/geometry.js';
 import { dot, streak, glow, petal, leaf, twinkle, mistBank } from './sprites.js';
@@ -85,7 +86,7 @@ export class Particles {
     this.g *= Math.exp(-dt / (this.gDecay || 0.9));
     const g = this.g, gs = speed * (1 + g), gw = g * 2.5;
     wind = [wind[0] + this.gDir[0] * gw, wind[1] + this.gDir[1] * gw];
-    this.visible = Math.round(n * Math.max(0, Math.min(1, amount)) * (this.r?.quality ?? 1));
+    this.visible = Math.round(n * Math.max(0, Math.min(1, amount * clamp(this.r?.params?.weather ?? 1, 0, 1.5))) * (this.r?.quality ?? 1));
     const cy = center[1] + (p.yOffset || 0);
     for (let i = 0; i < n; i++) {
       const o = i * 3, ph = this.phase[i];

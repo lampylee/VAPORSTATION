@@ -22,6 +22,7 @@ import { SelfTest } from './safety/selftest.js';
 import { Sink, Output, watchDpr } from './show/output.js';
 import { FrameGuard, health } from './show/output-logic.js';
 import { OperatorView } from './show/operator.js';
+import { clamp } from './gfx/math.js';
 
 const s = loadSettings();
 const canvas = document.getElementById('view');
@@ -252,15 +253,15 @@ function thumbFrame(dt, now) {
   const st = styles.styles[i];
   const steps = thumbs.last[i] < 0 ? 20 : Math.min(10, Math.max(1, Math.round((now - thumbs.last[i]) / 50)));
   thumbs.last[i] = now;
-  const P = renderer.params, saved = [P.flash, P.fade, P.jitterBoost, P.fogScale];
+  const P = renderer.params, saved = [P.flash, P.fade, P.jitterBoost, P.fogScale, P.weather];
   try {
     for (let n = 0; n < steps; n++) st.update(THUMB_AUDIO, 0, 0.05);
-    P.flash = 0; P.fade = 0; P.jitterBoost = 0; P.fogScale = 1;
+    P.flash = 0; P.fade = 0; P.jitterBoost = 0; P.fogScale = 1; P.weather = 1;
     renderer.beginScene('A'); renderer.setPalette(st.pal); st.render(renderer);
     renderer.composite(0); renderer.present();
     renderer.snapshot(envBrowser.ctx(i));
   } catch (e) { styles._fail(i, e, 'thumbnail'); }
-  [P.flash, P.fade, P.jitterBoost, P.fogScale] = saved;
+  [P.flash, P.fade, P.jitterBoost, P.fogScale, P.weather] = saved;
 }
 
 // Drop anything on the window: images -> palette from art, palette files -> import, audio -> play.
@@ -610,7 +611,8 @@ function frame(now) {
   if (!show.freeze) {
     P.time = (P.time || 0) + dt;   // stops while frozen (vertex wobble holds too)
     P.jitterBoost = s.audioPushesLook ? audio.beatPulse * k * show.jitterPush : 0;   // 0 at Gentle reactivity
-    P.fogScale = s.audioPushesLook ? 1 + audio.level * k * 0.25 : 1;
+    P.fogScale = (s.audioPushesLook ? 1 + audio.level * k * 0.25 : 1) * clamp(audio.shape?.fog ?? 1, 0.75, 1.25);
+    P.weather = audio.shape?.weather ?? 1;
   }
   P.fade = show.fade;
   P.flash = show.flashLevel(s);
