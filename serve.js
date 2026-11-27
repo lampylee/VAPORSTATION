@@ -25,11 +25,20 @@ const TYPES = {
   '.ogg': 'audio/ogg',
 };
 
+// Only answer requests addressed to this machine by name: blocks DNS-rebinding pages from reading files.
+const LOCAL_HOST = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
+
 http.createServer((req, res) => {
-  let urlPath = decodeURIComponent(req.url.split('?')[0]);
+  if (!LOCAL_HOST.test(req.headers.host || '')) { res.writeHead(403); return res.end(); }
+  let urlPath;
+  try { urlPath = decodeURIComponent(req.url.split('?')[0]); } catch (e) { res.writeHead(400); return res.end(); }   // malformed %-escape: never crash the server
   if (urlPath.endsWith('/')) urlPath += 'index.html';
-  const file = path.normalize(path.join(ROOT, urlPath));
-  if (!file.startsWith(ROOT)) { res.writeHead(403); return res.end(); }
+  const file = path.resolve(ROOT, '.' + path.posix.normalize('/' + urlPath));
+  // inside ROOT only (not a sibling folder that shares its name prefix), and no dot folders / files (.git, .claude)
+  const rel = path.relative(ROOT, file);
+  if (!rel || rel.startsWith('..') || path.isAbsolute(rel) || rel.split(path.sep).some((p) => p.startsWith('.'))) {
+    res.writeHead(404); return res.end('Not found');
+  }
   fs.readFile(file, (err, data) => {
     if (err) { res.writeHead(404); return res.end('Not found'); }
     res.writeHead(200, {
