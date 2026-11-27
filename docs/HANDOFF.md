@@ -1,4 +1,4 @@
-# Handoff — state as of 2026-11-24
+# Handoff — state as of 2026-11-27
 
 Read this first when picking the project back up. Also read `CLAUDE.md` (rules), `ROADMAP.md` (plan)
 and `docs/ENVIRONMENT-GUIDE.md` (how environments are built, full kit reference).
@@ -6,7 +6,7 @@ Older detail (per-wave concept tables, the original kit backlog) is in git histo
 
 ## Where things stand
 
-All work is committed on `main`, **local only: no git remote yet**, nothing pushed.
+All work is committed on `main` and pushed to `origin` (`github.com/lampylee/VAPORSTATION`).
 
 | Phase | Status |
 |---|---|
@@ -68,16 +68,15 @@ Number keys reach 0–9; the rest via N / Shift+N, the dropdown, auto-switch, a 
 
 1. **Gig-safety layer (Phase 5)**: built (governor, watchdog, offline PWA, kiosk launcher, pre-show check; see the last
    section). Left: try it on the gig laptop. Design: `docs/superpowers/specs/2026-11-22-gig-safety-design.md`.
-2. **Add a GitHub remote and push** (the user has to create the repo; everything lives on one disk until then).
-3. Run the "not verified" checks above on the gig laptop, plus the projector ones (see "Landed (2026-11-23): projector output").
-4. **The Conductor** (2026-11-23): built. Intensity follows the song's shape, sections, auto tempo, optional world change on
+2. Run the "not verified" checks above on the gig laptop, plus the projector ones (see "Landed (2026-11-23): projector output").
+3. **The Conductor** (2026-11-23): built. Intensity follows the song's shape, sections, auto tempo, optional world change on
    drops (off). Left: try it with real songs in a visible window (thresholds were tuned on synthetic songs and the demo track).
    Design + build notes: `docs/superpowers/specs/2026-11-23-conductor-design.md`. Test: `node tools/test-conductor.mjs`.
-5. **Song shape** (2026-11-24): landed on branch `claude/song-shape`, **not merged**. See "Landed (2026-11-24): song shape" below for status, what was and wasn't verified, and the open items for you to decide or check.
-6. Moonshot, not scheduled: a crossfaded **PS2 mode** toggle (640×448, perspective-correct, filtered textures, feedback
+4. **Song shape** (2026-11-24): merged into `main`. Left: try it with real songs in a visible window. See "Landed (2026-11-24): song shape" below for status, what was and wasn't verified, and the open items for you to decide or check.
+5. Moonshot, not scheduled: a crossfaded **PS2 mode** toggle (640×448, perspective-correct, filtered textures, feedback
    haze, ~100k-tri budget, kit detail scaling). Needs the user's sign-off on a scoped hard-rule exemption first.
    Design: `docs/superpowers/specs/2026-11-23-ps2-mode-design.md`.
-7. Parked idea, next after the projector output: a **live camera feed** (band as palette-mapped PS1 video on in-world
+6. Parked idea, next after the projector output: a **live camera feed** (band as palette-mapped PS1 video on in-world
    screens). Not designed yet; notes and open questions: `docs/superpowers/specs/2026-11-23-camera-feed-notes.md`.
 
 ## Systems in brief
@@ -115,7 +114,7 @@ Number keys reach 0–9; the rest via N / Shift+N, the dropdown, auto-switch, a 
 
 ## Landed (2026-11-24): song shape
 
-Branch `claude/song-shape` (not merged; `git log --oneline 1737617..HEAD`). Spec: `docs/superpowers/specs/2026-11-24-song-shape-design.md`. Three phases:
+Merged into `main` (`git log --oneline 1737617..8f9ec11`). Spec: `docs/superpowers/specs/2026-11-24-song-shape-design.md`. Three phases:
 1. **Calm motion + shape.** `beatMotion` column in `PROFILES` (Gentle 0 / Medium 0.4 / Punchy 1; `feel.beatMotion`, `audio.beatMotion`); `K.drive` also gives `groove` and `beatMotion`. `js/show/shape.js` (`SongShape`) eases `audio.shape` (close / pace / fog / weather / phrase) from the section; `node tools/test-shape.mjs`. Kit camera rigs lost their beat kicks at Gentle, travel by energy, and gained bar sway, section framing (`close`, per-phrase `reframe`) and `camParams()`; `renderer.fogScale` and the particle amount follow the shape; the debug overlay has a `shape:` line. `K.Breath` pays downbeat corrections back through an eased rate.
 2. **Bouncing pass.** Every style (and kit demo / calm) scales beat movement by `beatMotion` and light by `accent`, with Punchy kept as before. Rules for new environments: `docs/ENVIRONMENT-GUIDE.md` ("Song-shape rules").
 3. **Moods** (`js/kit/moods.js`, `K.Moods`) for the 12 Radiohead-set worlds (24-35): 2-4 section-crossfaded states each; see the guide's "Moods" section. The other 24 worlds only get the shared shape (framing, fog, weather) for now.
@@ -270,4 +269,4 @@ errors), governor tiers + the saturation cap with synthetic frame times, every s
   with a real interface, operator view readability from 2 m, `?selftest` and `?bench` on the gig laptop with dual on.
 
 **Phase 5 remaining:** run the not-verified checks on the gig laptop (kiosk.bat for real, Scarlett unplug / replug, a
-pre-show check there), and add the GitHub remote.
+pre-show check there).
