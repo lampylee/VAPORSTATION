@@ -14,7 +14,7 @@ All work is committed on `main`, **local only: no git remote yet**, nothing push
 | 0: housekeeping (`.gitignore`, `CLAUDE.md`, `?bench`) | done |
 | 1: CLUT palettes, editor, album-art extraction, import/export, setlist mode | done |
 | 2: world kit (`js/kit/`), Kit Demo, environment guide | done; kit now at **v5** |
-| 3: environment library | done: **36 environments** + 3 hidden reference scenes |
+| 3: environment library | done: **37 environments** + 3 hidden reference scenes |
 | 4: UI pass, MIDI, tap tempo, show control, Feel setting | done; real MIDI hardware untested |
 | 5: gig hardening | **in progress** (2026-11-22): gig-safety layer, see below |
 | Projector output + operator view | built (2026-11-23), single-screen only tested; see "Landed (2026-11-23): projector output" |
@@ -39,11 +39,14 @@ Draws / tris measured at idle → full intensity (320×240, stepped with synthet
 | 11 | Cold Base 23–24 / 13.5–15.6k | 24 | Quiet House 19 / 4.2k | 37 | The Backrooms 14 / 13.6–15k |
 | 12 | Station Deck 14–16 / 6.5–6.8k | 25 | Moth Lamp 13 / 5–5.4k | 38 | Fog Harbour 46–52 / 13.3–14k |
 |  |  |  |  | 39 | Ember Vigil 48–50 / 17.3–18.3k |
+|  |  |  |  | 40 | Ossuary Lift 8 / 1.7–1.9k |
 
 Groups: 1–16 waves 1–2 (general), 17–23 wave 3 (slow songs, built from Kit calm), 24–35 wave 4 Radiohead set (album
 palettes in `ALBUM_PALETTES`, `js/palette/library.js`; spec `docs/superpowers/specs/2026-11-20-radiohead-setlist-environments-design.md`),
 36–38 wave 5 horror (spec `docs/superpowers/specs/2026-11-21-horror-wave-design.md`; six more concepts from that spec were dropped by the user).
 39 Ember Vigil, a single showpiece built in one session (dark fantasy: knight at a fire in a ruined cathedral, keep + eclipse +
+40 Ossuary Lift (horror): an iron cage lift sinking down an endless skull-and-bone shaft; the world stays put, the wall texture
+scrolls and torches wrap past the cage (`K.LightSet`). Beat jolts the chains, a drop is a short free-fall with streaking torches.
 colossus through the rose window; spec `docs/superpowers/specs/2026-11-22-ember-vigil-design.md`). It is the Kit v6 reference.
 Number keys reach 0–9; the rest via N / Shift+N, the dropdown, auto-switch, a setlist song or the environment browser.
 
@@ -175,7 +178,7 @@ Open items for you to decide or check:
    > Vaporstation is a live audio-reactive visualizer for a friend's band: a static WebGL2 web app (no build step, no
    > dependencies) with an authentic PS1 look (320x240, vertex jitter, affine textures, dithered colour, heavy fog), shown
    > fullscreen at gigs. A play/silent state machine drives one 0..1 `intensity`; a CLUT palette system recolours any
-   > environment; a world kit (`js/kit/`) and 36 environments exist. Environments evoke the mood of late-90s games but must
+   > environment; a world kit (`js/kit/`) and 37 environments exist. Environments evoke the mood of late-90s games but must
    > be fully original: no names, characters, logos, maps or assets from real games.
 4. **Prompt template:**
    > Build one new environment for Vaporstation: **NAME**, on your own branch in this worktree.
