@@ -66,6 +66,9 @@ Number keys reach 0–9; the rest via N / Shift+N, the dropdown, auto-switch, a 
 
 ## Open items (priority)
 
+**Direction (2026-11-27):** the band is happy with what exists. Priority is hardening what is there, then small ideas that
+iterate on it. PS2 mode and the camera feed are moonshots: not scheduled.
+
 1. **Gig-safety layer (Phase 5)**: built (governor, watchdog, offline PWA, kiosk launcher, pre-show check; see the last
    section). Left: try it on the gig laptop. Design: `docs/superpowers/specs/2026-11-22-gig-safety-design.md`.
 2. Run the "not verified" checks above on the gig laptop, plus the projector ones (see "Landed (2026-11-23): projector output").
@@ -76,7 +79,7 @@ Number keys reach 0–9; the rest via N / Shift+N, the dropdown, auto-switch, a 
 5. Moonshot, not scheduled: a crossfaded **PS2 mode** toggle (640×448, perspective-correct, filtered textures, feedback
    haze, ~100k-tri budget, kit detail scaling). Needs the user's sign-off on a scoped hard-rule exemption first.
    Design: `docs/superpowers/specs/2026-11-23-ps2-mode-design.md`.
-6. Parked idea, next after the projector output: a **live camera feed** (band as palette-mapped PS1 video on in-world
+6. Moonshot, not scheduled (2026-11-27): a **live camera feed** (band as palette-mapped PS1 video on in-world
    screens). Not designed yet; notes and open questions: `docs/superpowers/specs/2026-11-23-camera-feed-notes.md`.
 
 ## Systems in brief

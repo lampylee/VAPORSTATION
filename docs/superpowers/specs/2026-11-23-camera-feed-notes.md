@@ -1,6 +1,7 @@
 # Live camera feed — idea notes (not designed yet)
 
-Status: parked idea (2026-11-23), not an approved design. Agreed order: projector output first (done, merged), then this.
+Status: moonshot, not scheduled (2026-11-27). The user chose to harden what exists and iterate in small steps instead.
+Not an approved design. Earlier status: parked idea (2026-11-23), to follow the projector output.
 When picked up, run it through brainstorming like the projector output: ask the user first, then approaches, then a spec.
 
 ## The idea
